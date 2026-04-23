@@ -9,19 +9,48 @@ logger = logging.getLogger(__name__)
 class RAGEngine:
     """محرك RAG باستخدام ChromaDB"""
 
-    def __init__(self, persist_dir: str = None):
-        self._persist_dir = persist_dir or "~/.intellifile/chroma_db"
+    def __init__(self, config=None, ai_engine=None):
+        # دعم التوافق مع الإصدارات القديمة والجديدة
+        if config is None:
+            from .config import Config
+            self.config = Config()
+        else:
+            self.config = config
+        
+        self.ai_engine = ai_engine
+        self._persist_dir = getattr(self.config, 'vector_db_path', None) or str(Path.home() / ".intellifile" / "vectors")
         self._client = None
+        self._embedding_function = None
         self._init_chroma()
+        self._init_embeddings()
 
     def _init_chroma(self):
         """تهيئة ChromaDB"""
         try:
             import chromadb
-            self._client = chromadb.PersistentClient(path=self._persist_dir)
+            self._client = chromadb.PersistentClient(path=str(Path(self._persist_dir).expanduser()))
             logger.info("تم تهيئة ChromaDB")
         except ImportError:
             logger.error("chromadb غير مثبت")
+        except Exception as e:
+            logger.error(f"خطأ في تهيئة ChromaDB: {e}")
+
+    def _init_embeddings(self):
+        """تهيئة دالة التضمين"""
+        if not self._client:
+            logger.warning("ChromaDB غير مهيأ، لن يتم استخدام التضمين")
+            self._embedding_function = None
+            return
+        
+        try:
+            from chromadb.utils import embedding_functions
+            self._embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="all-MiniLM-L6-v2"
+            )
+            logger.info("تم تهيئة دالة التضمين")
+        except Exception as e:
+            logger.warning(f"فشل تهيئة دالة التضمين: {e}")
+            self._embedding_function = None
         except Exception as e:
             logger.error(f"خطأ في تهيئة ChromaDB: {e}")
 

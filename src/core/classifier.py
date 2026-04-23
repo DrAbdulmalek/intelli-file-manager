@@ -129,3 +129,7 @@ class SmartFileClassifier:
             cat = item.get("category", "أخرى")
             stats[cat] = stats.get(cat, 0) + 1
         return stats
+
+
+# Alias للتوافق مع الكود القديم
+DocumentClassifier = SmartFileClassifier
