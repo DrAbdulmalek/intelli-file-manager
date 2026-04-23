@@ -7,24 +7,65 @@ logger = logging.getLogger(__name__)
 
 
 class RAGEngine:
-    """محرك RAG باستخدام ChromaDB"""
+    """محرك RAG باستخدام ChromaDB
 
-    def __init__(self, persist_dir: str = None, model: str = None):
-        self._persist_dir = persist_dir or "~/.intellifile/chroma_db"
+    يدعم طريقتين للتهيئة:
+    - RAGEngine(persist_dir=..., model=...)  # مباشر
+    - RAGEngine(config=..., ai_engine=...)  # عبر كائن الإعدادات
+    """
+
+    def __init__(self, persist_dir: str = None, model: str = None,
+                 config=None, ai_engine=None):
+        # دعم التوافق مع الإصدارات القديمة والجديدة
+        if config is not None:
+            self.config = config
+        else:
+            from .config import Config
+            self.config = Config()
+
+        self.ai_engine = ai_engine
         self._model = model  # None = سيستخدم Config.ai_model
+        self._persist_dir = (
+            persist_dir
+            or getattr(self.config, 'vector_db_path', None)
+            or "~/.intellifile/chroma_db"
+        )
         self._client = None
+        self._embedding_function = None
         self._init_chroma()
+        self._init_embeddings()
 
     def _init_chroma(self):
         """تهيئة ChromaDB"""
         try:
             import chromadb
-            self._client = chromadb.PersistentClient(path=self._persist_dir)
+            self._client = chromadb.PersistentClient(
+                path=str(Path(self._persist_dir).expanduser())
+            )
             logger.info("تم تهيئة ChromaDB")
         except ImportError:
             logger.error("chromadb غير مثبت")
         except Exception as e:
             logger.error(f"خطأ في تهيئة ChromaDB: {e}")
+
+    def _init_embeddings(self):
+        """تهيئة دالة التضمين"""
+        if not self._client:
+            logger.warning("ChromaDB غير مهيأ، لن يتم استخدام التضمين")
+            self._embedding_function = None
+            return
+
+        try:
+            from chromadb.utils import embedding_functions
+            self._embedding_function = (
+                embedding_functions.SentenceTransformerEmbeddingFunction(
+                    model_name="all-MiniLM-L6-v2"
+                )
+            )
+            logger.info("تم تهيئة دالة التضمين")
+        except Exception as e:
+            logger.warning(f"فشل تهيئة دالة التضمين: {e}")
+            self._embedding_function = None
 
     def ingest_file(self, filepath: str, chunk_size: int = 500) -> int:
         """استيعاب ملف في قاعدة المعرفة"""
@@ -35,7 +76,6 @@ class RAGEngine:
         collection_name = path.stem.replace(" ", "_")[:50]
 
         try:
-            # استخراج النص
             text = self._extract_text(filepath)
             if not text:
                 return 0
@@ -50,7 +90,16 @@ class RAGEngine:
             documents = chunks
 
             if ids:
-                collection.add(ids=ids, documents=documents, metadatas=metadatas)
+                if self._embedding_function:
+                    collection.add(
+                        ids=ids, documents=documents,
+                        metadatas=metadatas,
+                    )
+                else:
+                    collection.add(
+                        ids=ids, documents=documents,
+                        metadatas=metadatas,
+                    )
                 logger.info(f"تم استيعاب {len(chunks)} مقطع من {path.name}")
             return len(chunks)
         except Exception as e:
@@ -63,7 +112,6 @@ class RAGEngine:
             return "خطأ: ChromaDB غير متاح"
 
         try:
-            # البحث في جميع المجميعات
             results_text = []
             for collection_name in self._list_collection_names():
                 try:
@@ -80,7 +128,9 @@ class RAGEngine:
             if not results_text:
                 return "لم يتم العثور على نتائج."
 
-            context = "\n\n".join(f"[مقطع {i+1}]: {t}" for i, t in enumerate(results_text[:5]))
+            context = "\n\n".join(
+                f"[مقطع {i+1}]: {t}" for i, t in enumerate(results_text[:5])
+            )
             prompt = (
                 f"بناءً على المعلومات التالية، أجب عن السؤال:\n"
                 f"السؤال: {question}\n\n"
@@ -90,24 +140,26 @@ class RAGEngine:
 
             try:
                 import ollama
-                from .config import Config
-                config = Config()
-                model_name = self._model or config.ai_model
-                client = ollama.Client(host=config.ollama_url)
+                model_name = self._model or self.config.ai_model
+                ollama_url = getattr(self.config, 'ollama_url', 'http://localhost:11434')
+                client = ollama.Client(host=ollama_url)
                 response = client.chat(model_name, messages=[
                     {"role": "system", "content": "أنت مساعد ذكي. أجب بالعربية بدقة."},
                     {"role": "user", "content": prompt}
                 ])
                 return response["message"]["content"]
             except Exception:
-                return f"تم العثور على {len(results_text)} مقطع متعلق. لكن لا يمكن الاتصال بـ Ollama."
+                return (
+                    f"تم العثور على {len(results_text)} مقطع متعلق. "
+                    "لكن لا يمكن الاتصال بـ Ollama."
+                )
 
         except Exception as e:
             logger.error(f"خطأ في الاستعلام: {e}")
             return f"خطأ: {e}"
 
     def _list_collection_names(self) -> List[str]:
-        """قائمة أسماء المجميعات"""
+        """قائمة أسماء المجممعات"""
         if not self._client:
             return []
         try:

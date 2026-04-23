@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
 """واجهة المستخدم الرسومية - PySide6"""
 
-__all__ = []
+from .main_window import MainWindow
+
+__all__ = ['MainWindow']
