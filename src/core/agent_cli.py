@@ -28,7 +28,7 @@ class AgentCLI:
         classify = subparsers.add_parser("classify", help="تصنيف الملفات")
         classify.add_argument("path", help="مسار المجلد أو الملف")
         classify.add_argument("--output", "-o", help="مجلد الإخراج")
-        classify.add_argument("--model", default="gemma3", help="نموذج AI")
+        classify.add_argument("--model", default="llama3.2", help="نموذج AI")
         classify.add_argument("--auto", action="store_true", help="تصنيف تلقائي بدون تأكيد")
 
         # أمر التنظيم
@@ -43,7 +43,7 @@ class AgentCLI:
 
         # أمر المحادثة
         chat = subparsers.add_parser("chat", help="محادثة مع المساعد الذكي")
-        chat.add_argument("--model", default="gemma3", help="نموذج AI")
+        chat.add_argument("--model", default="llama3.2", help="نموذج AI")
 
         # أمر الكشف عن المكررات
         dup = subparsers.add_parser("duplicates", help="كشف الملفات المكررة")
