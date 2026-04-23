@@ -56,7 +56,8 @@ class MultimodalProcessor:
             import base64
             with open(filepath, "rb") as f:
                 img_b64 = base64.b64encode(f.read()).decode()
-            response = client.chat("gemma3", messages=[
+            # استخدام نموذج موحد llama3.2
+            response = client.chat("llama3.2", messages=[
                 {"role": "user", "content": f"صِف هذه الصورة باختصار بالعربية: "}
             ])
             result["ai_description"] = response["message"]["content"]

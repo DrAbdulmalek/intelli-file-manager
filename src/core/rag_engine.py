@@ -119,7 +119,8 @@ class RAGEngine:
             try:
                 import ollama
                 client = ollama.Client()
-                response = client.chat("gemma3", messages=[
+                # استخدام نموذج موحد llama3.2
+                response = client.chat("llama3.2", messages=[
                     {"role": "system", "content": "أنت مساعد ذكي. أجب بالعربية بدقة."},
                     {"role": "user", "content": prompt}
                 ])
