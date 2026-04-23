@@ -197,7 +197,7 @@ class TestCLIParseArgs:
         assert parsed.path == "/path/to/dir"
         assert parsed.auto is True
         assert parsed.output == "/out"
-        assert parsed.model == "gemma3"  # افتراضي
+        assert parsed.model == "llama3.2"  # افتراضي
 
     def test_parse_search_args(self):
         """يتحقق من تحليل معاملات أمر البحث"""

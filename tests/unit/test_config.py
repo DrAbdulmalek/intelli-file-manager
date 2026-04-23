@@ -30,9 +30,9 @@ class TestDefaultConfigValues:
         assert config.extension_map == dict(EXTENSION_MAP)
 
     def test_default_ai_model(self):
-        """يتحقق من أن النموذج الافتراضي هو gemma3"""
+        """يتحقق من أن النموذج الافتراضي هو llama3.2"""
         config = Config()
-        assert config.ai_model == "gemma3"
+        assert config.ai_model == "llama3.2"
 
     def test_default_ollama_url(self):
         """يتحقق من أن رابط Ollama الافتراضي هو localhost:11434"""

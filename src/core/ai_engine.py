@@ -27,6 +27,29 @@ class AIEngine:
                 return None
         return self._ollama
 
+    def check_connection(self) -> bool:
+        """التحقق من اتصال خادم Ollama
+
+        يجري طلب HTTP إلى نقطة النهاية /api/tags للتحقق من أن الخادم يعمل.
+        هذا الاسم مستخدم في الاختبارات وواجهة المستخدم.
+
+        العائد:
+            True إذا كان الخادم متاحاً، False خلاف ذلك
+        """
+        try:
+            import requests
+            resp = requests.get(f"{self.config.ollama_url}/api/tags", timeout=5)
+            if resp.status_code == 200:
+                logger.info("الاتصال بخادم Ollama ناجح")
+                return True
+            return False
+        except ImportError:
+            logger.warning("مكتبة requests غير مثبتة")
+            return False
+        except Exception as e:
+            logger.debug(f"فشل الاتصال بخادم Ollama: {e}")
+            return False
+
     def is_ollama_running(self) -> bool:
         """التحقق من أن Ollama يعمل"""
         try:

@@ -158,6 +158,66 @@ class RAGEngine:
             logger.error(f"خطأ في الاستعلام: {e}")
             return f"خطأ: {e}"
 
+    def index_documents(self, filepaths: list, chunk_size: int = 500) -> int:
+        """فهرسة مجموعة ملفات في قاعدة المعرفة
+
+        المعاملات:
+            filepaths: قائمة مسارات الملفات المراد فهرستها
+            chunk_size: حجم المقطع النصي
+
+        العائد:
+            عدد المقاطع التي تم فهرستها
+        """
+        total_chunks = 0
+        for filepath in filepaths:
+            try:
+                count = self.ingest_file(filepath, chunk_size=chunk_size)
+                total_chunks += count
+            except Exception as e:
+                logger.error(f"خطأ في فهرسة {filepath}: {e}")
+        logger.info(f"تم فهرسة {total_chunks} مقطع من {len(filepaths)} ملف")
+        return total_chunks
+
+    def semantic_search(self, query: str, top_k: int = 5) -> list:
+        """بحث دلالي في قاعدة المعرفة
+
+        المعاملات:
+            query: نص الاستعلام
+            top_k: عدد النتائج المطلوبة
+
+        العائد:
+            قائمة قواميس تحتوي على النص والمسافة وبيانات إضافية
+        """
+        if not self._client:
+            return []
+
+        all_results = []
+        for collection_name in self._list_collection_names():
+            try:
+                collection = self._client.get_collection(collection_name)
+                results = collection.query(
+                    query_texts=[query],
+                    n_results=min(top_k, max(1, collection.count()))
+                )
+                if results and results.get("documents"):
+                    for i, doc in enumerate(results["documents"][0]):
+                        entry = {
+                            "text": doc,
+                            "collection": collection_name,
+                        }
+                        if results.get("metadatas") and results["metadatas"][0]:
+                            entry["metadata"] = results["metadatas"][0][i]
+                        if results.get("distances") and results["distances"][0]:
+                            entry["distance"] = results["distances"][0][i]
+                        all_results.append(entry)
+            except Exception as e:
+                logger.debug(f"خطأ في البحث في {collection_name}: {e}")
+                continue
+
+        # ترتيب حسب المسافة وقطع النتائج
+        all_results.sort(key=lambda x: x.get("distance", float("inf")))
+        return all_results[:top_k]
+
     def _list_collection_names(self) -> List[str]:
         """قائمة أسماء المجممعات"""
         if not self._client:

@@ -155,6 +155,37 @@ class FileHandler:
             "is_file": path.is_file(),
         }
 
+    def scan_directory(self, directory: str, recursive: bool = True) -> list:
+        """مسح مجلد وإرجاع قائمة معلومات الملفات
+
+        المعاملات:
+            directory: مسار المجلد المراد مسحه
+            recursive: هل يتم المسح بشكل متكرر في المجلدات الفرعية
+
+        العائد:
+            قائمة قواميس تحتوي معلومات كل ملف (name, path, type, size, ...)
+        """
+        dir_path = Path(directory)
+        if not dir_path.is_dir():
+            logger.warning(f"المجلد غير موجود: {directory}")
+            return []
+
+        results = []
+        pattern = "**/*" if recursive else "*"
+
+        for item in dir_path.glob(pattern):
+            if not item.is_file() or item.name.startswith("."):
+                continue
+            try:
+                info = self.get_file_info(str(item))
+                info["type"] = item.suffix.lstrip(".").lower() or "بدون_امتداد"
+                results.append(info)
+            except Exception as e:
+                logger.debug(f"خطأ في مسح {item}: {e}")
+
+        logger.info(f"تم مسح {len(results)} ملف في {directory}")
+        return results
+
     def _backup_file(self, filepath: Path) -> Optional[str]:
         """نسخ ملف احتياطي"""
         try:

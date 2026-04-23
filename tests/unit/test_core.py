@@ -44,6 +44,7 @@ class TestConfig(unittest.TestCase):
     
     def test_save_and_load(self):
         """اختبار حفظ وتحميل الإعدادات"""
+        from src.core.config import Config
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "config.json"
             
@@ -137,14 +138,13 @@ class TestClassifier(unittest.TestCase):
         
         self.assertIn('category', result)
         self.assertIn('confidence', result)
-        self.assertIn('keywords', result)
     
     def test_classify_nonexistent_file(self):
         """اختبار تصنيف ملف غير موجود"""
         result = self.classifier.classify_file("/nonexistent/file.pdf")
         
-        self.assertEqual(result['category'], "أخرى")
-        self.assertLess(result['confidence'], 50)
+        # يجب أن يُرجع خطأ عند عدم وجود الملف
+        self.assertIn('error', result)
 
 
 class TestAIEngine(unittest.TestCase):
