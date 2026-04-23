@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 class MultimodalProcessor:
     """معالج ملفات متعددة الوسائط"""
 
-    def __init__(self):
+    def __init__(self, model: str = None):
+        self._model = model  # None = سيستخدم Config.ai_model
         self._ocr_available = False
         self._check_ocr()
 
@@ -51,8 +52,10 @@ class MultimodalProcessor:
         # وصف AI
         try:
             import ollama
-            client = ollama.Client()
-            model_name = "gemma3"
+            from ..core.config import Config
+            config = Config()
+            model_name = self._model or config.ai_model
+            client = ollama.Client(host=config.ollama_url)
             # لنسخ الصورة إلى base64
             import base64
             with open(filepath, "rb") as f:

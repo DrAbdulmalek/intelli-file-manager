@@ -9,8 +9,9 @@ logger = logging.getLogger(__name__)
 class RAGEngine:
     """محرك RAG باستخدام ChromaDB"""
 
-    def __init__(self, persist_dir: str = None):
+    def __init__(self, persist_dir: str = None, model: str = None):
         self._persist_dir = persist_dir or "~/.intellifile/chroma_db"
+        self._model = model  # None = سيستخدم Config.ai_model
         self._client = None
         self._init_chroma()
 
@@ -89,8 +90,10 @@ class RAGEngine:
 
             try:
                 import ollama
-                client = ollama.Client()
-                model_name = "gemma3"
+                from .config import Config
+                config = Config()
+                model_name = self._model or config.ai_model
+                client = ollama.Client(host=config.ollama_url)
                 response = client.chat(model_name, messages=[
                     {"role": "system", "content": "أنت مساعد ذكي. أجب بالعربية بدقة."},
                     {"role": "user", "content": prompt}
