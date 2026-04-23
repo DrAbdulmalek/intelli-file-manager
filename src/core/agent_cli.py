@@ -68,9 +68,9 @@ class AgentCLI:
 
         return parser
 
-    def parse_args(self, args=None) -> dict:
+    def parse_args(self, args=None):
         """تحليل الأوامر"""
-        return vars(self.parser.parse_args(args))
+        return self.parser.parse_args(args)
 
     def execute_command(self, command: str, args: list = None) -> dict:
         """تنفيذ أمر CLI"""

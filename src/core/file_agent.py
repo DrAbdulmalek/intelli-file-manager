@@ -79,7 +79,7 @@ class FileAgent:
 
     def detect_duplicates(self, directory: str) -> list:
         """كشف الملفات المكررة"""
-        from .utils.helpers import compute_file_hash
+        from src.utils.helpers import compute_file_hash
 
         hashes = {}
         duplicates = []

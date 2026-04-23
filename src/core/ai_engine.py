@@ -96,7 +96,7 @@ class AIEngine:
             return "أخرى"
 
     def chat(self, message: str, context: str = "") -> str:
-        "محادثة مع المساعد الذكي"
+        """محادثة مع المساعد الذكي"""
         client = self._get_ollama()
         if not client:
             return "خطأ: Ollama غير متاح. تأكد من تشغيله بالأمر: ollama serve"

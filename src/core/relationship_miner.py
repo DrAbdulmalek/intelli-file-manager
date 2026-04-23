@@ -101,7 +101,7 @@ class RelationshipMiner:
 
     def detect_duplicates(self, file_paths: List[str]) -> List[List[str]]:
         """كشف المجموعات المكررة"""
-        from .utils.helpers import compute_file_hash
+        from src.utils.helpers import compute_file_hash
 
         hash_map = defaultdict(list)
         for fp in file_paths:

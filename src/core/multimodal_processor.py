@@ -52,12 +52,14 @@ class MultimodalProcessor:
         try:
             import ollama
             client = ollama.Client()
+            model_name = "gemma3"
             # لنسخ الصورة إلى base64
             import base64
             with open(filepath, "rb") as f:
                 img_b64 = base64.b64encode(f.read()).decode()
-            response = client.chat("gemma3", messages=[
-                {"role": "user", "content": f"صِف هذه الصورة باختصار بالعربية: "}
+            response = client.chat(model_name, messages=[
+                {"role": "user", "content": f"صِف هذه الصورة باختصار بالعربية: ",
+                 "images": [img_b64]}
             ])
             result["ai_description"] = response["message"]["content"]
         except Exception:

@@ -21,7 +21,7 @@ class EmergentCategoryEngine:
             return {"error": "المجلد غير موجود"}
 
         stats = self._collect_stats(dir_path)
-        hierarchy = self._generate_hierarchy(stats)
+        hierarchy = self.generate_hierarchy(stats)
         return {
             "directory": str(dir_path),
             "total_files": stats["total"],

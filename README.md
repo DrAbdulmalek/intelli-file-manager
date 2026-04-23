@@ -136,7 +136,7 @@ The application supports automatic file classification using local AI models via
 
 ```bash
 # 1. استنساخ المستودع
-git clone https://github.com/your-username/IntelliFile.git
+git clone https://github.com/DrAbdulmalek/IntelliFile-app.git
 cd IntelliFile
 
 # 2. تثبيت متطلبات النظام
@@ -166,7 +166,7 @@ conda create -n intellifile python=3.11 -y
 conda activate intellifile
 
 # 2. استنساخ المستودع
-git clone https://github.com/your-username/IntelliFile.git
+git clone https://github.com/DrAbdulmalek/IntelliFile-app.git
 cd IntelliFile
 
 # 3. تثبيت المتطلبات
@@ -276,41 +276,49 @@ npm run dev
 ## 📁 هيكل المشروع | Project Structure
 
 ```
-IntelliFile/
+IntelliFile-app/
 ├── 📄 README.md                    # التوثيق الرئيسي
 ├── 📄 LICENSE                      # رخصة MIT
 ├── 📄 .gitignore                   # إعدادات Git
 ├── 📄 requirements.txt             # متطلبات Python
+├── 📄 setup.py                     # إعداد الحزمة
+├── 📄 pyproject.toml               # إعدادات البناء
+├── 📄 pytest.ini                   # إعدادات الاختبارات
+├── 📄 cli.py                       # نقطة دخخول CLI
 │
 ├── 📂 src/                         # الكود المصدري (Python)
-│   ├── 📂 ai/                      # محرك الذكاء الاصطناعي
-│   │   ├── 📄 classifier.py        # مصنف الملفات
-│   │   ├── 📄 embeddings.py        # التضمينات الدلالية
-│   │   ├── 📄 rag_engine.py        # محرك RAG
-│   │   ├── 📄 voice_control.py     # التحكم الصوتي
-│   │   ├── 📂 agents/              # وكلاء الملفات
-│   │   └── 📂 models/              # نماذج مخصصة
+│   ├── 📄 main.py                  # نقطة الدخول الرئيسية
 │   │
-│   ├── 📂 core/                    # المنطق الأساسي
-│   │   ├── 📄 file_manager.py      # إدارة الملفات
-│   │   ├── 📄 organizer.py         # المنظم التنبؤي
-│   │   ├── 📄 duplicate_detector.py# كشف المكررات
-│   │   ├── 📄 file_type_detect.py  # كشف نوع الملف
-│   │   └── 📄 category_mining.py   # تنقيب الفئات
+│   ├── 📂 core/                    # المنطق الأساسي (14 وحدة)
+│   │   ├── 📄 config.py            # الإعدادات + الفئات + خريطة الامتدادات
+│   │   ├── 📄 classifier.py        # مصنف الملفات الذكي (Magika + امتداد)
+│   │   ├── 📄 file_handler.py      # إدارة الملفات (CRUD + تراجع + نسخ احتياطي)
+│   │   ├── 📄 ai_engine.py         # محرك الذكاء الاصطناعي (Ollama)
+│   │   ├── 📄 semantic_search.py   # البحث الدلالي (sentence-transformers)
+│   │   ├── 📄 rag_engine.py        # محرك RAG (ChromaDB + Ollama)
+│   │   ├── 📄 voice_controller.py  # التحكم الصوتي (Arabic)
+│   │   ├── 📄 file_agent.py        # وكيل الملفات المستقل
+│   │   ├── 📄 multimodal_processor.py # معالجة متعددة الوسائط
+│   │   ├── 📄 relationship_miner.py  # تنقيب العلاقات (NetworkX)
+│   │   ├── 📄 predictive_organizer.py # المنظم التنبؤي
+│   │   ├── 📄 emergent_category.py # التصنيف الدينامي
+│   │   ├── 📄 self_extending_assistant.py # المساعد المتوسع
+│   │   └── 📄 agent_cli.py         # واجهة سطر الأوامر
+│   │
+│   ├── 📂 ai/                      # محرك الذكاء الاصطناعي
+│   │   ├── 📄 classifier.py        # مصنف AI (Ollama HTTP API)
+│   │   ├── 📄 embeddings.py        # التضمينات الدلالية
+│   │   └── 📂 agents/              # وكلاء AI
+│   │       └── 📄 base_agent.py    # الفئة الأساسية
 │   │
 │   ├── 📂 db/                      # قاعدة البيانات
-│   │   ├── 📄 chroma_db.py         # تكامل ChromaDB
-│   │   └── 📄 schemas.py           # مخططات البيانات
+│   │   ├── 📄 schemas.py           # FileMetadata + FileRecord
+│   │   └── 📄 chroma_db.py         # مدير ChromaDB
 │   │
-│   ├── 📂 gui/                     # واجهة المستخدم الرسومية
-│   │   ├── 📄 main_window.py       # النافذة الرئيسية
-│   │   ├── 📄 file_view.py         # عرض الملفات
-│   │   ├── 📄 settings_dialog.py   # نافذة الإعدادات
-│   │   └── 📂 components/          # مكونات UI
+│   ├── 📂 gui/                     # واجهة سطح المكتب (PySide6)
+│   │   └── 📄 main_window.py       # النافذة الرئيسية
 │   │
 │   └── 📂 utils/                   # أدوات مساعدة
-│       ├── 📄 config.py            # الإعدادات
-│       ├── 📄 logger.py            # تسجيل الأحداث
 │       └── 📄 helpers.py           # دوال مساعدة
 │
 ├── 📂 web/                         # واجهة الويب (Next.js)
@@ -329,7 +337,17 @@ IntelliFile/
 │       │       └── 📄 route.ts     # نقطة نهاية API
 │       │
 │       ├── 📂 components/          # مكونات React
-│       │   └── 📂 ui/              # مكونات shadcn/ui
+│       │   ├── 📂 ui/              # مكونات shadcn/ui (50+ ملف)
+│       │   ├── 📄 types.ts         # أنواع TypeScript
+│       │   ├── 📄 constants.tsx    # ثوابت التطبيق
+│       │   ├── 📄 helpers.tsx      # دوال مساعدة
+│       │   ├── 📄 Sidebar.tsx      # شريط التنقل
+│       │   ├── 📄 FileManager.tsx  # مدير الملفات
+│       │   ├── 📄 AICopilot.tsx    # لوحة المحادثة الذكية
+│       │   ├── 📄 SearchPanel.tsx  # البحث الدلالي
+│       │   ├── 📄 Dashboard.tsx    # لوحة المعلومات
+│       │   ├── 📄 SettingsPanel.tsx# الإعدادات
+│       │   └── 📄 ...              # مكونات أخرى
 │       │
 │       ├── 📂 hooks/               # React Hooks
 │       └── 📂 lib/                 # مكتبات مساعدة
@@ -338,13 +356,12 @@ IntelliFile/
 ├── 📂 docs/                        # التوثيق
 │   └── 📄 architecture.md          # وثائق البنية
 │
-├── 📂 tests/                       # الاختبارات
-│   ├── 📂 unit/                    # اختبارات الوحدات
-│   └── 📂 integration/             # اختبارات التكامل
+├── 📂 tests/                       # الاختبارات (173 اختبار)
+│   ├── 📄 conftest.py              # Fixtures مشتركة
+│   ├── 📂 unit/                    # اختبارات الوحدات (153)
+│   └── 📂 integration/             # اختبارات التكامل (20)
 │
-└── 📂 scripts/                     # نصوص مساعدة
-    ├── 📄 setup.sh                 # سكريبت الإعداد
-    └── 📄 build.sh                 # سكريبت البناء
+└── 📄 pyproject.toml               # إعدادات البناء والاختبارات
 ```
 
 ---
@@ -380,7 +397,7 @@ IntelliFile/
 
 1. **Fork المستودع**
    ```bash
-   git clone https://github.com/your-username/IntelliFile.git
+   git clone https://github.com/DrAbdulmalek/IntelliFile-app.git
    ```
 
 2. **إنشاء فرع جديد**
