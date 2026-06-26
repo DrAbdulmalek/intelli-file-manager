@@ -1,3 +1,7 @@
+> 💡 **Independent Side Product** — IntelliFile is a standalone AI-powered file manager for Manjaro Linux. It is **NOT** part of the [OmniMedical Suite](https://github.com/DrAbdulmalek/omni-medical-suite) medical OCR ecosystem.
+>
+> For medical document processing, see: [OmniMedical Suite](https://github.com/DrAbdulmalek/omni-medical-suite) · [Live Demo](https://huggingface.co/spaces/DrAbdulmalek/medical-handwriting-ocr)
+
 <div align="center">
 
 # ✨ IntelliFile
