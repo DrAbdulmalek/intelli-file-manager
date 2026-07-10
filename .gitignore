@@ -33,6 +33,11 @@ dist/
 .vscode/
 .idea/
 
+# Node.js
+node_modules/
+.next/
+out/
+
 # System files
 .DS_Store
 Thumbs.db
