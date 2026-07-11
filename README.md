@@ -521,7 +521,6 @@ IntelliFile is a **standalone AI-powered file classification application** for M
 
 > IntelliFile is independent. For medical document processing, see:
 > - [omni-medical-suite](https://github.com/DrAbdulmalek/omni-medical-suite) — Main platform
-> - [medical-ocr-postprocessor](https://github.com/DrAbdulmalek/medical-ocr-postprocessor) — OCR correction
-> - [medical-handwriting-ocr](https://github.com/DrAbdulmalek/medical-handwriting-ocr) — Production OCR
+> - [omni-medical-suite/apps/handwriting-demo/](https://github.com/DrAbdulmalek/omni-medical-suite/tree/main/apps/handwriting-demo) — Handwriting & clinical OCR
 
 **License: MIT** — Dr. Abdulmalek Tamer Al-husseini
