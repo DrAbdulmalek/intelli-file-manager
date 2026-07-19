@@ -43,3 +43,29 @@ pyaudio>=0.2.12
 python-magic>=0.4.27
 plotly>=5.18.0
 pandas>=2.0.0
+
+# =============================================================================
+# Development Roadmap additions (branch: docs/development-roadmap)
+# See docs/DEVELOPMENT_ROADMAP.md for full context
+# =============================================================================
+
+# ─── Hybrid Search (Task 1.1) ───────────────────────────────────────────────
+rank-bm25>=0.2.0
+jieba>=0.42.1
+nltk>=3.8.0
+
+# ─── Enhanced Multimodal Processor (Task 1.2) ───────────────────────────────
+# Heavy dependencies — uncomment when implementing
+# torch>=2.0.0
+# openai-whisper>=20231117
+# moondream>=0.0.1
+pytesseract>=0.3.10
+
+# ─── Smart Tagging (Task 2.1) ───────────────────────────────────────────────
+keybert>=0.8.0
+
+# ─── Async Indexer (Section 6.1) ────────────────────────────────────────────
+aiofiles>=23.0.0
+
+# ─── Test extras ────────────────────────────────────────────────────────────
+pytest-asyncio>=0.21.0
