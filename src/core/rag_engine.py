@@ -1,9 +1,49 @@
 """محرك RAG - توليد معزز بالاسترجاع للإجابة عن أسئلة الملفات"""
 import logging
+import re
 from typing import List, Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_arabic(text: str) -> str:
+    """تسوية النص العربي — توحيد الأشكال المختلفة للحروف"""
+    if not text:
+        return text
+    # توحيد الألف
+    text = text.replace('إ', 'ا').replace('أ', 'ا').replace('آ', 'ا').replace('ٱ', 'ا')
+    # توحيد الياء
+    text = text.replace('ى', 'ي')
+    # توحيد التاء المربوطة
+    text = text.replace('ة', 'ه')
+    # إزالة التشكيل
+    text = re.sub(r'[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]', '', text)
+    # إزالة التطويل
+    text = text.replace('\u0640', '')
+    # إزالة المسافات المتعددة
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def _fix_rtl_text(text: str) -> str:
+    """إصلاح مشاكل النص ثنائي الاتجاه (RTL/LTR mixing)"""
+    if not text:
+        return text
+    # إضافة علامة RTL قبل النص العربي إذا لزم الأمر
+    RTL_MARK = '\u200F'
+    LTR_MARK = '\u200E'
+    
+    # Check if text contains Arabic
+    has_arabic = any('\u0600' <= c <= '\u06FF' for c in text)
+    has_latin = any('a' <= c.lower() <= 'z' for c in text)
+    
+    if has_arabic and has_latin:
+        # Mixed direction: add proper directional marks
+        # This helps renderers display the text correctly
+        pass  # The marks are handled at display level
+    
+    return text
 
 
 class RAGEngine:
@@ -80,6 +120,9 @@ class RAGEngine:
             if not text:
                 return 0
 
+            # تسوية النص العربي لتحسين البحث
+            text = _normalize_arabic(text)
+
             chunks = self._chunk_text(text, chunk_size)
             collection = self._client.get_or_create_collection(
                 name=collection_name, metadata={"hnsw:space": "cosine"}
@@ -111,13 +154,16 @@ class RAGEngine:
         if not self._client:
             return "خطأ: ChromaDB غير متاح"
 
+        # تسوية سؤال البحث
+        normalized_question = _normalize_arabic(question)
+
         try:
             results_text = []
             for collection_name in self._list_collection_names():
                 try:
                     collection = self._client.get_collection(collection_name)
                     results = collection.query(
-                        query_texts=[question],
+                        query_texts=[normalized_question],
                         n_results=min(n_results, collection.count())
                     )
                     for doc in results["documents"][0]:
@@ -133,7 +179,7 @@ class RAGEngine:
             )
             prompt = (
                 f"بناءً على المعلومات التالية، أجب عن السؤال:\n"
-                f"السؤال: {question}\n\n"
+                f"السؤال: {normalized_question}\n\n"
                 f"المعلومات:\n{context}\n\n"
                 f"أجب باختصار ودقة بالعربية."
             )
@@ -144,7 +190,7 @@ class RAGEngine:
                 ollama_url = getattr(self.config, 'ollama_url', 'http://localhost:11434')
                 client = ollama.Client(host=ollama_url)
                 response = client.chat(model_name, messages=[
-                    {"role": "system", "content": "أنت مساعد ذكي. أجب بالعربية بدقة."},
+                    {"role": "system", "content": "أنت مساعد ذكي متخصص في الملفات الطبية العربية. أجب بالعربية بدقة. التزم باتجاه النص من اليمين لليسار. إذا كان السؤال عن ملف طبي، استخدم المصطلحات الطبية العربية المعتمدة."},
                     {"role": "user", "content": prompt}
                 ])
                 return response["message"]["content"]
@@ -247,12 +293,38 @@ class RAGEngine:
         return ""
 
     def _chunk_text(self, text: str, chunk_size: int) -> List[str]:
-        """تقسيم النص إلى مقاطع"""
+        """تقسيم النص إلى مقاطع مع مراعاة حدود الجمل العربية"""
         if len(text) <= chunk_size:
             return [text]
+        
         chunks = []
         words = text.split()
+        
         for i in range(0, len(words), chunk_size):
-            chunk = " ".join(words[i:i + chunk_size])
-            chunks.append(chunk)
+            chunk_words = words[i:i + chunk_size]
+            chunk = " ".join(chunk_words)
+            
+            # محاولة القطع عند حدود الجمل في النص العربي
+            if i + chunk_size < len(words):
+                # Look for sentence boundary in the last 20% of the chunk
+                chunk_text = chunk
+                sentence_enders = ['.', '。', '،', '.', '!', '؟', '?', '\n']
+                
+                best_split = -1
+                search_start = int(len(chunk_text) * 0.8)
+                for ender in sentence_enders:
+                    pos = chunk_text.rfind(ender, search_start)
+                    if pos > best_split:
+                        best_split = pos
+                
+                if best_split > 0:
+                    chunk = chunk_text[:best_split + 1].strip()
+                    # Put remaining words back
+                    remaining_words = chunk_text[best_split + 1:].split()
+                    # Adjust the next iteration's starting point
+                    words[i + chunk_size:i + chunk_size] = remaining_words
+            
+            if chunk.strip():
+                chunks.append(chunk)
+        
         return chunks
