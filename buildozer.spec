@@ -10,12 +10,13 @@ orientation = portrait
 fullscreen = 1
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,CAMERA,RECORD_AUDIO
 android.api = 33
-android.minapi = 24
+android.minapi = 21
 android.ndk = 25b
 android.accept_sdk_license = True
 android.archs = arm64-v8a
 android.allow_backup = True
-p4a.branch = master
+android.skip_update = False
+p4a.branch = v2024.01.15
 log_level = 2
 warn_on_root = 1
 
