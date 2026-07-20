@@ -1,7 +1,7 @@
 """محرك RAG - توليد معزز بالاسترجاع للإجابة عن أسئلة الملفات"""
 import logging
 import re
-from typing import List, Optional
+from typing import List
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -31,8 +31,6 @@ def _fix_rtl_text(text: str) -> str:
     if not text:
         return text
     # إضافة علامة RTL قبل النص العربي إذا لزم الأمر
-    RTL_MARK = '\u200F'
-    LTR_MARK = '\u200E'
     
     # Check if text contains Arabic
     has_arabic = any('\u0600' <= c <= '\u06FF' for c in text)

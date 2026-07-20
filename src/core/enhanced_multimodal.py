@@ -13,14 +13,13 @@ Enhanced MultimodalProcessor with:
 from __future__ import annotations
 
 import base64
-import io
 import json
 import logging
 import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ class PredictiveOrganizer:
             }
         with open(self._model_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        logger.info(f"تم حفظ النموذج التنبؤي")
+        logger.info("تم حفظ النموذج التنبؤي")
 
     def load_model(self) -> bool:
         """تحميل النموذج المحفوظ"""

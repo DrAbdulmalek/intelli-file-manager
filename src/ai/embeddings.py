@@ -269,7 +269,7 @@ class EmbeddingEngine:
         )
 
         try:
-            import numpy as np
+            import numpy as np  # noqa: F401
 
             embedding = self._model.encode(
                 text,

@@ -1,8 +1,6 @@
 """معالج متعدد الوسائط - صور وصوت وفيديو"""
-import os
 import logging
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +16,7 @@ class MultimodalProcessor:
     def _check_ocr(self):
         """التحقق من تثبيت OCR"""
         try:
-            import pytesseract
+            import pytesseract  # noqa: F401
             self._ocr_available = True
         except ImportError:
             logger.info("Tesseract OCR غير مثبت")
@@ -61,7 +59,7 @@ class MultimodalProcessor:
             with open(filepath, "rb") as f:
                 img_b64 = base64.b64encode(f.read()).decode()
             response = client.chat(model_name, messages=[
-                {"role": "user", "content": f"صِف هذه الصورة باختصار بالعربية: ",
+                {"role": "user", "content": "صِف هذه الصورة باختصار بالعربية: ",
                  "images": [img_b64]}
             ])
             result["ai_description"] = response["message"]["content"]

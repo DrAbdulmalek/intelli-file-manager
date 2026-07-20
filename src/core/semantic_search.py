@@ -1,9 +1,8 @@
 """محرك البحث الدلالي - بحث ذكي في الملفات"""
-import os
 import json
 import logging
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 

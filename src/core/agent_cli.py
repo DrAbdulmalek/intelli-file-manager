@@ -55,7 +55,7 @@ class AgentCLI:
         stats.add_argument("path", nargs="?", default=".", help="مسار المجلد")
 
         # أمر الجدول الزمني
-        schedule = subparsers.add_parser("schedule", help="جدولة المهام الدورية")
+        subparsers.add_parser("schedule", help="جدولة المهام الدورية")
 
         # أمر الصوت
         voice = subparsers.add_parser("voice", help="التحكم الصوتي")
@@ -138,7 +138,7 @@ class AgentCLI:
             return {"success": False, "error": "المسار ليس مجلداً"}
 
         results = classifier.batch_classify(str(path))
-        created = handler.create_category_folders(str(path))
+        handler.create_category_folders(str(path))
 
         if args.dry_run:
             print("\n🔍 وضع تجريبي:")

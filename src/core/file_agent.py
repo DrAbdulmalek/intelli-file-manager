@@ -2,7 +2,6 @@
 import logging
 import threading
 from pathlib import Path
-from typing import Optional
 from datetime import datetime
 from .config import Config
 
@@ -69,7 +68,7 @@ class FileAgent:
                 try:
                     if self.classifier:
                         info = self.classifier.classify_file(str(item))
-                        category = info.get("category", "أخرى")
+                        info.get("category", "أخرى")
                         results["classified"] += 1
                 except Exception:
                     results["errors"] += 1

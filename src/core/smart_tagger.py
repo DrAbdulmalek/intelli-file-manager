@@ -14,10 +14,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-from dataclasses import dataclass, field, asdict
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +141,7 @@ _CONTENT_KEYWORDS: dict[str, list[Tag]] = {
     "lab result": [Tag("medical/lab-result", "medical", 0.9, "auto")],
 }
 
-_FILENAME_PATTERNS: list[tuple[re.Pattern, list[Tag]]] = []
-import re
-_FILENAME_PATTERNS = [
+_FILENAME_PATTERNS: list[tuple[re.Pattern, list[Tag]]] = [
     (re.compile(r"(?:تقرير|report)", re.I), [Tag("document/report", "document-type")]),
     (re.compile(r"(?:فاتورة|invoice)", re.I), [Tag("document/invoice", "document-type")]),
     (re.compile(r"(?:شهادة|certificate)", re.I), [Tag("document/certificate", "document-type")]),

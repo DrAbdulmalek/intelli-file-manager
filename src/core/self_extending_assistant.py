@@ -1,7 +1,6 @@
 """المساعد القابل للتوسع ذاتياً - إنشاء أدوات جديدة"""
 import logging
-import traceback
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
