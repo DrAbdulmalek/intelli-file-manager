@@ -8,13 +8,13 @@ on:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -35,7 +35,8 @@ jobs:
             libltdl-dev libbz2-dev libreadline-dev \
             libsqlite3-dev wget curl llvm \
             libblas-dev liblapack-dev gfortran \
-            libjpeg-dev libpng-dev libfreetype6-dev
+            libjpeg-dev libpng-dev libfreetype6-dev \
+            patchelf
 
       - name: Cache Buildozer global
         uses: actions/cache@v4
@@ -60,7 +61,7 @@ jobs:
 
       - name: Build APK (debug)
         run: |
-          buildozer android debug 2>&1 | tail -50
+          buildozer android debug 2>&1 | tail -80
         env:
           BUILDOZER_WARN_ON_ROOT: 1
 
