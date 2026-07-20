@@ -601,12 +601,4 @@ _SAFE_CATEGORY_RE = re.compile(r"^[\w\-\u0600-\u06FF]+$")
 
 
 # When run directly: uvicorn src.api.server:app --port 8421
-app = None
-
-def __getattr__(name):
-    global app
-    if name == "app" and app is None:
-        app = create_app()
-    if name == "app":
-        return app
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+app = create_app()
