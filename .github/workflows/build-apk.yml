@@ -2,8 +2,10 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    branches:
+      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -31,69 +33,48 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            autoconf libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake libffi-dev libssl-dev \
-            libltdl-dev libbz2-dev libreadline-dev \
-            libsqlite3-dev wget curl llvm \
-            libblas-dev liblapack-dev gfortran \
-            libjpeg-dev libpng-dev libfreetype6-dev \
-            patchelf
+          sudo apt-get install -y -qq autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev libltdl-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libblas-dev liblapack-dev gfortran libjpeg-dev libpng-dev libfreetype6-dev patchelf
 
       - name: Cache Buildozer global
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
           key: buildozer-global-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-global-${{ runner.os }}-
+          restore-keys: buildozer-global-${{ runner.os }}-
 
       - name: Cache Buildozer Android
         uses: actions/cache@v4
         with:
           path: .buildozer
           key: buildozer-android-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-android-${{ runner.os }}-
+          restore-keys: buildozer-android-${{ runner.os }}-
 
-      - name: Install Buildozer & Cython
-        run: |
-          pip install --upgrade pip setuptools
-          pip install buildozer==1.5.0 cython==3.0.11
+      - name: Install Buildozer and Cython
+        run: pip install --upgrade pip setuptools && pip install buildozer==1.5.0 cython==3.0.11
 
-      - name: Build APK (debug)
-        run: |
-          buildozer android debug 2>&1 | tail -80
+      - name: Build APK debug
+        run: buildozer android debug 2>&1 | tail -80
         env:
           BUILDOZER_WARN_ON_ROOT: 1
 
       - name: Find and list APK files
         run: |
-          echo "=== Searching for APK files ==="
-          find . -name "*.apk" -type f 2>/dev/null | while read f; do
-            echo "Found: $f ($(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null) bytes)"
-          done
-          # Create bin directory and copy APKs there for consistent artifact path
+          echo "Searching for APK files..."
+          find . -name "*.apk" -type f 2>/dev/null
           mkdir -p bin
           find . -name "*.apk" -type f -exec cp {} bin/ \;
-          echo "=== Contents of bin/ ==="
-          ls -lh bin/ 2>/dev/null || echo "bin/ is empty"
+          ls -lh bin/ || echo "No APK in bin/"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: intellifile-debug-apk
-          path: |
-            bin/*.apk
-            ./**/*.apk
+          path: bin/*.apk
           if-no-files-found: warn
 
       - name: Release APK on tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            bin/*.apk
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: bin/*.apk
