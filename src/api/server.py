@@ -10,12 +10,15 @@ REST API + WebSocket endpoints for the IntelliFile Manager:
   - Health check: engine availability
 
 All endpoints support Arabic RTL content natively.
+Privacy-first: all processing is local, no data leaves the device.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -24,6 +27,64 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Path sandboxing — security: only allow paths under configured directories
+# ---------------------------------------------------------------------------
+
+_ALLOWED_DIRS: list[Path] | None = None
+_MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
+_MAX_WS_MESSAGE_SIZE = 10 * 1024  # 10 KB
+
+
+def _get_allowed_dirs() -> list[Path]:
+    """Get and cache the list of allowed directories."""
+    global _ALLOWED_DIRS
+    if _ALLOWED_DIRS is not None:
+        return _ALLOWED_DIRS
+    dirs_str = os.environ.get(
+        "INTELLIFILE_ALLOWED_DIRS",
+        os.path.join(os.getcwd(), "data"),
+    )
+    _ALLOWED_DIRS = [
+        Path(d.strip()).resolve()
+        for d in dirs_str.split(",")
+        if d.strip()
+    ]
+    _ALLOWED_DIRS.append(Path.cwd().resolve())
+    return _ALLOWED_DIRS
+
+
+def _validate_path(path_str: str, must_exist: bool = True) -> Path:
+    """Validate that a path is within allowed directories (sandboxing).
+
+    Raises HTTPException(403) if the path escapes the sandbox.
+    """
+    resolved = Path(path_str).resolve()
+    allowed = _get_allowed_dirs()
+    if not any(resolved.is_relative_to(allowed_dir) for allowed_dir in allowed):
+        raise HTTPException(
+            status_code=403,
+            detail="المسار خارج المجلدات المسموح بها",
+        )
+    if must_exist and not resolved.exists():
+        raise HTTPException(status_code=400, detail=f"المسار غير موجود: {resolved}")
+    return resolved
+
+
+def _sanitize_filename(filename: str) -> str:
+    """Sanitize an uploaded filename to prevent path traversal.
+
+    Strips directory components and rejects suspicious names.
+    """
+    # Strip directory components
+    safe_name = Path(filename).name
+    # Replace non-alphanumeric (except dots, dashes, underscores, Arabic chars)
+    safe_name = re.sub(r'[^\w\.\-\u0600-\u06FF]', '_', safe_name)
+    if not safe_name or safe_name.startswith('.'):
+        raise HTTPException(400, "اسم الملف غير صالح")
+    return safe_name
+
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
@@ -149,11 +210,12 @@ def create_app() -> FastAPI:
             except Exception:
                 engines[name] = False
 
-        # Check Ollama
+        # Check Ollama (async)
         try:
             import httpx
-            r = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
-            engines["ollama"] = r.status_code == 200
+            async with httpx.AsyncClient() as client:
+                r = await client.get("http://localhost:11434/api/tags", timeout=3.0)
+                engines["ollama"] = r.status_code == 200
         except Exception:
             engines["ollama"] = False
 
@@ -169,9 +231,8 @@ def create_app() -> FastAPI:
         if not clf:
             raise HTTPException(500, "Classifier engine unavailable")
 
-        path = Path(req.path)
-        if not path.exists():
-            raise HTTPException(400, f"المسار غير موجود: {req.path}")
+        # Security: validate path is within allowed directories
+        path = _validate_path(req.path)
 
         if path.is_file():
             result = clf.classify_file(str(path))
@@ -229,6 +290,8 @@ def create_app() -> FastAPI:
         search_eng = _get_engine("hybrid_search")
         if not search_eng:
             raise HTTPException(500, "Search engine unavailable")
+        # Security: validate directory path
+        _validate_path(directory)
         exts = tuple(extensions.split(",")) if extensions else None
         count = search_eng.index_files(directory, extensions=exts)
         return {"indexed": count, "directory": directory}
@@ -242,6 +305,8 @@ def create_app() -> FastAPI:
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
+        # Security: validate path
+        _validate_path(filepath)
         ft = tagger.auto_tag(filepath)
         return ft.to_dict()
 
@@ -250,6 +315,8 @@ def create_app() -> FastAPI:
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
+        # Security: validate path
+        _validate_path(req.filepath)
         tagger.add_manual_tag(req.filepath, req.tag, req.category)
         ft = tagger.get_tags(req.filepath)
         return ft.to_dict()
@@ -259,6 +326,9 @@ def create_app() -> FastAPI:
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
+        # Security: validate all paths
+        for fp in req.filepaths:
+            _validate_path(fp)
         count = tagger.batch_tag(req.filepaths, req.tag, req.category)
         return {"tagged": count, "tag": req.tag}
 
@@ -267,6 +337,8 @@ def create_app() -> FastAPI:
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
+        # Security: validate path
+        _validate_path(filepath)
         removed = tagger.remove_tag(filepath, tag)
         return {"removed": removed}
 
@@ -275,6 +347,8 @@ def create_app() -> FastAPI:
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
+        # Security: validate directory
+        _validate_path(directory)
         files = tagger.search_by_tag(directory, tag)
         return {"tag": tag, "files": files, "count": len(files)}
 
@@ -283,6 +357,8 @@ def create_app() -> FastAPI:
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
+        # Security: validate directory
+        _validate_path(directory)
         return tagger.get_all_tags(directory)
 
     # -------------------------------------------------------------------
@@ -301,6 +377,9 @@ def create_app() -> FastAPI:
         copilot = _get_engine("copilot")
         if not copilot:
             raise HTTPException(500, "Copilot engine unavailable")
+        # Security: validate all file paths
+        for fp in filepaths:
+            _validate_path(fp)
         count = copilot.index_files(filepaths)
         return {"indexed": count}
 
@@ -316,17 +395,30 @@ def create_app() -> FastAPI:
         copilot = _get_engine("copilot")
         if not copilot:
             raise HTTPException(500, "Copilot engine unavailable")
+        # Security: validate path
+        _validate_path(filepath)
         return {"summary": copilot.summarize_file(filepath)}
 
     # WebSocket for streaming copilot chat
     @_app.websocket("/api/copilot/ws")
     async def copilot_ws(websocket: WebSocket):
+        # Security: validate origin
+        origin = websocket.headers.get("origin", "")
+        allowed_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:8420"]
+        if origin and origin not in allowed_origins:
+            await websocket.close(code=4003, reason="Origin not allowed")
+            return
+
         await websocket.accept()
         copilot = _get_engine("copilot")
         try:
             while True:
                 data = await websocket.receive_json()
                 message = data.get("message", "")
+                # Security: limit message size
+                if len(message) > _MAX_WS_MESSAGE_SIZE:
+                    await websocket.send_json({"error": "Message too large"})
+                    continue
                 conv_id = data.get("conversation_id")
                 if copilot and message:
                     result = copilot.chat(message, conv_id)
@@ -336,7 +428,7 @@ def create_app() -> FastAPI:
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
         except Exception as exc:
-            logger.error(f"WebSocket error: {exc}")
+            logger.error("WebSocket error: %s", exc)
 
     # -------------------------------------------------------------------
     # Multimodal Processing
@@ -347,6 +439,8 @@ def create_app() -> FastAPI:
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
+        # Security: validate path
+        _validate_path(filepath)
         return mm.process_image(filepath, fix_scan=fix_scan)
 
     @_app.post("/api/process/audio")
@@ -354,6 +448,8 @@ def create_app() -> FastAPI:
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
+        # Security: validate path
+        _validate_path(filepath)
         return mm.process_audio(filepath)
 
     @_app.post("/api/process/video")
@@ -361,6 +457,8 @@ def create_app() -> FastAPI:
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
+        # Security: validate path
+        _validate_path(filepath)
         return mm.process_video(filepath)
 
     @_app.post("/api/process/document")
@@ -368,33 +466,49 @@ def create_app() -> FastAPI:
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
+        # Security: validate path
+        _validate_path(filepath)
         return mm.process_document(filepath)
 
     @_app.post("/api/process/upload")
     async def upload_and_process(file: UploadFile = File(...)):
         """Upload a file and process it based on its type."""
+        # Security: sanitize filename to prevent path traversal
+        safe_name = _sanitize_filename(file.filename)
+
+        # Check file size
+        content = await file.read()
+        if len(content) > _MAX_UPLOAD_SIZE:
+            raise HTTPException(400, "حجم الملف يتجاوز الحد المسموح (100MB)")
+
         tmp_dir = Path.home() / ".intellifile" / "uploads"
         tmp_dir.mkdir(parents=True, exist_ok=True)
-        tmp_path = tmp_dir / file.filename
+        tmp_path = tmp_dir / safe_name
         with open(tmp_path, "wb") as f:
-            content = await file.read()
             f.write(content)
 
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
 
-        ext = Path(file.filename).suffix.lower()
-        if ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp", ".gif"):
-            return mm.process_image(str(tmp_path))
-        elif ext in (".mp3", ".wav", ".ogg", ".flac", ".m4a"):
-            return mm.process_audio(str(tmp_path))
-        elif ext in (".mp4", ".avi", ".mkv", ".mov"):
-            return mm.process_video(str(tmp_path))
-        elif ext in (".pdf", ".docx", ".xlsx", ".txt"):
-            return mm.process_document(str(tmp_path))
-        else:
-            return {"path": str(tmp_path), "type": "unknown", "name": file.filename}
+        ext = Path(safe_name).suffix.lower()
+        try:
+            if ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp", ".gif"):
+                return mm.process_image(str(tmp_path))
+            elif ext in (".mp3", ".wav", ".ogg", ".flac", ".m4a"):
+                return mm.process_audio(str(tmp_path))
+            elif ext in (".mp4", ".avi", ".mkv", ".mov"):
+                return mm.process_video(str(tmp_path))
+            elif ext in (".pdf", ".docx", ".xlsx", ".txt"):
+                return mm.process_document(str(tmp_path))
+            else:
+                return {"path": str(tmp_path), "type": "unknown", "name": safe_name}
+        finally:
+            # Clean up temp file after processing
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
 
     # -------------------------------------------------------------------
     # Medical NER
@@ -432,7 +546,10 @@ def create_app() -> FastAPI:
         if not fh or not clf:
             raise HTTPException(500, "File handler or classifier unavailable")
 
-        source = Path(req.source_dir)
+        # Security: validate paths are within allowed directories
+        source = _validate_path(req.source_dir)
+        target = _validate_path(req.target_dir, must_exist=False) if req.target_dir else source
+
         if not source.is_dir():
             raise HTTPException(400, f"مجلد المصدر غير موجود: {req.source_dir}")
 
@@ -447,12 +564,15 @@ def create_app() -> FastAPI:
             try:
                 result = clf.classify_file(str(item))
                 category = result.get("category", "أخرى")
+                # Security: sanitize category for use as path component
+                if not _SAFE_CATEGORY_RE.match(category):
+                    category = "أخرى"
                 organized.setdefault(category, []).append(item.name)
 
                 if not req.dry_run:
-                    fh.move_file(str(item), category, req.target_dir or req.source_dir)
-            except Exception as exc:
-                errors.append(f"{item.name}: {exc}")
+                    fh.move_file(str(item), category, str(target))
+            except Exception:
+                errors.append(f"{item.name}: error during processing")
 
         return {
             "organized": organized,
@@ -476,5 +596,17 @@ def create_app() -> FastAPI:
     return _app
 
 
+# Safe category pattern (Arabic + alphanumeric + dash/underscore)
+_SAFE_CATEGORY_RE = re.compile(r"^[\w\-\u0600-\u06FF]+$")
+
+
 # When run directly: uvicorn src.api.server:app --port 8421
-app = create_app()
+app = None
+
+def __getattr__(name):
+    global app
+    if name == "app" and app is None:
+        app = create_app()
+    if name == "app":
+        return app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

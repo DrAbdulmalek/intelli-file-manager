@@ -244,7 +244,7 @@ class HybridSearchEngine:
 
         # Index into BM25
         self.bm25.add_documents(texts_for_bm25)
-        self._doc_ids = doc_ids_for_bm25
+        self._doc_ids.extend(doc_ids_for_bm25)
 
         # Index into semantic engine
         semantic_count = self.semantic.index_documents(documents)

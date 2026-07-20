@@ -44,10 +44,12 @@ class EnhancedMultimodalProcessor:
 
     def __init__(self, ollama_url: str = "http://localhost:11434",
                  ai_model: str = "llama3.2",
-                 scanner_fixer_enabled: bool = True):
+                 scanner_fixer_enabled: bool = True,
+                 allow_cloud_speech: bool = False):
         self.ollama_url = ollama_url
         self.ai_model = ai_model
         self.scanner_fixer_enabled = scanner_fixer_enabled
+        self.allow_cloud_speech = allow_cloud_speech  # Privacy: disabled by default
 
         # Lazy-loaded engines
         self._paddle_ocr = None
@@ -163,6 +165,7 @@ class EnhancedMultimodalProcessor:
             result["image_info_error"] = str(exc)
 
         working_path = filepath
+        temp_file_to_cleanup = None
 
         # Step 1: Scanner fixer (if enabled and available)
         if fix_scan:
@@ -172,34 +175,42 @@ class EnhancedMultimodalProcessor:
                     fixed_path = self._fix_scan(filepath)
                     if fixed_path:
                         working_path = fixed_path
+                        temp_file_to_cleanup = fixed_path
                         result["scan_fixed"] = True
-                        result["fixed_path"] = fixed_path
                 except Exception as exc:
                     result["scan_fix_error"] = str(exc)
 
-        # Step 2: OCR — PaddleOCR first, then Tesseract fallback
-        ocr_result = self._ocr_image(working_path)
-        result.update(ocr_result)
+        try:
+            # Step 2: OCR — PaddleOCR first, then Tesseract fallback
+            ocr_result = self._ocr_image(working_path)
+            result.update(ocr_result)
 
-        # Step 3: Vision-language description (Moondream2 via Ollama or llava)
-        vision_result = self._vision_describe(working_path)
-        if vision_result:
-            result["ai_description"] = vision_result
+            # Step 3: Vision-language description (Moondream2 via Ollama or llava)
+            vision_result = self._vision_describe(working_path)
+            if vision_result:
+                result["ai_description"] = vision_result
 
-        # Step 4: Medical NER on extracted text
-        extracted_text = result.get("extracted_text", "")
-        if extracted_text:
-            self._init_medical_ner()
-            if self._medical_ner:
+            # Step 4: Medical NER on extracted text
+            extracted_text = result.get("extracted_text", "")
+            if extracted_text:
+                self._init_medical_ner()
+                if self._medical_ner:
+                    try:
+                        ner_result = self._medical_ner.extract(extracted_text)
+                        result["medical_entities"] = ner_result.summary()
+                        result["diagnosis"] = ner_result.diagnosis
+                        result["medications"] = ner_result.medications
+                        result["patient_name"] = ner_result.patient_name
+                        result["patient_id"] = ner_result.patient_id
+                    except Exception as exc:
+                        result["ner_error"] = str(exc)
+        finally:
+            # Cleanup temp file from scanner fixer
+            if temp_file_to_cleanup:
                 try:
-                    ner_result = self._medical_ner.extract(extracted_text)
-                    result["medical_entities"] = ner_result.summary()
-                    result["diagnosis"] = ner_result.diagnosis
-                    result["medications"] = ner_result.medications
-                    result["patient_name"] = ner_result.patient_name
-                    result["patient_id"] = ner_result.patient_id
-                except Exception as exc:
-                    result["ner_error"] = str(exc)
+                    os.unlink(temp_file_to_cleanup)
+                except Exception:
+                    pass
 
         return result
 
@@ -334,22 +345,28 @@ class EnhancedMultimodalProcessor:
         path = Path(filepath)
         result = {"path": str(path), "type": "audio", "name": path.name}
 
-        # Try local Whisper model
+        # Try local Whisper model (privacy-first: local processing)
         transcript = self._transcribe_whisper(filepath)
         if transcript:
             result["transcript"] = transcript
             result["success"] = True
             result["engine"] = "whisper"
-        else:
-            # Fallback to Google Speech Recognition
+        elif self.allow_cloud_speech:
+            # WARNING: Google Speech sends audio to cloud — privacy risk for medical data
+            logger.warning("⚠️ Using Google Speech Recognition — audio data will be sent to Google cloud. "
+                           "Set allow_cloud_speech=False to disable.")
             transcript = self._transcribe_google(filepath)
             if transcript:
                 result["transcript"] = transcript
                 result["success"] = True
                 result["engine"] = "google_speech"
+                result["privacy_warning"] = "Audio was sent to Google cloud API — not recommended for medical data"
             else:
                 result["success"] = False
                 result["error"] = "لم يتم التعرف على الكلام"
+        else:
+            result["success"] = False
+            result["error"] = "لم يتم التعرف على الكلام (Whisper غير متاح و Google Speech معطل للخصوصية)"
 
         # Medical NER on transcript
         if result.get("transcript"):

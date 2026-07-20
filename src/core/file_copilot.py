@@ -42,7 +42,7 @@ class Message:
 @dataclass
 class Conversation:
     """محادثة كاملة مع سياق"""
-    id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     title: str = ""
     messages: list[Message] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
