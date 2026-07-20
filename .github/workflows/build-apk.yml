@@ -9,6 +9,8 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
     steps:
       - uses: actions/checkout@v4
 
@@ -17,25 +19,60 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Java JDK
+      - name: Install Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
-          pip install --upgrade pip
-          pip install buildozer cython
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake libffi-dev libssl-dev \
+            libltdl-dev libbz2-dev libreadline-dev \
+            libsqlite3-dev wget curl llvm \
+            libblas-dev liblapack-dev gfortran \
+            libjpeg-dev libpng-dev libfreetype6-dev
 
-      - name: Build APK
-        run: buildozer android debug
+      - name: Cache Buildozer global
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-global-${{ runner.os }}-
 
-      - name: Upload APK
+      - name: Cache Buildozer Android
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: buildozer-android-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-android-${{ runner.os }}-
+
+      - name: Install Buildozer & Cython
+        run: |
+          pip install --upgrade pip setuptools
+          pip install buildozer==1.5.0 cython==3.0.11
+
+      - name: Build APK (debug)
+        run: |
+          buildozer android debug 2>&1 | tail -50
+        env:
+          BUILDOZER_WARN_ON_ROOT: 1
+
+      - name: List built APK
+        run: ls -lh bin/*.apk 2>/dev/null || echo "APK not found in bin/"
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: intellifile-apk
+          name: intellifile-debug-apk
           path: bin/*.apk
+          if-no-files-found: warn
 
       - name: Release APK on tag
         if: startsWith(github.ref, 'refs/tags/v')

@@ -48,7 +48,7 @@ class EmbeddingEngine:
 
     def __init__(
         self,
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = "paraphrase-multilingual-MiniLM-L12-v2",
         device: Optional[str] = None,
         normalize_embeddings: bool = True,
         batch_size: int = 32,
@@ -95,8 +95,10 @@ class EmbeddingEngine:
     @property
     def dimension(self) -> Optional[int]:
         """أبعاد المتجهات (أو None إذا لم يُحمَّل النموذج)"""
-        if self._model is not None and hasattr(self._model, "get_sentence_embedding_dimension"):
-            return self._model.get_sentence_embedding_dimension()
+        if self._model is not None:
+            # sentence-transformers v5+ renamed the method
+            _fn = getattr(self._model, "get_embedding_dimension", None) or getattr(self._model, "get_sentence_embedding_dimension", None)
+            return _fn() if _fn else None
         return None
 
     @property

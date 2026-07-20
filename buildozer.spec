@@ -4,8 +4,8 @@ package.name = intellifile
 package.domain = org.intellifile
 source.dir = mobile
 source.include_exts = py,png,jpg,kv,atlas,json,ttf,otf
-version = 2.0.0
-requirements = python3==3.11.6,kivy==2.3.0,pillow,pytesseract,httpx,pydantic,chromadb,rank-bm25,rapidfuzz,networkx,pdfplumber,python-docx,openpyxl,rich
+version = 2.1.0
+requirements = python3,kivy==2.3.0,pillow,httpx,pydantic,rank-bm25,rapidfuzz,networkx,rich
 orientation = portrait
 fullscreen = 1
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,CAMERA,RECORD_AUDIO
