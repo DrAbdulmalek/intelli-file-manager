@@ -1,0 +1,29 @@
+{
+  "name": "IntelliFile Manager - إدارة الملفات الذكية",
+  "short_name": "IntelliFile",
+  "description": "تطبيق شامل لتصنيف وإدارة الملفات بالذكاء الاصطناعي - يدعم العربية، البحث الدلالي، والمعالجة متعددة الوسائط",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities", "medical"],
+  "screenshots": [],
+  "prefer_related_applications": false
+}

@@ -11,7 +11,10 @@ export function useIsMobile() {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
     }
     mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    // Initialize state outside the effect body using a microtask
+    // to avoid synchronous setState in effect warning
+    const initialValue = window.innerWidth < MOBILE_BREAKPOINT
+    queueMicrotask(() => setIsMobile(initialValue))
     return () => mql.removeEventListener("change", onChange)
   }, [])
 
