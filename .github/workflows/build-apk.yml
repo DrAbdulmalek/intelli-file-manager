@@ -6,6 +6,9 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-22.04
@@ -65,18 +68,32 @@ jobs:
         env:
           BUILDOZER_WARN_ON_ROOT: 1
 
-      - name: List built APK
-        run: ls -lh bin/*.apk 2>/dev/null || echo "APK not found in bin/"
+      - name: Find and list APK files
+        run: |
+          echo "=== Searching for APK files ==="
+          find . -name "*.apk" -type f 2>/dev/null | while read f; do
+            echo "Found: $f ($(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null) bytes)"
+          done
+          # Create bin directory and copy APKs there for consistent artifact path
+          mkdir -p bin
+          find . -name "*.apk" -type f -exec cp {} bin/ \;
+          echo "=== Contents of bin/ ==="
+          ls -lh bin/ 2>/dev/null || echo "bin/ is empty"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: intellifile-debug-apk
-          path: bin/*.apk
+          path: |
+            bin/*.apk
+            ./**/*.apk
           if-no-files-found: warn
 
       - name: Release APK on tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: bin/*.apk
+          files: |
+            bin/*.apk
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
