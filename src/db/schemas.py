@@ -6,7 +6,7 @@
 """
 
 from dataclasses import dataclass, field, asdict
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 from datetime import datetime
 from enum import Enum
 

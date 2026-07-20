@@ -7,7 +7,6 @@ Requires: PySide6
 """
 
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -25,22 +24,11 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
     Slot,
-    QTranslator,
-    QLocale,
 )
 from PySide6.QtGui import (
     QAction,
-    QColor,
     QDesktopServices,
-    QFileSystemWatcher,
-    QFont,
-    QFontDatabase,
-    QIcon,
     QKeySequence,
-    QPalette,
-    QPixmap,
-    QTextCharFormat,
-    QTextCursor,
     QUrl,
 )
 from PySide6.QtWidgets import (
@@ -56,25 +44,19 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMenu,
-    QMenuBar,
     QMessageBox,
     QProgressBar,
     QPushButton,
-    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QStatusBar,
-    QStyle,
-    QStyleFactory,
     QTabWidget,
     QTextBrowser,
-    QTextEdit,
     QToolBar,
     QToolButton,
     QTreeView,

@@ -1,8 +1,7 @@
 """منقب العلاقات المخفية بين الملفات"""
-import os
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)

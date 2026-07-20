@@ -15,7 +15,6 @@ Privacy-first: all processing is local, no data leaves the device.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import re

@@ -1,5 +1,4 @@
 """وظائف مساعدة لتطبيق IntelliFile"""
-import os
 import hashlib
 from pathlib import Path
 

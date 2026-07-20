@@ -1,10 +1,8 @@
 """مصنف الملفات الذكي - يجمع بين القواعد والمحرك الذكي"""
-import os
 import logging
-import tempfile
 from pathlib import Path
 from typing import Optional
-from .config import Config, CATEGORIES
+from .config import Config
 
 logger = logging.getLogger(__name__)
 

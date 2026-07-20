@@ -17,7 +17,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
