@@ -5,7 +5,7 @@ package.domain = org.intellifile
 source.dir = mobile
 source.include_exts = py,png,jpg,kv,atlas,json,ttf,otf
 version = 2.1.0
-requirements = python3,kivy==2.2.1,pydantic
+requirements = python3,kivy==2.2.1
 orientation = portrait
 fullscreen = 1
 android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,CAMERA,RECORD_AUDIO

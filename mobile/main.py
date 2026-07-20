@@ -62,14 +62,8 @@ class APIClient:
         self.base_url = (base_url or os.environ.get("INTELLIFILE_API", _DEFAULT_API)).rstrip("/")
 
     def _request(self, method: str, path: str, **kwargs):
-        """Make HTTP request using httpx (preferred) or urllib."""
+        """Make HTTP request using urllib (no external deps needed)."""
         url = f"{self.base_url}{path}"
-        try:
-            import httpx
-            r = httpx.request(method, url, timeout=10, **kwargs)
-            return r.json(), r.status_code
-        except ImportError:
-            pass
         try:
             import urllib.request
             import urllib.error
