@@ -12,6 +12,11 @@ from .predictive_organizer import PredictiveOrganizer
 from .emergent_category import EmergentCategoryEngine
 from .self_extending_assistant import SelfExtendingAssistant
 from .agent_cli import AgentCLI
+from .hybrid_search import HybridSearchEngine, BM25Engine, SemanticSearchEngineV2
+from .medical_ner import ArabicMedicalNER, ExtractionResult, MedicalEntity
+from .smart_tagger import SmartTagger, Tag, FileTags
+from .file_copilot import FileCopilot, Conversation, Message
+from .enhanced_multimodal import EnhancedMultimodalProcessor
 
 __all__ = [
     "Config", "SmartFileClassifier", "FileHandler", "AIEngine",
@@ -19,4 +24,9 @@ __all__ = [
     "MultimodalProcessor", "FileAgent", "RelationshipMiner",
     "PredictiveOrganizer", "EmergentCategoryEngine",
     "SelfExtendingAssistant", "AgentCLI",
+    "HybridSearchEngine", "BM25Engine", "SemanticSearchEngineV2",
+    "ArabicMedicalNER", "ExtractionResult", "MedicalEntity",
+    "SmartTagger", "Tag", "FileTags",
+    "FileCopilot", "Conversation", "Message",
+    "EnhancedMultimodalProcessor",
 ]
