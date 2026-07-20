@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { QUICK_COMMANDS, AI_RESPONSES } from './constants';
 import type { ChatMessage } from './types';
+import api from '@/lib/api';
 
 interface AICopilotProps {
   chatMessages: ChatMessage[];
@@ -33,7 +34,7 @@ export const AICopilot = React.memo(function AICopilot({
   }, [chatMessages, isTyping]);
 
   const handleSendMessage = useCallback(
-    (text?: string) => {
+    async (text?: string) => {
       const msg = text || chatInput.trim();
       if (!msg) return;
 
@@ -47,12 +48,22 @@ export const AICopilot = React.memo(function AICopilot({
       setChatInput('');
       setIsTyping(true);
 
-      setTimeout(() => {
-        setIsTyping(false);
+      try {
+        // Try real API first
+        const result = await api.copilotChat(msg);
+        const assistantMsg: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: result.response,
+          timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+        };
+        setChatMessages((prev) => [...prev, assistantMsg]);
+      } catch (error) {
+        // Fallback to simulated response when backend unavailable
         const matchedKey = Object.keys(AI_RESPONSES).find((k) => msg.includes(k));
         const aiResponse = matchedKey
           ? AI_RESPONSES[matchedKey]
-          : `🤖 فهمت طلبك: "${msg}"\n\nجاري معالجة الأمر...\n\n✅ تم التنفيذ بنجاح!\n\nيمكنني مساعدتك بأي أمر آخر. ماذا تريد أن أفعل؟`;
+          : `🤖 فهمت طلبك: "${msg}"\n\n⚠️ الخادم غير متاح حالياً. يتم استخدام الردود المحلية.\n\nيمكنك تشغيل خادم API: python -m uvicorn src.api.server:app --port 8421`;
         const assistantMsg: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -60,7 +71,9 @@ export const AICopilot = React.memo(function AICopilot({
           timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
         };
         setChatMessages((prev) => [...prev, assistantMsg]);
-      }, 2000 + Math.random() * 1500);
+      } finally {
+        setIsTyping(false);
+      }
     },
     [chatInput, setChatMessages, setChatInput, setIsTyping]
   );

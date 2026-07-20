@@ -1,0 +1,39 @@
+{
+  "name": "IntelliFile Manager",
+  "short_name": "IntelliFile",
+  "description": "إدارة ملفات ذكية — بحث هجين، وسوم ذكية، مساعد ملفات، NER طبي",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#0f3460",
+  "orientation": "portrait-primary",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["productivity", "utilities", "medical"],
+  "shortcuts": [
+    {
+      "name": "بحث",
+      "short_name": "بحث",
+      "url": "/?action=search",
+      "icons": [{"src": "/icons/search.png", "sizes": "96x96"}]
+    },
+    {
+      "name": "تصنيف",
+      "short_name": "تصنيف",
+      "url": "/?action=classify",
+      "icons": [{"src": "/icons/classify.png", "sizes": "96x96"}]
+    }
+  ]
+}

@@ -12,12 +12,49 @@ class SemanticSearchEngine:
     """محرك بحث دلالي باستخدام embeddings"""
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2",
-                 index_path: str = None):
+                 index_path: str = None,
+                 glossary_terms: dict = None):
         self.model_name = model_name
         self._model = None
         self._index_path = Path(index_path or "~/.intellifile/search_index").expanduser()
         self._embeddings = {}
         self._file_texts = {}
+        self._field_extractor = None
+        self._glossary_terms = glossary_terms or {}
+
+    def _init_field_extractor(self):
+        """Try to import field_extractor from omni-medical-suite."""
+        if self._field_extractor is not None:
+            return
+        try:
+            from src.ocr.field_extractor import extract_fields, build_template_signature
+            self._field_extractor = {
+                "extract_fields": extract_fields,
+                "build_template_signature": build_template_signature,
+            }
+            logger.info("تم تحميل field_extractor من omni-medical-suite")
+        except ImportError:
+            logger.debug("field_extractor غير متاح")
+            self._field_extractor = None
+
+    def _enrich_with_glossary(self, text: str) -> str:
+        """Enrich text with glossary terms for better search matching.
+
+        Appends normalized glossary terms found in the text, enabling
+        bilingual search (Arabic query matching English terms and vice versa).
+        """
+        if not self._glossary_terms:
+            return text
+
+        enriched_parts = [text]
+        text_lower = text.lower()
+
+        for arabic_term, english_term in self._glossary_terms.items():
+            if arabic_term in text or english_term.lower() in text_lower:
+                enriched_parts.append(f"[{arabic_term} = {english_term}]")
+
+        enriched = " ".join(enriched_parts)
+        return enriched[:3000]  # Limit length
 
     def _load_model(self):
         """تحميل نموذج embeddings"""
@@ -67,6 +104,8 @@ class SemanticSearchEngine:
             if item.is_file() and not item.name.startswith("."):
                 try:
                     text = self._extract_text(str(item))
+                    # Enrich with glossary terms
+                    text = self._enrich_with_glossary(text)
                     if text.strip():
                         emb = self._model.encode(text)
                         self._embeddings[str(item)] = emb.tolist()
@@ -84,7 +123,8 @@ class SemanticSearchEngine:
             return []
 
         try:
-            query_emb = self._model.encode(query)
+            query_enriched = self._enrich_with_glossary(query)
+            query_emb = self._model.encode(query_enriched)
             results = []
             for filepath, emb_list in self._embeddings.items():
                 # حساب التشابه الجيبي

@@ -34,7 +34,7 @@ def main():
         description="IntelliFile - تطبيق تصنيف الملفات الذكي | Smart File Classifier",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="تفعيل السجلات التفصيلية")
-    parser.add_argument("--version", action="version", version="IntelliFile v1.0.0")
+    parser.add_argument("--version", action="version", version="IntelliFile v2.0.0")
     parser.add_argument("--no-gui", action="store_true", help="تشغيل بدون واجهة رسومية")
     parser.add_argument("--cli", action="store_true", help="تشغيل واجهة سطر الأوامر")
     parser.add_argument("--web", action="store_true", help="تشغيل خادم الويب فقط")
@@ -155,25 +155,44 @@ def _start_gui(config, logger):
 
 
 def _start_web_server(config, logger):
-    """بدء خادم الويب"""
+    """بدء خادم API + خادم الويب"""
     import subprocess
+    import threading
+
     web_dir = Path(__file__).parent.parent / "web"
 
-    if not web_dir.exists():
-        logger.error(f"مجلد الويب غير موجود: {web_dir}")
-        sys.exit(1)
+    # Start FastAPI backend on port 8421
+    def run_api():
+        try:
+            import uvicorn
+            from src.api.server import app
+            logger.info("Starting IntelliFile API server on http://localhost:8421")
+            uvicorn.run(app, host="0.0.0.0", port=8421, log_level="info")
+        except Exception as e:
+            logger.error(f"خطأ في خادم API: {e}")
 
-    logger.info("جاري بدء خادم الويب...")
-    logger.info("افتح http://localhost:3000 في المتصفح")
+    api_thread = threading.Thread(target=run_api, daemon=True)
+    api_thread.start()
 
-    try:
-        subprocess.run(["npm", "run", "dev"], cwd=str(web_dir), check=True)
-    except FileNotFoundError:
-        logger.error("npm غير موجود. تأكد من تثبيت Node.js")
-        sys.exit(1)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"خطأ في تشغيل خادم الويب: {e}")
-        sys.exit(1)
+    if web_dir.exists():
+        logger.info("جاري بدء خادم الويب...")
+        logger.info("افتح http://localhost:3000 في المتصفح")
+        logger.info("API docs: http://localhost:8421/api/docs")
+        try:
+            subprocess.run(["npm", "run", "dev"], cwd=str(web_dir), check=True)
+        except FileNotFoundError:
+            logger.error("npm غير موجود. تأكد من تثبيت Node.js")
+            logger.info("API server still running at http://localhost:8421")
+            # Keep API server running even without frontend
+            api_thread.join()
+        except subprocess.CalledProcessError as e:
+            logger.error(f"خطأ في تشغيل خادم الويب: {e}")
+            logger.info("API server still running at http://localhost:8421")
+            api_thread.join()
+    else:
+        logger.info("مجلد الويب غير موجود — تشغيل API server فقط")
+        logger.info("API: http://localhost:8421 | Docs: http://localhost:8421/api/docs")
+        api_thread.join()
 
 
 if __name__ == "__main__":

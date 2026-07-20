@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CATEGORIES, SEARCH_SUGGESTIONS } from './constants';
 import { formatFileSize, getFileIcon, getCategoryInfo } from './helpers';
-import type { FileItem } from './types';
+import type { FileItem, FileCategory } from './types';
+import api from '@/lib/api';
 
 interface SearchPanelProps {
   files: FileItem[];
@@ -41,12 +42,29 @@ export const SearchPanel = React.memo(function SearchPanel({
 }: SearchPanelProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const handleSemanticSearch = useCallback(() => {
+  const handleSemanticSearch = useCallback(async () => {
     if (!semanticQuery.trim()) return;
     setIsSearching(true);
     setShowSuggestions(false);
 
-    setTimeout(() => {
+    try {
+      // Try real hybrid search API
+      const result = await api.search(semanticQuery, 10, 'hybrid');
+      const mapped: FileItem[] = result.results.map((r, i) => ({
+        id: r.id || i.toString(),
+        name: r.id?.split('/').pop() || 'نتيجة بحث',
+        size: 0,
+        extension: r.id?.split('.').pop() || '',
+        category: 'مستندات' as FileCategory,
+        isProtected: false,
+        isDuplicate: false,
+        createdAt: new Date().toISOString(),
+        similarityScore: Math.round((r.rrf_score || r.score || 0) * 1000),
+        isClassified: true,
+      }));
+      setSearchResults(mapped);
+    } catch {
+      // Fallback to local search
       const query = semanticQuery.toLowerCase();
       const scored = files.map((f) => {
         let score = 0;
@@ -58,12 +76,13 @@ export const SearchPanel = React.memo(function SearchPanel({
       });
       scored.sort((a, b) => (b.similarityScore || 0) - (a.similarityScore || 0));
       setSearchResults(scored.slice(0, 10));
+    } finally {
       setIsSearching(false);
       setHasSearched(true);
       if (!recentSearches.includes(semanticQuery)) {
         setRecentSearches((prev) => [semanticQuery, ...prev.slice(0, 4)]);
       }
-    }, 1200);
+    }
   }, [semanticQuery, files, recentSearches, setSearchResults, setIsSearching, setHasSearched, setRecentSearches]);
 
   return (

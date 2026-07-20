@@ -2,8 +2,8 @@ from setuptools import setup, find_packages
 
 setup(
     name="intellifile",
-    version="1.0.0",
-    description="تطبيق تصنيف الملفات الذكي - Smart File Classifier",
+    version="2.0.0",
+    description="تطبيق إدارة الملفات الذكي المتكامل — Hybrid Search + Smart Tags + File Copilot + Medical NER",
     author="Dr. Abdulmalek",
     packages=find_packages(),
     python_requires=">=3.9",
@@ -24,6 +24,13 @@ setup(
         "sentence-transformers>=2.2.0",
         "numpy>=1.24.0",
         "scipy>=1.10.0",
+        "rank-bm25>=0.2.2",
+
+        # خادم API
+        "fastapi>=0.104.0",
+        "uvicorn[standard]>=0.24.0",
+        "python-multipart>=0.0.6",
+        "websockets>=12.0",
 
         # الرسوم البيانية والعلاقات
         "networkx>=3.1",
@@ -41,12 +48,29 @@ setup(
         # أدوات مساعدة
         "pydantic>=2.0.0",
         "rich>=13.0.0",
+        "rapidfuzz>=3.0.0",
     ],
     extras_require={
         "voice": [
             "pyttsx3>=2.90",
             "SpeechRecognition>=3.10.0",
             "pyaudio>=0.2.12",
+        ],
+        "ocr": [
+            "pytesseract>=0.3.10",
+            "paddleocr>=2.7.0",
+            "paddlepaddle>=2.5.0",
+        ],
+        "whisper": [
+            "openai-whisper>=20230314",
+        ],
+        "vision": [
+            "paddleocr>=2.7.0",
+            "paddlepaddle>=2.5.0",
+        ],
+        "medical": [
+            "paddleocr>=2.7.0",
+            "pytesseract>=0.3.10",
         ],
         "extras": [
             "plotly>=5.18.0",
@@ -56,6 +80,10 @@ setup(
             "pyttsx3>=2.90",
             "SpeechRecognition>=3.10.0",
             "pyaudio>=0.2.12",
+            "pytesseract>=0.3.10",
+            "paddleocr>=2.7.0",
+            "paddlepaddle>=2.5.0",
+            "openai-whisper>=20230314",
             "plotly>=5.18.0",
             "pandas>=2.0.0",
         ],
