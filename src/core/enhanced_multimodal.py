@@ -92,17 +92,24 @@ class EnhancedMultimodalProcessor:
             return
         if not self.scanner_fixer_enabled:
             return
-        try:
-            from packages.scanner_fixer.src.scanner_fixer.pipeline import ScannerPipeline
-            self._scanner_fixer = ScannerPipeline()
-            logger.info("تم تحميل scanner_fixer من omni-medical-suite")
-        except ImportError:
+        # Try omni-medical-suite package paths (priority order)
+        for module_path in [
+            "packages.scanner_fixer",
+            "scanner_fixer",
+            "src.scanner_fixer",
+        ]:
             try:
-                from scanner_fixer.pipeline import ScannerPipeline
-                self._scanner_fixer = ScannerPipeline()
-                logger.info("تم تحميل scanner_fixer (standalone)")
+                mod = __import__(module_path, fromlist=["fix_scan", "enhance_for_ocr"])
+                self._scanner_fixer = {
+                    "fix_scan": getattr(mod, "fix_scan", None),
+                    "enhance_for_ocr": getattr(mod, "enhance_for_ocr", None),
+                }
+                logger.info(f"تم تحميل scanner_fixer من {module_path}")
+                return
             except ImportError:
-                logger.debug("scanner_fixer غير متاح — سيتم تخطي خطوة الإصلاح")
+                continue
+        logger.debug("scanner_fixer غير متاح — سيتم تخطي خطوة الإصلاح")
+        self._scanner_fixer = None
 
     def _init_medical_ner(self):
         if self._medical_ner is not None:
@@ -201,32 +208,44 @@ class EnhancedMultimodalProcessor:
         if not self._scanner_fixer:
             return None
         try:
-            # Use scanner_fixer pipeline
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                output_path = tmp.name
+            fix_fn = self._scanner_fixer.get("fix_scan")
+            if fix_fn:
+                result = fix_fn(filepath)
+                if result and hasattr(result, "get"):
+                    image = result.get("image")
+                    if image:
+                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                            image.save(tmp.name)
+                            return tmp.name
+                elif isinstance(result, str) and Path(result).exists():
+                    return result
 
-            # Try using the pipeline's process method
-            if hasattr(self._scanner_fixer, "process"):
-                result = self._scanner_fixer.process(filepath, output_path=output_path)
-                if result and Path(output_path).exists():
-                    return output_path
-
-            # Fallback: try individual operations
-            from PIL import Image
+            # Fallback: PIL-based basic enhancement
+            from PIL import Image, ImageEnhance, ImageFilter
             img = Image.open(filepath)
 
-            # Auto-rotate and deskew
-            if hasattr(self._scanner_fixer, "deskew"):
-                img = self._scanner_fixer.deskew(img)
-            elif hasattr(self._scanner_fixer, "auto_rotate"):
-                img = self._scanner_fixer.auto_rotate(img)
+            # Convert to grayscale if needed
+            if img.mode != "L":
+                img = img.convert("L")
 
-            # Enhance
-            if hasattr(self._scanner_fixer, "enhance"):
-                img = self._scanner_fixer.enhance(img)
+            # Apply basic enhancement
+            enhance_fn = self._scanner_fixer.get("enhance_for_ocr")
+            if enhance_fn:
+                try:
+                    result = enhance_fn(img)
+                    if result:
+                        img = result
+                except Exception:
+                    pass
 
-            img.save(output_path)
-            return output_path
+            # Fallback PIL enhancement
+            img = ImageEnhance.Contrast(img).enhance(1.5)
+            img = ImageEnhance.Sharpness(img).enhance(2.0)
+            img = img.filter(ImageFilter.MedianFilter(size=3))
+
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                img.save(tmp.name)
+                return tmp.name
 
         except Exception as exc:
             logger.debug(f"خطأ في scanner_fixer: {exc}")
