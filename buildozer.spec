@@ -16,7 +16,7 @@ android.accept_sdk_license = True
 android.archs = arm64-v8a
 android.allow_backup = True
 android.skip_update = False
-p4a.branch = v2024.01.15
+p4a.branch = v2024.01.21
 log_level = 2
 warn_on_root = 1
 
