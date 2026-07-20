@@ -193,6 +193,10 @@ def create_app() -> FastAPI:
             from src.core.file_handler import FileHandler
             _engines[name] = FileHandler()
 
+        elif name == "embeddings":
+            from src.ai.embeddings import EmbeddingEngine
+            _engines[name] = EmbeddingEngine(model_name="paraphrase-multilingual-MiniLM-L12-v2")
+
         return _engines.get(name)
 
     # -------------------------------------------------------------------
@@ -209,6 +213,19 @@ def create_app() -> FastAPI:
             except Exception:
                 engines[name] = False
 
+        # Check EmbeddingEngine (sentence-transformers)
+        try:
+            emb = _get_engine("embeddings")
+            if emb:
+                emb.load()
+                engines["embeddings"] = emb.is_loaded
+                engines["embedding_model"] = emb.model_name
+                engines["embedding_dimension"] = emb.dimension
+            else:
+                engines["embeddings"] = False
+        except Exception:
+            engines["embeddings"] = False
+
         # Check Ollama (async)
         try:
             import httpx
@@ -218,7 +235,45 @@ def create_app() -> FastAPI:
         except Exception:
             engines["ollama"] = False
 
-        return HealthResponse(status="ok", version="2.0.0", engines=engines)
+        return HealthResponse(status="ok", version="2.1.0", engines=engines)
+
+    # -------------------------------------------------------------------
+    # Embeddings (sentence-transformers)
+    # -------------------------------------------------------------------
+
+    @_app.post("/api/embed")
+    async def embed_texts(texts: list[str]):
+        """توليد التمثيلات المتجهية للنصوص باستخدام sentence-transformers.
+
+        يدعم العربية والإنجليزية مع نموذج paraphrase-multilingual-MiniLM-L12-v2.
+        """
+        emb = _get_engine("embeddings")
+        if not emb:
+            raise HTTPException(503, "محرك التمثيل المتجهي غير متاح. ثبّت sentence-transformers.")
+        try:
+            emb.load()
+            vectors = emb.encode_batch(texts)
+            return {
+                "embeddings": vectors,
+                "count": len(vectors),
+                "model": emb.model_name,
+                "dimension": emb.dimension,
+            }
+        except Exception as exc:
+            raise HTTPException(500, f"فشل التمثيل المتجهي: {exc}")
+
+    @_app.post("/api/embed/similarity")
+    async def compute_similarity(text1: str = Query(...), text2: str = Query(...)):
+        """حساب التشابه الدلالي بين نصين."""
+        emb = _get_engine("embeddings")
+        if not emb:
+            raise HTTPException(503, "محرك التمثيل المتجهي غير متاح")
+        try:
+            emb.load()
+            sim = emb.similarity(text1, text2)
+            return {"similarity": sim, "text1": text1[:50], "text2": text2[:50]}
+        except Exception as exc:
+            raise HTTPException(500, f"فشل حساب التشابه: {exc}")
 
     # -------------------------------------------------------------------
     # Classify
@@ -251,6 +306,15 @@ def create_app() -> FastAPI:
         search_eng = _get_engine("hybrid_search")
         if not search_eng:
             raise HTTPException(500, "Search engine unavailable")
+
+        # Auto-wire sentence-transformers for semantic search
+        if req.engine in ("semantic", "hybrid"):
+            try:
+                emb = _get_engine("embeddings")
+                if emb and emb.is_loaded and hasattr(search_eng, 'wire_embeddings'):
+                    search_eng.wire_embeddings(emb.encode, emb.dimension)
+            except Exception:
+                pass
 
         if req.engine == "bm25":
             results = search_eng.bm25.search(req.query, top_k=req.top_k)
