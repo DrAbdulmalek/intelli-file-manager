@@ -166,8 +166,18 @@ def _start_web_server(config, logger):
         try:
             import uvicorn
             from src.api.server import app
-            logger.info("Starting IntelliFile API server on http://localhost:8421")
-            uvicorn.run(app, host="0.0.0.0", port=8421, log_level="info")
+            # SECURITY: Bind to localhost only by default.
+            # Use INTELLIFILE_HOST=0.0.0.0 only if you explicitly want
+            # network access and have set up authentication.
+            import os
+            host = os.getenv("INTELLIFILE_HOST", "127.0.0.1")
+            if host != "127.0.0.1":
+                logger.warning(
+                    "SECURITY: API server bound to %s — ensure authentication is configured!",
+                    host,
+                )
+            logger.info("Starting IntelliFile API server on http://%s:8421", host)
+            uvicorn.run(app, host=host, port=8421, log_level="info")
         except Exception as e:
             logger.error(f"خطأ في خادم API: {e}")
 

@@ -1,4 +1,9 @@
-"""المساعد القابل للتوسع ذاتياً - إنشاء أدوات جديدة"""
+"""المساعد القابل للتوسع ذاتياً - إنشاء أدوات جديدة
+
+SECURITY NOTE: The dangerous exec()-based dynamic tool creation has been removed.
+Only pre-registered (built-in) tools are available now. Future plugin support
+will use a safe, allowlisted plugin interface instead of arbitrary code execution.
+"""
 import logging
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -7,7 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class SelfExtendingAssistant:
-    """مساعد يمكنه إنشاء أدوات جديدة في وقت التشغيل"""
+    """مساعد يمكنه استخدام أدوات مدمجة وآمنة فقط
+
+    تم إزالة exec() لأسباب أمنية — الأدوات الديناميكية ستكون
+    عبر نظام إضافات (plugin) آمن في إصدار لاحق.
+    """
 
     def __init__(self, ai_engine=None):
         self.ai_engine = ai_engine
@@ -39,27 +48,28 @@ class SelfExtendingAssistant:
             },
         }
 
-    def create_tool(self, name: str, description: str,
-                     function_code: str) -> bool:
-        """إنشاء أداة جديدة ديناميكياً"""
-        try:
-            # إنشاء دالة من الكود
-            namespace = {}
-            exec(function_code, namespace)
-            func = namespace.get(name)
-            if not callable(func):
-                return False
+    def register_tool(self, name: str, description: str, func: callable,
+                      params: List[str] = None) -> bool:
+        """تسجيل أداة جديدة بشكل آمن — يجب تمرير دالة Python حقيقية
 
-            self._tools[name] = {
-                "description": description,
-                "function": func,
-                "dynamic": True,
-            }
-            logger.info(f"تم إنشاء أداة جديدة: {name}")
-            return True
-        except Exception as e:
-            logger.error(f"خطأ في إنشاء الأداة {name}: {e}")
+        هذا يحل محل create_tool() القديم الذي كان يستخدم exec().
+        الأداة يجب أن تكون دالة Python مسجلة صراحة، وليس كود نصي.
+        """
+        if not callable(func):
+            logger.error(f"لا يمكن تسجيل أداة غير قابلة للاستدعاء: {name}")
             return False
+
+        if name in self._tools:
+            logger.warning(f"الأداة '{name}' موجودة مسبقاً — يتم الاستبدال")
+
+        self._tools[name] = {
+            "description": description,
+            "function": func,
+            "params": params or [],
+            "dynamic": True,
+        }
+        logger.info(f"تم تسجيل أداة جديدة: {name}")
+        return True
 
     def execute_tool(self, name: str, params: Dict = None) -> str:
         """تنفيذ أداة"""
@@ -91,36 +101,6 @@ class SelfExtendingAssistant:
             {"name": name, "description": info["description"], "dynamic": info.get("dynamic", False)}
             for name, info in self._tools.items()
         ]
-
-    async def generate_tool_from_instruction(self, instruction: str) -> Optional[Dict]:
-        """استخدام AI لتوليد أداة من وصف"""
-        if not self.ai_engine:
-            return None
-
-        prompt = (
-            f"أنت مساعد IntelliFile. أنش أداة Python بناءً على الوصف التالي.\n"
-            f"أجب بصيغة Python فقط بدون أي شرح:\n\n"
-            f"الوصف: {instruction}\n\n"
-            f"القالب:\n"
-            f"def tool_name(**kwargs):\n"
-            f"    # الكود هنا\n"
-            f"    return result\n"
-        )
-
-        try:
-            response = self.ai_engine.chat(prompt)
-            code = response.strip()
-            # استخراج اسم الدالة
-            import re
-            match = re.search(r"def\s+(\w+)\s*\(", code)
-            if match:
-                name = match.group(1)
-                self.create_tool(name, instruction, code)
-                return {"name": name, "description": instruction, "code": code}
-        except Exception:
-            pass
-
-        return None
 
     # === الأدوات المدمجة ===
     @staticmethod

@@ -52,11 +52,15 @@ def compute_file_hash(filepath: str, algorithm: str = "sha256") -> str:
 
 
 def is_path_safe(base_path: str, target_path: str) -> bool:
-    """التحقق من أن المسار آمن ولا يحتوي على path traversal"""
+    """التحقق من أن المسار آمن ولا يحتوي على path traversal
+
+    يستخدم Path.is_relative_to() بدلاً من startswith() النصي
+    لتجنب ثغرات مثل /home/user/intellifile-evil/ المطابقة لـ /home/user/intellifile
+    """
     try:
         base = Path(base_path).resolve()
         target = Path(target_path).resolve()
-        return str(target).startswith(str(base))
+        return target.is_relative_to(base)
     except (ValueError, OSError):
         return False
 
