@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="intellifile",
     version="2.0.0",
-    description="تطبيق إدارة الملفات الذكي المتكامل — Hybrid Search + Smart Tags + File Copilot + Medical NER",
+    description="تطبيق إدارة الملفات الذكي المحلي — Hybrid Search + Smart Tags + File Copilot + NER",
     author="Dr. Abdulmalek",
     packages=find_packages(),
     python_requires=">=3.9",
@@ -63,14 +63,6 @@ setup(
         ],
         "whisper": [
             "openai-whisper>=20230314",
-        ],
-        "vision": [
-            "paddleocr>=2.7.0",
-            "paddlepaddle>=2.5.0",
-        ],
-        "medical": [
-            "paddleocr>=2.7.0",
-            "pytesseract>=0.3.10",
         ],
         "extras": [
             "plotly>=5.18.0",

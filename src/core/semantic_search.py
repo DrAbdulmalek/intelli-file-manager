@@ -18,23 +18,7 @@ class SemanticSearchEngine:
         self._index_path = Path(index_path or "~/.intellifile/search_index").expanduser()
         self._embeddings = {}
         self._file_texts = {}
-        self._field_extractor = None
         self._glossary_terms = glossary_terms or {}
-
-    def _init_field_extractor(self):
-        """Try to import field_extractor from omni-medical-suite."""
-        if self._field_extractor is not None:
-            return
-        try:
-            from src.ocr.field_extractor import extract_fields, build_template_signature
-            self._field_extractor = {
-                "extract_fields": extract_fields,
-                "build_template_signature": build_template_signature,
-            }
-            logger.info("تم تحميل field_extractor من omni-medical-suite")
-        except ImportError:
-            logger.debug("field_extractor غير متاح")
-            self._field_extractor = None
 
     def _enrich_with_glossary(self, text: str) -> str:
         """Enrich text with glossary terms for better search matching.
