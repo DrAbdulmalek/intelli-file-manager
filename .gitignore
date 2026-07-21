@@ -1,4 +1,3 @@
-```
 # Compiled Python files
 *.pyc
 __pycache__/
@@ -8,6 +7,8 @@ venv/
 .venv/
 .env
 .env.local
+.env.production
+.env.staging
 *.env.*
 
 # Logs
@@ -41,4 +42,33 @@ out/
 # System files
 .DS_Store
 Thumbs.db
-```
+
+# Secrets — NEVER commit these
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets.yaml
+secrets.json
+
+# Database files
+*.sqlite
+*.db
+
+# Buildozer / Android
+.buildozer/
+*.apk
+*.aab
+
+# Local data directories
+chroma_db/
+uploads/
+data/
+.intellifile/
+
+# Editor backups
+*.bak
+*.swp
+*~
