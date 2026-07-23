@@ -21,8 +21,9 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Security, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,28 @@ logger = logging.getLogger(__name__)
 _ALLOWED_DIRS: list[Path] | None = None
 _MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 _MAX_WS_MESSAGE_SIZE = 10 * 1024  # 10 KB
+
+# ---------------------------------------------------------------------------
+# Optional API key authentication
+# Set INTELLIFILE_API_KEY env var to enable. When not set, auth is skipped
+# (safe for localhost-only use). When set, all endpoints require the header
+# X-API-Key: <value>.
+# ---------------------------------------------------------------------------
+_API_KEY = os.environ.get("INTELLIFILE_API_KEY", "")
+_api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def _verify_api_key(api_key: str = Security(_api_key_scheme)) -> str:
+    """Dependency that enforces API key when INTELLIFILE_API_KEY is configured."""
+    if not _API_KEY:
+        # No API key configured — skip auth (localhost-only is the default)
+        return "anonymous"
+    if api_key == _API_KEY:
+        return api_key[:4] + "..."
+    raise HTTPException(
+        status_code=401,
+        detail="مفتاح API غير صالح — اضبط X-API-Key في رأس الطلب",
+    )
 
 
 def _get_allowed_dirs() -> list[Path]:
@@ -140,7 +163,7 @@ def create_app() -> FastAPI:
     """Create the IntelliFile Manager FastAPI application."""
     _app = FastAPI(
         title="IntelliFile Manager API",
-        description="إدارة ملفات ذكية — بحث هجين، وسوم ذكية، مساعد ملفات، NER طبي",
+        description="إدارة ملفات ذكية — بحث هجين، وسوم ذكية، مساعد ملفات",
         version="2.0.0",
         docs_url="/api/docs",
         redoc_url="/api/redoc",
@@ -153,9 +176,9 @@ def create_app() -> FastAPI:
             "http://localhost:3001",
             "http://localhost:8420",
         ],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["X-API-Key", "Content-Type"],
     )
 
     # Lazy-loaded engines
@@ -242,7 +265,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.post("/api/embed")
-    async def embed_texts(texts: list[str]):
+    async def embed_texts(texts: list[str], _auth: str = Depends(_verify_api_key)):
         """توليد التمثيلات المتجهية للنصوص باستخدام sentence-transformers.
 
         يدعم العربية والإنجليزية مع نموذج paraphrase-multilingual-MiniLM-L12-v2.
@@ -263,7 +286,7 @@ def create_app() -> FastAPI:
             raise HTTPException(500, f"فشل التمثيل المتجهي: {exc}")
 
     @_app.post("/api/embed/similarity")
-    async def compute_similarity(text1: str = Query(...), text2: str = Query(...)):
+    async def compute_similarity(text1: str = Query(...), text2: str = Query(...), _auth: str = Depends(_verify_api_key)):
         """حساب التشابه الدلالي بين نصين."""
         emb = _get_engine("embeddings")
         if not emb:
@@ -280,7 +303,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.post("/api/classify", response_model=ClassifyResponse)
-    async def classify(req: ClassifyRequest):
+    async def classify(req: ClassifyRequest, _auth: str = Depends(_verify_api_key)):
         clf = _get_engine("classifier")
         if not clf:
             raise HTTPException(500, "Classifier engine unavailable")
@@ -302,7 +325,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.post("/api/search")
-    async def search(req: SearchRequest):
+    async def search(req: SearchRequest, _auth: str = Depends(_verify_api_key)):
         search_eng = _get_engine("hybrid_search")
         if not search_eng:
             raise HTTPException(500, "Search engine unavailable")
@@ -349,7 +372,7 @@ def create_app() -> FastAPI:
             return {"query": req.query, "results": results, "engine": "hybrid", "total": len(results)}
 
     @_app.post("/api/search/index")
-    async def index_directory(directory: str = Query(...), extensions: str = Query("")):
+    async def index_directory(directory: str = Query(...), extensions: str = Query(""), _auth: str = Depends(_verify_api_key)):
         search_eng = _get_engine("hybrid_search")
         if not search_eng:
             raise HTTPException(500, "Search engine unavailable")
@@ -364,7 +387,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.post("/api/tags/auto")
-    async def auto_tag(filepath: str = Query(...)):
+    async def auto_tag(filepath: str = Query(...), _auth: str = Depends(_verify_api_key)):
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
@@ -374,7 +397,7 @@ def create_app() -> FastAPI:
         return ft.to_dict()
 
     @_app.post("/api/tags/add")
-    async def add_tag(req: TagRequest):
+    async def add_tag(req: TagRequest, _auth: str = Depends(_verify_api_key)):
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
@@ -385,7 +408,7 @@ def create_app() -> FastAPI:
         return ft.to_dict()
 
     @_app.post("/api/tags/batch")
-    async def batch_tag(req: BatchTagRequest):
+    async def batch_tag(req: BatchTagRequest, _auth: str = Depends(_verify_api_key)):
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
@@ -396,7 +419,7 @@ def create_app() -> FastAPI:
         return {"tagged": count, "tag": req.tag}
 
     @_app.delete("/api/tags/remove")
-    async def remove_tag(filepath: str = Query(...), tag: str = Query(...)):
+    async def remove_tag(filepath: str = Query(...), tag: str = Query(...), _auth: str = Depends(_verify_api_key)):
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
@@ -429,14 +452,14 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.post("/api/copilot/chat")
-    async def copilot_chat(req: CopilotMessage):
+    async def copilot_chat(req: CopilotMessage, _auth: str = Depends(_verify_api_key)):
         copilot = _get_engine("copilot")
         if not copilot:
             raise HTTPException(500, "Copilot engine unavailable")
         return copilot.chat(req.message, req.conversation_id)
 
     @_app.post("/api/copilot/index")
-    async def copilot_index(filepaths: list[str]):
+    async def copilot_index(filepaths: list[str], _auth: str = Depends(_verify_api_key)):
         copilot = _get_engine("copilot")
         if not copilot:
             raise HTTPException(500, "Copilot engine unavailable")
@@ -454,7 +477,7 @@ def create_app() -> FastAPI:
         return copilot.list_conversations()
 
     @_app.post("/api/copilot/summarize")
-    async def copilot_summarize(filepath: str = Query(...)):
+    async def copilot_summarize(filepath: str = Query(...), _auth: str = Depends(_verify_api_key)):
         copilot = _get_engine("copilot")
         if not copilot:
             raise HTTPException(500, "Copilot engine unavailable")
@@ -498,7 +521,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.post("/api/process/image")
-    async def process_image(filepath: str = Query(...), fix_scan: bool = Query(True)):
+    async def process_image(filepath: str = Query(...), fix_scan: bool = Query(True), _auth: str = Depends(_verify_api_key)):
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
@@ -507,7 +530,7 @@ def create_app() -> FastAPI:
         return mm.process_image(filepath, fix_scan=fix_scan)
 
     @_app.post("/api/process/audio")
-    async def process_audio(filepath: str = Query(...)):
+    async def process_audio(filepath: str = Query(...), _auth: str = Depends(_verify_api_key)):
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
@@ -516,7 +539,7 @@ def create_app() -> FastAPI:
         return mm.process_audio(filepath)
 
     @_app.post("/api/process/video")
-    async def process_video(filepath: str = Query(...)):
+    async def process_video(filepath: str = Query(...), _auth: str = Depends(_verify_api_key)):
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
@@ -525,7 +548,7 @@ def create_app() -> FastAPI:
         return mm.process_video(filepath)
 
     @_app.post("/api/process/document")
-    async def process_document(filepath: str = Query(...)):
+    async def process_document(filepath: str = Query(...), _auth: str = Depends(_verify_api_key)):
         mm = _get_engine("multimodal")
         if not mm:
             raise HTTPException(500, "Multimodal processor unavailable")
@@ -534,7 +557,7 @@ def create_app() -> FastAPI:
         return mm.process_document(filepath)
 
     @_app.post("/api/process/upload")
-    async def upload_and_process(file: UploadFile = File(...)):
+    async def upload_and_process(file: UploadFile = File(...), _auth: str = Depends(_verify_api_key)):
         """Upload a file and process it based on its type."""
         # Security: sanitize filename to prevent path traversal
         safe_name = _sanitize_filename(file.filename)
@@ -578,7 +601,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.post("/api/ner/extract")
-    async def ner_extract(req: NerRequest):
+    async def ner_extract(req: NerRequest, _auth: str = Depends(_verify_api_key)):
         ner = _get_engine("ner")
         if not ner:
             raise HTTPException(500, "NER engine unavailable")
@@ -603,7 +626,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.post("/api/organize")
-    async def organize(req: OrganizeRequest):
+    async def organize(req: OrganizeRequest, _auth: str = Depends(_verify_api_key)):
         fh = _get_engine("file_handler")
         clf = _get_engine("classifier")
         if not fh or not clf:
@@ -649,7 +672,7 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.get("/api/stats")
-    async def get_stats():
+    async def get_stats(_auth: str = Depends(_verify_api_key)):
         from src.core.config import CATEGORIES
         return {
             "categories": CATEGORIES,
