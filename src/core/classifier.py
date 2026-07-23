@@ -1,4 +1,10 @@
-"""مصنف الملفات الذكي - يجمع بين القواعد والمحرك الذكي"""
+"""مصنف الملفات الذكي - يجمع بين القواعد والمحرك الذكي
+
+NOTE: The omni-medical-suite import attempts (_init_medical_classifier,
+_init_scanner_fixer) have been removed. Medical classification is now
+handled by keyword-based fallback only. For full medical NER/classification,
+use a plugin or the separate omni-medical-suite project.
+"""
 import logging
 from pathlib import Path
 from typing import Optional
@@ -10,117 +16,50 @@ logger = logging.getLogger(__name__)
 class SmartFileClassifier:
     """مصنف ذكي يجمع بين التصنيف بالامتداد والمحتوى"""
 
-    # خريطة الكلمات المفتاحية الطبية العربية-الإنجليزية
-    _MEDICAL_KEYWORDS = {
-        "قلب": "cardiology", "قلبية": "cardiology", "cardiac": "cardiology",
-        "عظام": "orthopedic", "orthopedic": "orthopedic", "كسر": "orthopedic",
-        "أعصاب": "neurology", "عصبي": "neurology", "neurology": "neurology",
-        "جراحة": "general_surgery", "surgery": "general_surgery",
-        "أشعة": "radiology", "radiology": "radiology",
-        "أدوية": "pharmacology", "دواء": "pharmacology", "pharmacology": "pharmacology",
-        "تشخيص": "pathology", "pathology": "pathology", "مختبر": "pathology",
-        "بحث": "research", "research": "research",
-    }
-
     def __init__(self, config: Optional[Config] = None):
         self.config = config or Config()
         self._magika = None
-        self._medical_classifier = None
-        self._scanner_fixer = None
         self._init_magika()
 
-    def _init_medical_classifier(self):
-        """محاولة استيراد MedicalClassifier من omni-medical-suite"""
-        if self._medical_classifier is not None:
-            return
-        try:
-            from packages.core.classifier import MedicalClassifier
-            self._medical_classifier = MedicalClassifier()
-            logger.info("تم تحميل MedicalClassifier من packages.core")
-            return
-        except ImportError:
-            pass
-        try:
-            from hf_space.packages.core.classifier import MedicalClassifier
-            self._medical_classifier = MedicalClassifier()
-            logger.info("تم تحميل MedicalClassifier من hf_space.packages.core")
-            return
-        except ImportError:
-            logger.debug("MedicalClassifier غير متاح — سيتم استخدام تصنيف الكلمات المفتاحية")
-            self._medical_classifier = None
-
-    def _init_scanner_fixer(self):
-        """محاولة استيراد scanner_fixer من omni-medical-suite"""
-        if self._scanner_fixer is not None:
-            return
-        try:
-            from packages.scanner_fixer import fix_scan, enhance_for_ocr
-            self._scanner_fixer = {"fix_scan": fix_scan, "enhance_for_ocr": enhance_for_ocr}
-            logger.info("تم تحميل scanner_fixer من packages.scanner_fixer")
-            return
-        except ImportError:
-            pass
-        try:
-            from scanner_fixer import fix_scan, enhance_for_ocr
-            self._scanner_fixer = {"fix_scan": fix_scan, "enhance_for_ocr": enhance_for_ocr}
-            logger.info("تم تحميل scanner_fixer (standalone)")
-            return
-        except ImportError:
-            logger.debug("scanner_fixer غير متاح")
-            self._scanner_fixer = None
-
     def classify_medical(self, text: str) -> dict:
-        """تصنيف طبي للنص باستخدام MedicalClassifier أو الكلمات المفتاحية"""
-        self._init_medical_classifier()
-        if self._medical_classifier is not None:
-            try:
-                result = self._medical_classifier.classify(text)
-                return {
-                    "category": result.get("category", "unknown"),
-                    "confidence": result.get("confidence", 0.0),
-                    "all_scores": result.get("all_scores", {}),
-                    "source": "medical_classifier",
-                }
-            except Exception as e:
-                logger.debug(f"خطأ في MedicalClassifier: {e}")
+        """تصنيف طبي للنص باستخدام الكلمات المفتاحية
 
-        # تصنيف بالكلمات المفتاحية كاحتياطي
+        للتشفير الطبي المتقدم، استخدم نظام الإضافات أو
+        مشروع omni-medical-suite المنفصل.
+        """
+        _MEDICAL_KEYWORDS = {
+            "قلب": "cardiology", "قلبية": "cardiology", "cardiac": "cardiology",
+            "عظام": "orthopedic", "orthopedic": "orthopedic", "كسر": "orthopedic",
+            "أعصاب": "neurology", "عصبي": "neurology", "neurology": "neurology",
+            "جراحة": "general_surgery", "surgery": "general_surgery",
+            "أشعة": "radiology", "radiology": "radiology",
+            "أدوية": "pharmacology", "دواء": "pharmacology", "pharmacology": "pharmacology",
+            "تشخيص": "pathology", "pathology": "pathology", "مختبر": "pathology",
+            "بحث": "research", "research": "research",
+        }
         if text:
             text_lower = text.lower()
-            best_category = "unknown"
-            best_keyword = None
-            for keyword, category in self._MEDICAL_KEYWORDS.items():
+            for keyword, category in _MEDICAL_KEYWORDS.items():
                 if keyword in text or keyword.lower() in text_lower:
-                    best_category = category
-                    best_keyword = keyword
-                    break
-            if best_keyword:
-                return {
-                    "category": best_category,
-                    "confidence": 0.6,
-                    "all_scores": {best_category: 0.6},
-                    "source": "keyword_fallback",
-                }
-
+                    return {
+                        "category": category,
+                        "confidence": 0.6,
+                        "all_scores": {category: 0.6},
+                        "source": "keyword_fallback",
+                    }
         return {"category": "unknown", "confidence": 0.0, "source": "keyword_fallback"}
 
     def classify_file_medical(self, filepath: str) -> dict:
-        """تصنيف ملف طبي — يجمع بين تصنيف الملف وتصنيف المحتوى الطبي"""
+        """تصنيف ملف — يجمع بين تصنيف الملف وتصنيف المحتوى الطبي"""
         file_info = self.classify_file(filepath)
         if "error" in file_info:
             return file_info
-
-        # استخراج النص من الملف
         text = self._extract_text_for_medical(filepath)
-
-        # تصنيف طبي
         medical_info = self.classify_medical(text)
-
-        # دمج النتائج
         return {**file_info, **medical_info}
 
     def _extract_text_for_medical(self, filepath: str) -> str:
-        """استخراج نص من ملف للتصنيف الطبي"""
+        """استخراج نص من ملف للتصنيف"""
         path = Path(filepath)
         ext = path.suffix.lower()
 
@@ -150,7 +89,6 @@ class SmartFileClassifier:
                 except Exception:
                     return ""
             elif ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"):
-                # للصور: نحاول OCR بسيط
                 try:
                     import pytesseract
                     from PIL import Image
@@ -194,13 +132,12 @@ class SmartFileClassifier:
                 if result and hasattr(result, "output"):
                     magika_type = result.output
                     content_type = magika_type
-                    # تحويل نوع Magika إلى تصنيفنا
                     mapped = self._map_magika_type(magika_type)
                     if mapped and mapped != "أخرى":
                         category = mapped
                         confidence = 95.0
                     elif extension and self.config.get_category(extension) != "أخرى":
-                        confidence = 75.0  # content + extension agree it's not "other"
+                        confidence = 75.0
             except Exception as e:
                 logger.debug(f"خطأ في تصنيف Magika: {e}")
 
