@@ -2,224 +2,107 @@
 
 <div align="center">
 
-## خارطة تطور مدير الملفات الذكي
-### IntelliFile Manager Development Roadmap
+## خارطة تطور مدير الملفات الذكي المحلي
+### Local-first AI File Manager Development Roadmap
 
 </div>
 
 ---
 
-## v2.0 (Current) — Foundation & Core Features | الأساس والمميزات الأساسية
+## v2.1 (Current) — Foundation & Security | الأساس والأمان
 
-### P0: Core Engine | محرك الأساس
-
-المحرك الأساسي الذي يُشكل عمود IntelliFile Manager:
-
-- **Smart File Classifier** — مصنف الملفات الذكي باستخدام Google Magika + تصنيف بالامتداد
+### Core Engine | محرك الأساس
+- **Smart File Classifier** — مصنف الملفات الذكي (Magika + content-based)
 - **File Handler** — معالج الملفات (CRUD + تراجع + نسخ احتياطي)
 - **AI Engine** — محرك الذكاء الاصطناعي (تكامل Ollama)
-- **Configuration System** — نظام إعدادات مرن مع فئات مخصصة
+- **Hybrid Search** — محرك بحث هجين (BM25 + Semantic + RRF)
+- **Smart Tagger** — نظام وسوم ذكي متعدد الطبقات
+- **File Copilot** — مساعد ملفات ذكي (RAG)
+- **Multimodal Processor** — معالجة الصور والصوت والفيديو والمستندات
 
-### P1: Search & Intelligence | البحث والذكاء
+### Security Hardening | تعزيز الأمان
+- API يربط على 127.0.0.1 فقط افتراضياً
+- مصادقة API Key اختيارية
+- CORS محدود بـ localhost
+- Path sandboxing لمنع traversal
+- إزالة exec() من الكود
+- .gitignore صحيح وشامل
 
-طبقة الذكاء الاصطناعي المتقدمة:
-
-- **Hybrid Search Engine** — محرك بحث هجين (BM25 + Semantic + RRF Fusion)
-- **Semantic Search** — بحث دلالي عبر sentence-transformers + ChromaDB
-- **Smart Tagger** — نظام وسوم ذكي متعدد الطبقات (تلقائي + يدوي + مجمّع)
-- **File Copilot** — مساعد ملفات ذكي يعتمد على RAG (محادثة + تلخيص + فهرسة)
-- **Medical NER** — استخراج الكيانات المسماة من النصوص الطبية العربية
-- **RAG Engine** — محرك توليد معزز بالاسترجاع (ChromaDB + Ollama)
-
-### P2: Multimodal & Integration | متعدد الوسائط والتكامل
-
-- **Enhanced Multimodal Processor** — معالجة الصور والصوت والفيديو والمستندات
-- **FastAPI Server** — خادم API مع 22 نقطة نهاية REST + WebSocket
-- **Next.js 16 Web UI** — واجهة ويب حديثة (RTL + shadcn/ui + dark mode)
-- **Voice Controller** — تحكم صوتي باللغة العربية
-- **File Agents** — وكلاء ملفات مستقلون
-- **Relationship Miner** — تنقيب العلاقات بين الملفات
-- **Predictive Organizer** — منظم تنبؤي يتعلم أنماط الاستخدام
-- **Emergent Categories** — اكتشاف فئات جديدة تلقائياً
-- **Self-Extending Assistant** — مساعد يتوسع ذاتياً
-
-### P3: Documentation & Plugin System | التوثيق ونظام الإضافات
-
-- **Comprehensive README** — توثيق شامل ثنائي اللغة (عربي + إنجليزي)
-- **CONTRIBUTING Guide** — دليل مساهمة مع إرشادات RTL العربية
-- **Plugin System** — نظام إضافات مرن:
-  - `IntelliFilePlugin` — فئة أساسية مجردة
-  - `PluginContext` — سياق التطبيق مع تسجيل المكونات
-  - `PluginManager` — إدارة دورة حياة الإضافات
-  - اكتشاف تلقائي من `src/plugins/` و `~/.intellifile/plugins/`
-  - تسجيل: مصنفات، محركات بحث، مستخرجات NER، مولدات وسوم، معالجات ملفات
-- **Sample Medical Plugin** — إضافة طبية تجريبية (مصنف تخصصات طبية)
-- **Roadmap** — خارطة طريق واضحة للإصدارات القادمة
-
-### Arabic Medical Focus | التركيز الطبي العربي في v2.0
-
-- استخراج كيانات طبية عربية (أسماء المرضى، التشخيصات، الأدوية، الإجراءات)
-- تصنيف المستندات الطبية حسب التخصص
-- وسوم طبية ذكية تلقائية
-- بحث دلالي في المستندات الطبية العربية
-- دعم كامل لـ RTL في جميع الواجهات
-- خصوصية تامة — معالجة محلية بدون اتصال
-
-### Test Coverage | تغطية الاختبارات في v2.0
-
-- **241 اختبار** (وحدات + تكامل)
-- تغطية جميع المحركات الأساسية
-- اختبارات خاصة بالمحتوى العربي والطبي
-- اختبارات API endpoints
+### Repository Cleanup | تنظيف المستودع
+- فصل حدود المستودع عن omni-medical-suite
+- إزالة إشارات التكامل من التوثيق
+- هوية واضحة: مدير ملفات محلي عام
 
 ---
 
-## v2.1 (Planned: Q3 2025) — Collaboration & Medical Imaging | التعاون والتصوير الطبي
+## v2.2 (Planned) — Desktop Usability | قابلية استخدام سطح المكتب
 
-### Real-Time Collaboration | التعاون في الوقت الفعلي
+### PySide6 Desktop GUI | واجهة سطح المكتب
+- محسن اختيار المجلدات
+- شريط تقدم المسح والفهرسة
+- معاينات الملفات (PDF, صور, نص)
+- تقارير الأخطاء
+- حالة الفهرسة في الخلفية
+- UX البحث المتقدم
+- UX الوسوم
+- الإجراءات الأخيرة / التراجع
+- إعدادات للتبديل (بحث دلالي، ollama، مراقبة مجلدات)
 
-- **WebSocket Sync** — مزامنة التغييرات في الوقت الفعلي بين المستخدمين
-- **Shared Workspaces** — مساحات عمل مشتركة مع صلاحيات
-- **Activity Feed** — تغذية نشاط مباشرة
-- **Conflict Resolution** — حل تعارضات التحرير المتزامن
-- **Presence Indicators** — مؤشرات حضور المستخدمين
-
-### DICOM Viewer | عارض DICOM الطبي
-
-- **DICOM Parser** — محلل ملفات DICOM (dcm2jpg + pydicom)
-- **Image Viewer** — عارض صور طبي تفاعلي:
-  - تكبير/تصغير وتحريك (zoom/pan)
-  - تعديل النافذة/المستوى (windowing/leveling)
-  - قياسات (مسافات، زوايا، مناطق)
-  - تعليقات توضيحية (annotations)
-- **DICOM Metadata** — عرض البيانات الوصفية (المريض، الدراسة، السلسلة)
-- **Multi-frame Support** — دعم الإطارات المتعددة
-- **DICOM to PNG/JPG** — تحويل للعرض في واجهة الويب
-
-### Voice Commands | أوامر صوتية متقدمة
-
-- **Enhanced Arabic STT** — تحسين دقة التعرف على الكلام العربي
-- **Command Grammar** — قواعد أوامر صوتية مخصصة:
-  - "صنّف جميع الملفات في هذا المجلد"
-  - "ابحث عن تقارير الأشعة"
-  - "أضف وسم طبي لهذا الملف"
-  - "لخّص هذا التقرير"
-- **Voice Shortcuts** — اختصارات صوتية قابلة للتخصيص
-- **Continuous Listening** — استماع مستمر مع تنبيه تنشيط
-- **Multi-language** — دعم أوامر بالعربية والإنجليزية
-
-### Arabic Medical Focus | التركيز الطبي العربي في v2.1
-
-- **DICOM Arabic Metadata** — قراءة وعرض البيانات الوصفية العربية في ملفات DICOM
-- **Medical Image Annotations** — تعليقات توضيحية عربية على صور الأشعة
-- **Voice-Driven Medical Workflow** — سير عمل طبي بالأوامر الصوتية العربية:
-  - "افتح صورة أشعة الصدر للمريض أحمد"
-  - "أضف ملاحظة: كتلة في الرئة اليمنى"
-  - "اربط هذا التقرير بصورة الأشعة"
-- **Collaborative Medical Review** — مراجعة تعاونية للتقارير والصور الطبية
+### File Organization MVP | تنظيم الملفات الأساسي
+- مخزون ملفات مفهرس
+- استخراج بيانات وصفية شامل
+- استخراج محتوى (pdf/docx/xlsx/pptx/text)
+- فئات ذكية قابلة للتخصيص
+- علامات يحددها المستخدم
+- إجراءات قائمة على القواعد
+- وضع dry-run آمن
+- سجل undo/rollback
+- اكتشاف الملفات المكررة والمتشابهة
+- مراقبة المجلدات مع debounce
 
 ---
 
-## v3.0 (Planned: Q1 2026) — Enterprise & Ecosystem | المؤسسات والمنظومة
+## v3.0 (Planned) — Local AI & Smart Features | الذكاء المحلي والميزات الذكية
 
-### Federated Learning | التعلم الموحد
+### Enhanced Local Search | بحث محلي محسن
+- بحث هجين خفيف (BM25 + semantic + RRF)
+- دلالي اختياري (عند توفر embeddings)
+- واجهة "لماذا تم تصنيف هذا الملف هنا؟"
+- تفسير: قاعدة مطابقة، كلمات مفتاحية، تشابه دلالي
 
-- **Local Model Training** — تدريب النماذج محلياً على بيانات المستخدم
-- **Federated Aggregation** — تجميع التحديثات بدون مشاركة البيانات الخام
-- **Privacy-Preserving** — حماية الخصوصية أثناء التعلم المشترك:
-  - Differential Privacy — خصوصية تفاضلية
-  - Secure Aggregation — تجميع آمن
-  - Model Encryption — تشفير النماذج
-- **Medical NER Fine-tuning** — تحسين نماذج NER الطبية على بيانات عربية حقيقية
-- **Adaptive Classification** — تصنيف يتكيف مع أنماط المستخدم المحلية
+### File Copilot | مساعد الملفات المحلي
+- RAG على مجموعات ملفات محلية
+- أولوية للسرعة والثبات
+- إجابات مبنية على محتوى الملفات الفعلي
+- تلخيص ذكي
 
-### Plugin Marketplace | سوق الإضافات
-
-- **Plugin Registry** — سجل مركزي للإضافات المتاحة
-- **One-Click Install** — تثبيت بنقرة واحدة من واجهة المستخدم
-- **Plugin Sandbox** — بيئة آمنة لتشغيل الإضافات:
-  - Resource Limits — حدود الموارد (CPU, RAM, Disk)
-  - Permission Model — نموذج صلاحيات
-  - Isolation — عزل الإضافات عن النظام الأساسي
-- **Plugin API v2** — واجهة برمجة إضافات محسنة:
-  - Event hooks — ربط بالأحداث
-  - UI extensions — توسيع الواجهة
-  - Custom settings — إعدادات مخصصة
-- **Verified Plugins** — إضافات موثقة ومعتمدة
-- **Plugin CLI** — أدوات سطر أوامر لإدارة الإضافات:
-  ```bash
-  intellifile plugin install medical-radiology
-  intellifile plugin list
-  intellifile plugin update --all
-  intellifile plugin create my-plugin
-  ```
-
-### Multi-User Support | دعم المستخدمين المتعددين
-
-- **User Authentication** — مصادقة المستخدمين (JWT + OAuth2)
-- **Role-Based Access** — صلاحيات مبنية على الأدوار:
-  - Admin — مدير النظام
-  - Editor — محرر الملفات
-  - Viewer — مستعرض فقط
-  - Medical — صلاحيات طبية خاصة
-- **Workspace Isolation** — عزل مساحات العمل بين المستخدمين
-- **Shared Collections** — مجموعات ملفات مشتركة
-- **Audit Trail** — سجل تدقيق شامل لجميع العمليات
-- **HIPAA Compliance** — توافق مع معايير HIPAA للبيانات الطبية
-
-### Arabic Medical Focus | التركيز الطبي العربي في v3.0
-
-- **Federated Medical NER** — تحسين نماذج NER الطبية العربية عبر التعلم الموحد بدون مشاركة بيانات المرضى
-- **Medical Plugin Ecosystem** — منظومة إضافات طبية متخصصة:
-  - إضافة تخطيط القلب (ECG Analyzer)
-  - إضافة التحاليل المخبرية (Lab Results Parser)
-  - إضافة الوصفات الطبية (Prescription Manager)
-  - إضافة التقارير الإشعاعية (Radiology Reports)
-- **Multi-Hospital Integration** — تكامل بين مستشفيات متعددة مع حماية الخصوصية
-- **Arabic Medical Terminology Database** — قاعدة بيانات المصطلحات الطبية العربية
-- **Compliance Templates** — قوالب توافق مع المعايير الطبية العربية:
-  - قوالب الهيئة السعودية للتخصصات الصحية
-  - قوالب وزارة الصحة
-  - قوالب اعتماد المستشفيات
+### Plugin Ecosystem | منظومة الإضافات
+- سجل إضافات مركزي
+- تثبيت بنقرة واحدة
+- بيئة آمنة (sandbox) للإضافات
+- واجهة برمجة إضافات محسنة v2
+- إضافات موثقة ومعتمدة
 
 ---
 
-## Long-Term Vision | الرؤية طويلة المدى
+## v4.0 (Planned) — Cross-Platform & Performance | عبر المنصات والأداء
 
-### v3.1+ (2026)
-
-- **Desktop Mobile Companion** — تطبيق جوال مرافق
-- **Cloud Backup (Optional)** — نسخ احتياطي سحابي اختياري مع تشفير طرفي
-- **AI Model Optimization** — تحسين نماذج الذكاء الاصطناعي للأجهزة ضعيفة الموارد
-- **Batch Processing Server** — خادم معالجة مجمعة للملفات الكبيرة
-
-### v4.0 (2027)
-
-- **On-Device LLM** — نماذج لغوية مدمجة بدون حاجة لـ Ollama
-- **Natural Language File Operations** — عمليات ملفات باللغة الطبيعية العربية
-- **Predictive Analytics** — تحليلات تنبؤية لأنماط الملفات
-- **Cross-Platform** — دعم Windows و macOS بالإضافة إلى Linux
+- دعم Windows و macOS بالإضافة إلى Linux
+- نماذج لغوية مدمجة بدون حاجة لـ Ollama
+- عمليات ملفات باللغة الطبيعية
+- تحليلات تنبؤية لأنماط الملفات
+- تحسين الأداء للمجلدات الكبيرة
+- معالجة مجمعة للملفات
 
 ---
 
-## Contributing to the Roadmap | المساهمة في خارطة الطريق
+## Contributing | المساهمة
 
 هل لديك أفكار لميزات جديدة؟ نرحب بمساهماتك:
 
-1. افتح [Feature Request](https://github.com/DrAbdulmalek/IntelliFile-app/issues/new?template=feature_request.md)
-2. ناقش الفكرة في [Discussions](https://github.com/DrAbdulmalek/IntelliFile-app/discussions)
+1. افتح [Feature Request](https://github.com/DrAbdulmalek/intelli-file-manager/issues)
+2. ناقش الفكرة في [Discussions](https://github.com/DrAbdulmalek/intelli-file-manager/discussions)
 3. قدّم PR مع تنفيذ الميزة المقترحة
-
-### Priority Areas | مجالات الأولوية
-
-| الأولوية | المجال | الوصف |
-|---------|--------|-------|
-| 🔴 عالية | DICOM Viewer | عارض صور طبية للمستندات الطبية |
-| 🔴 عالية | Arabic NER Accuracy | تحسين دقة استخراج الكيانات الطبية العربية |
-| 🟡 متوسطة | Voice Commands | أوامر صوتية متقدمة بالعربية |
-| 🟡 متوسطة | Plugin Marketplace | سوق إضافات مركزي |
-| 🟢 منخفضة | Federated Learning | تعلم موحد للحفاظ على الخصوصية |
-| 🟢 منخفضة | Multi-User | دعم المستخدمين المتعددين |
 
 ---
 
@@ -227,7 +110,5 @@
 
 **خارطة الطريق تتطور مع المجتمع**
 **The roadmap evolves with the community**
-
-[Report Bug](https://github.com/DrAbdulmalek/IntelliFile-app/issues) · [Request Feature](https://github.com/DrAbdulmalek/IntelliFile-app/issues) · [Discuss](https://github.com/DrAbdulmalek/IntelliFile-app/discussions)
 
 </div>

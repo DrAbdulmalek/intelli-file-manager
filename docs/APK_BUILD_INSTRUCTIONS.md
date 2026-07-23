@@ -31,7 +31,7 @@ pip3 install buildozer cython
 ```bash
 git clone https://github.com/DrAbdulmalek/intelli-file-manager.git
 cd intelli-file-manager
-git checkout feat/omni-integration-v2
+git checkout main
 ```
 
 ### 2. بناء APK (الطريقة المباشرة)

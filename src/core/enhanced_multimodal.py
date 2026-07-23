@@ -1,11 +1,11 @@
-"""معالج متعدد الوسائط المحسّن - تكامل مع omni-medical-suite
+"""معالج متعدد الوسائط المحسّن — صور/صوت/فيديو/مستندات
 
 Enhanced MultimodalProcessor with:
   - Moondream2 vision-language model for image description
   - Whisper for audio/video transcription (Arabic + English)
   - PaddleOCR + Tesseract dual-engine OCR
-  - Scanner fixer integration from omni-medical-suite
-  - DICOM medical image support
+  - Basic image enhancement (contrast, sharpness, denoise)
+  - Named Entity Recognition (NER) on extracted text
   - Arabic RTL text normalization
   - Offline-first: all models run locally
 """
@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 
 
 class EnhancedMultimodalProcessor:
-    """معالج متعدد الوسائط محسّن للملفات الطبية العربية.
+    """معالج متعدد الوسائط للملفات.
 
     Pipeline for image processing:
-      1. Scanner fixer (deskew, enhance, denoise) — from omni-medical-suite
+      1. Image enhancement (contrast, sharpness, denoise)
       2. OCR (PaddleOCR → Tesseract fallback) — Arabic + English
       3. Vision-Language (Moondream2) — image description
-      4. Medical NER — extract medical entities from OCR text
+      4. NER — extract named entities from OCR text
 
     Pipeline for audio/video:
       1. FFmpeg extract audio
@@ -43,18 +43,15 @@ class EnhancedMultimodalProcessor:
 
     def __init__(self, ollama_url: str = "http://localhost:11434",
                  ai_model: str = "llama3.2",
-                 scanner_fixer_enabled: bool = True,
                  allow_cloud_speech: bool = False):
         self.ollama_url = ollama_url
         self.ai_model = ai_model
-        self.scanner_fixer_enabled = scanner_fixer_enabled
         self.allow_cloud_speech = allow_cloud_speech  # Privacy: disabled by default
 
         # Lazy-loaded engines
         self._paddle_ocr = None
         self._moondream = None
         self._whisper_model = None
-        self._scanner_fixer = None
         self._medical_ner = None
 
         # Availability flags
@@ -87,31 +84,6 @@ class EnhancedMultimodalProcessor:
         except Exception as exc:
             logger.warning(f"خطأ في تحميل PaddleOCR: {exc}")
 
-    def _init_scanner_fixer(self):
-        """Try to import scanner_fixer from omni-medical-suite."""
-        if self._scanner_fixer is not None:
-            return
-        if not self.scanner_fixer_enabled:
-            return
-        # Try omni-medical-suite package paths (priority order)
-        for module_path in [
-            "packages.scanner_fixer",
-            "scanner_fixer",
-            "src.scanner_fixer",
-        ]:
-            try:
-                mod = __import__(module_path, fromlist=["fix_scan", "enhance_for_ocr"])
-                self._scanner_fixer = {
-                    "fix_scan": getattr(mod, "fix_scan", None),
-                    "enhance_for_ocr": getattr(mod, "enhance_for_ocr", None),
-                }
-                logger.info(f"تم تحميل scanner_fixer من {module_path}")
-                return
-            except ImportError:
-                continue
-        logger.debug("scanner_fixer غير متاح — سيتم تخطي خطوة الإصلاح")
-        self._scanner_fixer = None
-
     def _init_medical_ner(self):
         if self._medical_ner is not None:
             return
@@ -133,14 +105,14 @@ class EnhancedMultimodalProcessor:
         """Process an image through the full pipeline.
 
         Steps:
-          1. (Optional) Fix scan artifacts with scanner_fixer
+          1. (Optional) Basic image enhancement (contrast, sharpness, denoise)
           2. OCR with PaddleOCR → Tesseract fallback
           3. Vision description with Moondream/Ollama
-          4. Medical NER on extracted text
+          4. NER on extracted text
 
         Args:
             filepath: Path to the image file
-            fix_scan: Whether to apply scanner fixer preprocessing
+            fix_scan: Whether to apply basic image enhancement
 
         Returns:
             Dict with all extraction results
@@ -166,18 +138,16 @@ class EnhancedMultimodalProcessor:
         working_path = filepath
         temp_file_to_cleanup = None
 
-        # Step 1: Scanner fixer (if enabled and available)
+        # Step 1: Basic image enhancement (if requested)
         if fix_scan:
-            self._init_scanner_fixer()
-            if self._scanner_fixer:
-                try:
-                    fixed_path = self._fix_scan(filepath)
-                    if fixed_path:
-                        working_path = fixed_path
-                        temp_file_to_cleanup = fixed_path
-                        result["scan_fixed"] = True
-                except Exception as exc:
-                    result["scan_fix_error"] = str(exc)
+            try:
+                enhanced_path = self._enhance_image(filepath)
+                if enhanced_path:
+                    working_path = enhanced_path
+                    temp_file_to_cleanup = enhanced_path
+                    result["image_enhanced"] = True
+            except Exception as exc:
+                result["enhance_error"] = str(exc)
 
         try:
             # Step 2: OCR — PaddleOCR first, then Tesseract fallback
@@ -213,42 +183,18 @@ class EnhancedMultimodalProcessor:
 
         return result
 
-    def _fix_scan(self, filepath: str) -> Optional[str]:
-        """Apply scanner fixer pipeline to an image."""
-        if not self._scanner_fixer:
-            return None
+    def _enhance_image(self, filepath: str) -> Optional[str]:
+        """Apply basic image enhancement (contrast, sharpness, denoise) for better OCR."""
         try:
-            fix_fn = self._scanner_fixer.get("fix_scan")
-            if fix_fn:
-                result = fix_fn(filepath)
-                if result and hasattr(result, "get"):
-                    image = result.get("image")
-                    if image:
-                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                            image.save(tmp.name)
-                            return tmp.name
-                elif isinstance(result, str) and Path(result).exists():
-                    return result
-
-            # Fallback: PIL-based basic enhancement
             from PIL import Image, ImageEnhance, ImageFilter
+
             img = Image.open(filepath)
 
             # Convert to grayscale if needed
             if img.mode != "L":
                 img = img.convert("L")
 
-            # Apply basic enhancement
-            enhance_fn = self._scanner_fixer.get("enhance_for_ocr")
-            if enhance_fn:
-                try:
-                    result = enhance_fn(img)
-                    if result:
-                        img = result
-                except Exception:
-                    pass
-
-            # Fallback PIL enhancement
+            # Basic enhancement
             img = ImageEnhance.Contrast(img).enhance(1.5)
             img = ImageEnhance.Sharpness(img).enhance(2.0)
             img = img.filter(ImageFilter.MedianFilter(size=3))
@@ -258,7 +204,7 @@ class EnhancedMultimodalProcessor:
                 return tmp.name
 
         except Exception as exc:
-            logger.debug(f"خطأ في scanner_fixer: {exc}")
+            logger.debug(f"خطأ في تحسين الصورة: {exc}")
             return None
 
     def _ocr_image(self, filepath: str) -> dict:
