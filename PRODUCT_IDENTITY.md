@@ -96,12 +96,12 @@ This document establishes the **non-negotiable product identities** for reposito
 
 ## Scope Enforcement Checklist
 
-- [ ] Remove DICOM parser from intelli-file-manager
-- [ ] Remove SyncManager from intelli-file-manager
-- [ ] Remove medical NER from intelli-file-manager
-- [ ] Verify no medical-specific imports in intelli-file-manager
-- [ ] Create shared utilities package if needed
-- [ ] Document integration boundaries in both repos
+- [x] Remove DICOM parser from intelli-file-manager — PR #1 (fix/ifm-remove-dicom-sync)
+- [x] Remove SyncManager from intelli-file-manager — PR #1 (fix/ifm-remove-dicom-sync)
+- [x] Remove medical NER from intelli-file-manager — earlier fix/scope-enforcement branch
+- [x] Verify no medical-specific imports in intelli-file-manager — verified in PR #1
+- [ ] Create shared utilities package if needed — deferred to BACKLOG.md (B-01)
+- [x] Document integration boundaries in both repos — PRODUCT_IDENTITY.md + REPO_POLICY.md
 
 ---
 
@@ -111,6 +111,7 @@ This document establishes the **non-negotiable product identities** for reposito
 |------|----------|-----------|-------|
 | 2026-07-22 | Separate product identities | Prevent scope creep, maintain focus | DrAbdulmalek |
 | 2026-07-22 | Remove medical features from intelli-file-manager | Violation of product identity | Mistral (Vibe) |
+| 2026-07-24 | Confirm DICOM parser and SyncManager absent from main | Final scope enforcement closure | Executive Reviewer (PR #1) |
 
 ---
 
