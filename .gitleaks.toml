@@ -1,0 +1,23 @@
+# Gitleaks configuration for intelli-file-manager
+# Reference: https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+
+title = "intelli-file-manager gitleaks config"
+
+[extend]
+# Start from the default gitleaks rules, then add repo-specific extensions.
+useDefault = true
+
+# Global allowlist — paths that should never be flagged.
+[allowlist]
+description = "Allowed paths (test fixtures, docs, examples)"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)\.env\.template$''',
+  '''(^|/)docs/.*\.md$''',
+  '''(^|/)SECURITY_NOTES\.md$''',
+  '''(^|/)PRODUCT_IDENTITY\.md$''',
+  '''(^|/)REPO_POLICY\.md$''',
+  '''(^|/)AI_WORKLOG\.md$''',
+  '''(^|/)CONTRIBUTING\.md$''',
+  '''(^|/)README\.md$''',
+]
