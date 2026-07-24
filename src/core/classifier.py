@@ -1,9 +1,10 @@
 """مصنف الملفات الذكي - يجمع بين القواعد والمحرك الذكي
 
-NOTE: The omni-medical-suite import attempts (_init_medical_classifier,
-_init_scanner_fixer) have been removed. Medical classification is now
-handled by keyword-based fallback only. For full medical NER/classification,
-use a plugin or the separate omni-medical-suite project.
+This classifier handles general-purpose file categorization (documents, code,
+images, archives, etc.) using extension rules and content-based detection
+via Magika. It does NOT perform domain-specific classification (medical,
+legal, financial). For domain-specific classification, use a plugin or
+external service.
 """
 import logging
 from pathlib import Path
@@ -20,86 +21,6 @@ class SmartFileClassifier:
         self.config = config or Config()
         self._magika = None
         self._init_magika()
-
-    def classify_medical(self, text: str) -> dict:
-        """تصنيف طبي للنص باستخدام الكلمات المفتاحية
-
-        للتشفير الطبي المتقدم، استخدم نظام الإضافات أو
-        مشروع omni-medical-suite المنفصل.
-        """
-        _MEDICAL_KEYWORDS = {
-            "قلب": "cardiology", "قلبية": "cardiology", "cardiac": "cardiology",
-            "عظام": "orthopedic", "orthopedic": "orthopedic", "كسر": "orthopedic",
-            "أعصاب": "neurology", "عصبي": "neurology", "neurology": "neurology",
-            "جراحة": "general_surgery", "surgery": "general_surgery",
-            "أشعة": "radiology", "radiology": "radiology",
-            "أدوية": "pharmacology", "دواء": "pharmacology", "pharmacology": "pharmacology",
-            "تشخيص": "pathology", "pathology": "pathology", "مختبر": "pathology",
-            "بحث": "research", "research": "research",
-        }
-        if text:
-            text_lower = text.lower()
-            for keyword, category in _MEDICAL_KEYWORDS.items():
-                if keyword in text or keyword.lower() in text_lower:
-                    return {
-                        "category": category,
-                        "confidence": 0.6,
-                        "all_scores": {category: 0.6},
-                        "source": "keyword_fallback",
-                    }
-        return {"category": "unknown", "confidence": 0.0, "source": "keyword_fallback"}
-
-    def classify_file_medical(self, filepath: str) -> dict:
-        """تصنيف ملف — يجمع بين تصنيف الملف وتصنيف المحتوى الطبي"""
-        file_info = self.classify_file(filepath)
-        if "error" in file_info:
-            return file_info
-        text = self._extract_text_for_medical(filepath)
-        medical_info = self.classify_medical(text)
-        return {**file_info, **medical_info}
-
-    def _extract_text_for_medical(self, filepath: str) -> str:
-        """استخراج نص من ملف للتصنيف"""
-        path = Path(filepath)
-        ext = path.suffix.lower()
-
-        try:
-            if ext in (".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml",
-                        ".py", ".js", ".ts", ".html", ".css", ".sh", ".bat", ".log"):
-                return path.read_text(encoding="utf-8", errors="ignore")[:5000]
-            elif ext == ".pdf":
-                try:
-                    import pdfplumber
-                    with pdfplumber.open(filepath) as pdf:
-                        return "\n".join(p.extract_text() or "" for p in pdf.pages)[:5000]
-                except ImportError:
-                    try:
-                        import fitz
-                        doc = fitz.open(filepath)
-                        text = "\n".join(page.get_text() for page in doc)
-                        doc.close()
-                        return text[:5000]
-                    except ImportError:
-                        return ""
-            elif ext in (".docx",):
-                try:
-                    from docx import Document
-                    doc = Document(filepath)
-                    return "\n".join(p.text for p in doc.paragraphs)[:5000]
-                except Exception:
-                    return ""
-            elif ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"):
-                try:
-                    import pytesseract
-                    from PIL import Image
-                    img = Image.open(filepath)
-                    return pytesseract.image_to_string(img, lang="ara+eng")[:5000]
-                except Exception:
-                    return path.name
-        except Exception as e:
-            logger.debug(f"لا يمكن استخراج النص من {filepath}: {e}")
-
-        return path.name
 
     def _init_magika(self):
         """تهيئة مكتبة Magika للتصنيف بالمحتوى"""

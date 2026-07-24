@@ -27,11 +27,12 @@ This document establishes the **non-negotiable product identities** for reposito
 - Clinical workflows
 - Any feature requiring cloud processing
 
-**⚠️ Violation Remediation:**
-- DICOM parser must be removed
-- SyncManager must be removed
-- Medical NER components must be removed
-- All commits adding these features must be reverted
+**⚠️ Violation Remediation Status:**
+- ✅ DICOM parser — was never merged to main; experimental branch was deleted
+- ✅ SyncManager — was never merged to main; experimental branch was deleted
+- ✅ Medical NER (medical_ner.py, sample_medical_plugin.py) — removed in `fix/scope-enforcement` branch
+- ✅ Medical classification methods (`classify_medical`, `classify_file_medical`) — removed in `intellifile-scope-reset` PR
+- ✅ All commits adding these features were never pushed to main
 
 ---
 
@@ -96,12 +97,13 @@ This document establishes the **non-negotiable product identities** for reposito
 
 ## Scope Enforcement Checklist
 
-- [ ] Remove DICOM parser from intelli-file-manager
-- [ ] Remove SyncManager from intelli-file-manager
-- [ ] Remove medical NER from intelli-file-manager
-- [ ] Verify no medical-specific imports in intelli-file-manager
-- [ ] Create shared utilities package if needed
-- [ ] Document integration boundaries in both repos
+- [x] Remove DICOM parser from intelli-file-manager (never merged to main)
+- [x] Remove SyncManager from intelli-file-manager (never merged to main)
+- [x] Remove medical NER from intelli-file-manager (merged via `fix/scope-enforcement`)
+- [x] Remove medical classification methods (`classify_medical`, `classify_file_medical`) — this PR
+- [x] Verify no medical-specific imports in intelli-file-manager (verified post-PR)
+- [ ] Create shared utilities package if needed (deferred — not needed yet)
+- [x] Document integration boundaries in both repos (omni now has its own governance docs)
 
 ---
 

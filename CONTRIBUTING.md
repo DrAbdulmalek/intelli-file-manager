@@ -88,7 +88,7 @@ git checkout -b docs/وصف-التوثيق
 
 ```bash
 git add .
-git commit -m "feat: إضافة عارض DICOM طبي"
+git commit -m "feat: إضافة عارض ملفات ذكي"
 ```
 
 ### 5. Push and PR | الرفع وإنشاء طلب سحب
