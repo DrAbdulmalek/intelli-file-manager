@@ -159,3 +159,36 @@ class MultimodalProcessor:
         except Exception as e:
             logger.error(f"خطأ في استخراج نص XLSX: {e}")
             return ""
+
+    def extract_text_from_pptx(self, filepath: str) -> str:
+        """استخراج نص من PPTX (PowerPoint)
+
+        يجمع النص من:
+          - إطار النص لكل شكل (text_frame)
+          - خلايا الجداول داخل الشرائح
+        """
+        try:
+            from pptx import Presentation
+            prs = Presentation(filepath)
+            parts = []
+            for slide_num, slide in enumerate(prs.slides, start=1):
+                parts.append(f"### Slide {slide_num} ###")
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for paragraph in shape.text_frame.paragraphs:
+                            text = paragraph.text.strip()
+                            if text:
+                                parts.append(text)
+                    if shape.has_table:
+                        for row in shape.table.rows:
+                            row_text = " | ".join(
+                                cell.text.strip()
+                                for cell in row.cells
+                                if cell.text.strip()
+                            )
+                            if row_text:
+                                parts.append(row_text)
+            return "\n".join(parts)
+        except Exception as e:
+            logger.error(f"خطأ في استخراج نص PPTX: {e}")
+            return ""
