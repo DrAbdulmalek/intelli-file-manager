@@ -15,6 +15,9 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 | Phase 2: Boundary Enforcement | ✅ COMPLETED | Executive Reviewer | 2026-07-24 | 2026-07-24 |
 | Phase 3: Repo Hygiene | ⏳ PENDING | Executive Reviewer | - | - |
 | Phase 4: PR Execution (PR-01) | ✅ COMPLETED | Executive Reviewer | 2026-07-24 | 2026-07-24 |
+| Phase 5: Roadmap (IFM + OMS) | ✅ COMPLETED | Executive Reviewer | 2026-07-24 | 2026-07-24 |
+| Phase 6: PR-02 (FileInventory + tests) | ✅ COMPLETED | Executive Reviewer | 2026-07-24 | 2026-07-24 |
+| Phase 7: PR-03 (Enhanced Metadata) | ✅ COMPLETED | Executive Reviewer | 2026-07-24 | 2026-07-24 |
 
 ---
 
@@ -40,7 +43,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 1. ✅ Add SECURITY_NOTES.md to intelli-file-manager
 2. ✅ Remove DICOM/SyncManager from intelli-file-manager (PR-01, 2026-07-24)
 3. ⏳ Branch cleanup (long-lived feature branches)
-4. ⏳ Begin disciplined development roadmap (Phase A: CORE MVP)
+4. 🟡 Disciplined development roadmap (Phase A in progress — PR-02 ✅, PR-03 ✅, PR-04 next)
 
 ### Z.ai - VERIFIER ONLY
 
@@ -91,6 +94,38 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 | 11:17 | Updated AI_WORKLOG.md (Phase 1 + 2 + PR-01 marked COMPLETED) | intelli-file-manager | ✅ |
 | 11:18 | Ran full pytest suite — verified 229+ tests pass | intelli-file-manager | ✅ |
 | 11:18 | Committed + pushed branch + opened PR #1 | intelli-file-manager | ✅ |
+
+### 2026-07-24 - Executive Reviewer (PR-02 — IFM Phase A: indexed file inventory)
+
+| Time (UTC) | Action | Repository | Status |
+|------------|--------|------------|--------|
+| 13:00 | Pulled latest main (origin/main at PR-01 merge 2d296e3 after PR #25 squash) | intelli-file-manager | ✅ |
+| 13:01 | Inspected existing indexing layer (FileHandler + MultimodalProcessor) | intelli-file-manager | ✅ |
+| 13:02 | Created branch feat/ifm-indexed-file-inventory | intelli-file-manager | ✅ |
+| 13:05 | Wrote src/core/file_inventory.py (387 lines: FileInventory + InventoryStats + 5 extractors) | intelli-file-manager | ✅ |
+| 13:06 | Added extract_text_from_pptx to MultimodalProcessor (33 lines) | intelli-file-manager | ✅ |
+| 13:08 | Added real_doc_dir fixture + 4 helpers to conftest.py (146 lines) | intelli-file-manager | ✅ |
+| 13:10 | Wrote tests/integration/test_file_inventory.py (423 lines, 33 tests, 8 classes) | intelli-file-manager | ✅ |
+| 13:11 | Ran test suite — 262/262 pass (33 new, 0 regressions) | intelli-file-manager | ✅ |
+| 13:12 | Committed + pushed branch + opened PR #25 | intelli-file-manager | ✅ |
+
+### 2026-07-24 - Executive Reviewer (PR-03 — IFM Phase A: enhanced metadata + content extraction)
+
+| Time (UTC) | Action | Repository | Status |
+|------------|--------|------------|--------|
+| 14:00 | Merged PR #25 via API (squash, sha=2d296e3) then pulled main | intelli-file-manager | ✅ |
+| 14:02 | Inspected FileInventory + MultimodalProcessor for extractor unification | intelli-file-manager | ✅ |
+| 14:03 | Installed python-magic in venv (already in requirements.txt) | intelli-file-manager | ✅ |
+| 14:04 | Created branch feat/ifm-enhanced-metadata | intelli-file-manager | ✅ |
+| 14:06 | Wrote src/core/metadata_extractor.py (312 lines: image EXIF + AV ffprobe + magic content_type) | intelli-file-manager | ✅ |
+| 14:08 | Extended FileMetadata with extra_metadata: dict field + merge() fix | intelli-file-manager | ✅ |
+| 14:09 | Updated FileInventory to use detect_content_type + extract_extended_metadata | intelli-file-manager | ✅ |
+| 14:10 | Unified MultimodalProcessor (delegate image/video/text extractors to new module) | intelli-file-manager | ✅ |
+| 14:12 | Added real_media_dir fixture + 4 helpers (JPEG+EXIF, PNG, MP3, MP4) to conftest.py | intelli-file-manager | ✅ |
+| 14:14 | Wrote tests/integration/test_metadata_extractor.py (455 lines, 48 tests, 8 classes) | intelli-file-manager | ✅ |
+| 14:15 | Ran new tests — 48/48 pass | intelli-file-manager | ✅ |
+| 14:15 | Ran full suite — 310/310 pass (48 new, 0 regressions) | intelli-file-manager | ✅ |
+| 14:16 | Committed + pushed branch + opening PR | intelli-file-manager | ✅ |
 
 ### 2026-07-20 to 2026-07-21 - Z.ai (Previous Work)
 

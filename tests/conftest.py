@@ -281,6 +281,93 @@ def _build_real_pptx(path):
     prs.save(str(path))
 
 
+# ─── Fixture: ملفات وسائط حقيقية (jpg/png/mp3/mp4) لاختبارات PR-03 ───────
+# تُبنى فعليًا عبر PIL (للصور) وffmpeg (للصوت/الفيديو).
+@pytest.fixture
+def real_media_dir(tmp_path):
+    """ينشئ مجلداً يحتوي ملفات وسائط حقيقية لاختبار الميتاداتا الموسّعة
+
+    المحتوى:
+      - sample.jpg: JPEG 80x60 مع EXIF (Make, Model, DateTime)
+      - sample.png: PNG 50x50
+      - sample.mp3: ملف صوتي 1.5s صمت (يُولَّد عبر ffmpeg)
+      - sample.mp4: ملف فيديو 1s لون ثابت (يُولَّد عبر ffmpeg)
+      - corrupt.jpg: ملف بامتداد jpg لكن بمحتوى عشوائي (لاختبار التسامح)
+    """
+    _build_real_jpeg_with_exif(tmp_path / "sample.jpg")
+    _build_real_png(tmp_path / "sample.png")
+    _build_real_mp3(tmp_path / "sample.mp3")
+    _build_real_mp4(tmp_path / "sample.mp4")
+    # ملف تالف لاختبار التسامح مع الأخطاء
+    (tmp_path / "corrupt.jpg").write_bytes(b"\xff\xd8\xff\xe0 not really a jpeg")
+    return tmp_path
+
+
+def _build_real_jpeg_with_exif(path):
+    """يبني JPEG حقيقي 80x60 مع وسوم EXIF (Make, Model, DateTime)"""
+    from PIL import Image
+    img = Image.new("RGB", (80, 60), color=(123, 200, 50))
+    exif = img.getexif() if hasattr(img, "getexif") else None
+    if exif is not None:
+        # وسوم EXIF الشائعة
+        # 0x010F = Make, 0x0110 = Model, 0x0132 = DateTime
+        exif[0x010F] = "TestCamera"
+        exif[0x0110] = "IFM-1000"
+        exif[0x0132] = "2026:07:24 10:30:00"
+        exif[0x013B] = "Artist Name"  # Artist
+    img.save(str(path), "JPEG", exif=exif)
+
+
+def _build_real_png(path):
+    """يبني PNG حقيقي 50x50"""
+    from PIL import Image
+    img = Image.new("RGBA", (50, 50), color=(10, 20, 30, 255))
+    img.save(str(path), "PNG")
+
+
+def _build_real_mp3(path):
+    """يبني MP3 حقيقي 1.5s صمت عبر ffmpeg (fallback: يكتب بايتات وهمية)"""
+    import subprocess
+    import shutil
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        # fallback: لا يوجد ffmpeg، نكتب رأس MP3 فقط
+        path.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00\x00" + b"\xff\xfb" * 100)
+        return
+    try:
+        subprocess.run(
+            [ffmpeg, "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+             "-t", "1.5", "-q:a", "9", "-metadata",
+             "title=Test Audio", "-metadata", "artist=IFM Test",
+             str(path)],
+            capture_output=True, timeout=15, check=False,
+        )
+    except Exception:
+        path.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00\x00" + b"\xff\xfb" * 100)
+
+
+def _build_real_mp4(path):
+    """يبني MP4 حقيقي 1s لون ثابت عبر ffmpeg (fallback: يكتب رأس MP4)"""
+    import subprocess
+    import shutil
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        # fallback: رأس MP4 بسيط
+        path.write_bytes(b"\x00\x00\x00\x18 ftypmp42" + b"\x00" * 50)
+        return
+    try:
+        subprocess.run(
+            [ffmpeg, "-y", "-f", "lavfi", "-i",
+             "color=c=red:s=160x120:d=1:r=15",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p",
+             "-movflags", "+faststart",
+             str(path)],
+            capture_output=True, timeout=20, check=False,
+        )
+    except Exception:
+        path.write_bytes(b"\x00\x00\x00\x18 ftypmp42" + b"\x00" * 50)
+
+
 # ─── Mock: ollama ──────────────────────────────────────────────────────────
 @pytest.fixture
 def mock_ollama():

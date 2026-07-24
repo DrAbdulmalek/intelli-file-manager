@@ -1,6 +1,18 @@
-"""معالج متعدد الوسائط - صور وصوت وفيديو"""
+"""معالج متعدد الوسائط - صور وصوت وفيديو
+
+هذه الوحدة توفّر ميزات AI على الوسائط (وصف الصور، نسخ الصوت) فوق
+الميتاداتا الأساسية المستخرَجة عبر metadata_extractor الموحّد (PR-03).
+
+تغير PR-03:
+  - استخراج الأبعاد/الصيغة/EXIF للصور أصبح يُوكَّل إلى extract_image_metadata
+  - استخراج معلومات الفيديو (ffprobe) أصبح يُوكَّل إلى extract_av_metadata
+  - استخراج النص من PDF/DOCX/XLSX/PPTX يُوكَّل إلى FileInventory._extract_content
+  - AI/OCR/Transcription لا تزال هنا (خارج نطاق PR-03)
+"""
 import logging
 from pathlib import Path
+
+from .metadata_extractor import extract_image_metadata, extract_av_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -22,19 +34,23 @@ class MultimodalProcessor:
             logger.info("Tesseract OCR غير مثبت")
 
     def process_image(self, filepath: str) -> dict:
-        """تحليل صورة ووصف محتواها"""
+        """تحليل صورة ووصف محتواها
+
+        الميتاداتا الأساسية (width/height/format/mode/exif) تُستخرَج عبر
+        extract_image_metadata الموحّد (PR-03). وصف AI يُضاف إن توفّر ollama.
+        """
         path = Path(filepath)
         result = {"path": str(path), "type": "image"}
 
-        try:
-            from PIL import Image
-            img = Image.open(filepath)
-            result["width"] = img.width
-            result["height"] = img.height
-            result["format"] = img.format
-            result["mode"] = img.mode
-        except Exception as e:
-            result["error"] = str(e)
+        # الميتاداتا الأساسية موكَّلة إلى metadata_extractor
+        basic = extract_image_metadata(filepath)
+        # دمج المفاتيح غير الخطأ في النتيجة
+        for key, value in basic.items():
+            if key != "error":
+                result[key] = value
+        if "error" in basic and not any(k in result for k in ("width", "height")):
+            # فقط نُسجّل الخطأ لو لم نحصل على أي ميتاداتا
+            result["error"] = basic["error"]
 
         # OCR
         if self._ocr_available:
@@ -90,105 +106,40 @@ class MultimodalProcessor:
         return result
 
     def process_video(self, filepath: str) -> dict:
-        """تحليل فيديو واستخراج معلومات"""
+        """تحليل فيديو واستخراج معلومات
+
+        الميتاداتا (المدة، الترميز، الأبعاد، معدل البت) تُستخرَج عبر
+        extract_av_metadata الموحّد (PR-03) الذي يستخدم ffprobe.
+        """
         path = Path(filepath)
         result = {"path": str(path), "type": "video", "name": path.name}
 
-        try:
-            # محاولة الحصول على معلومات باستخدام ffprobe
-            import subprocess
-            cmd = [
-                "ffprobe", "-v", "quiet", "-print_format", "json",
-                "-show_format", "-show_streams", str(filepath)
-            ]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if proc.returncode == 0:
-                import json
-                info = json.loads(proc.stdout)
-                if "format" in info:
-                    fmt = info["format"]
-                    result["duration"] = fmt.get("duration", "0")
-                    result["bit_rate"] = fmt.get("bit_rate", "0")
-                    result["format_name"] = fmt.get("format_name", "")
-                    result["size"] = fmt.get("size", "0")
-                if "streams" in info:
-                    for stream in info["streams"]:
-                        if stream.get("codec_type") == "video":
-                            result["video_codec"] = stream.get("codec_name", "")
-                            result["resolution"] = f"{stream.get('width')}x{stream.get('height')}"
-                        elif stream.get("codec_type") == "audio":
-                            result["audio_codec"] = stream.get("codec_name", "")
-        except Exception as e:
-            result["probe_error"] = str(e)
+        av_info = extract_av_metadata(filepath)
+        # دمج المفاتيح غير الخطأ في النتيجة
+        for key, value in av_info.items():
+            if key == "error":
+                result["probe_error"] = value
+            else:
+                result[key] = value
 
         return result
 
     def extract_text_from_pdf(self, filepath: str) -> str:
-        """استخراج نص من PDF"""
-        try:
-            import pdfplumber
-            with pdfplumber.open(filepath) as pdf:
-                return "\n".join(p.extract_text() or "" for p in pdf.pages)
-        except Exception as e:
-            logger.error(f"خطأ في استخراج نص PDF: {e}")
-            return ""
+        """استخراج نص من PDF — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
+        from .file_inventory import _extract_pdf_text
+        return _extract_pdf_text(Path(filepath))
 
     def extract_text_from_docx(self, filepath: str) -> str:
-        """استخراج نص من DOCX"""
-        try:
-            from docx import Document
-            doc = Document(filepath)
-            return "\n".join(p.text for p in doc.paragraphs)
-        except Exception as e:
-            logger.error(f"خطأ في استخراج نص DOCX: {e}")
-            return ""
+        """استخراج نص من DOCX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
+        from .file_inventory import _extract_docx_text
+        return _extract_docx_text(Path(filepath))
 
     def extract_text_from_xlsx(self, filepath: str) -> str:
-        """استخراج نص من XLSX"""
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(filepath)
-            rows = []
-            for sheet in wb.sheetnames:
-                ws = wb[sheet]
-                for row in ws.iter_rows(values_only=True):
-                    row_text = " | ".join(str(c) if c else "" for c in row)
-                    if row_text.strip():
-                        rows.append(row_text)
-            return "\n".join(rows[:500])
-        except Exception as e:
-            logger.error(f"خطأ في استخراج نص XLSX: {e}")
-            return ""
+        """استخراج نص من XLSX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
+        from .file_inventory import _extract_xlsx_text
+        return _extract_xlsx_text(Path(filepath))
 
     def extract_text_from_pptx(self, filepath: str) -> str:
-        """استخراج نص من PPTX (PowerPoint)
-
-        يجمع النص من:
-          - إطار النص لكل شكل (text_frame)
-          - خلايا الجداول داخل الشرائح
-        """
-        try:
-            from pptx import Presentation
-            prs = Presentation(filepath)
-            parts = []
-            for slide_num, slide in enumerate(prs.slides, start=1):
-                parts.append(f"### Slide {slide_num} ###")
-                for shape in slide.shapes:
-                    if shape.has_text_frame:
-                        for paragraph in shape.text_frame.paragraphs:
-                            text = paragraph.text.strip()
-                            if text:
-                                parts.append(text)
-                    if shape.has_table:
-                        for row in shape.table.rows:
-                            row_text = " | ".join(
-                                cell.text.strip()
-                                for cell in row.cells
-                                if cell.text.strip()
-                            )
-                            if row_text:
-                                parts.append(row_text)
-            return "\n".join(parts)
-        except Exception as e:
-            logger.error(f"خطأ في استخراج نص PPTX: {e}")
-            return ""
+        """استخراج نص من PPTX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
+        from .file_inventory import _extract_pptx_text
+        return _extract_pptx_text(Path(filepath))

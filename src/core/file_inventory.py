@@ -5,6 +5,9 @@
   - حساب SHA-256 لكل ملف (جاهز لكشف التكرار)
   - استخراج النص من txt/pdf/docx/xlsx/pptx عبر استيراد كسول
     (graceful degradation: لو المكتبة غير مثبتة يُرجع نص فارغ)
+  - استخراج الميتاداتا الموسّعة للصور (EXIF) والصوت/الفيديو (ffprobe)
+    عبر metadata_extractor الموحّد (PR-03)
+  - كشف نوع المحتوى (MIME) عبر python-magic مع fallback للامتداد (PR-03)
   - إرجاع FileRecord جاهز للفهرسة/التخزين
 
 لا تشمل هذه الوحدة:
@@ -12,7 +15,8 @@
   - أي ميزات طبية — ممنوعة per PRODUCT_IDENTITY.md
   - أي تخزين دائم — مسؤولية طبقة db
 
-PR-02 من development-roadmap-v1.0
+PR-02 من development-roadmap-v1.0 (FileInventory + اختبارات تكامل)
+PR-03 من development-roadmap-v1.0 (ميتاداتا موسّعة + content_type عبر magic)
 """
 from __future__ import annotations
 
@@ -25,6 +29,7 @@ from pathlib import Path
 from typing import Iterable, Iterator, List, Optional
 
 from ..db.schemas import FileCategory, FileMetadata, FileRecord
+from .metadata_extractor import detect_content_type, extract_extended_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +211,10 @@ class FileInventory:
         # بناء FileMetadata
         ext = file_path.suffix.lower()
         category = FileCategory.from_extension(ext)
+        # كشف نوع المحتوى عبر python-magic مع fallback للامتداد
+        content_type = detect_content_type(file_path, ext)
+        # استخراج الميتاداتا الموسّعة (EXIF للصور، ffprobe للصوت/الفيديو)
+        extra_metadata = self._safe_extract_extended(file_path, ext)
         metadata = FileMetadata(
             file_name=file_path.name,
             file_path=str(file_path),
@@ -216,7 +225,8 @@ class FileInventory:
             created_at=datetime.fromtimestamp(stat.st_ctime).isoformat(),
             modified_at=datetime.fromtimestamp(stat.st_mtime).isoformat(),
             is_duplicate=is_duplicate,
-            content_type=_guess_content_type(ext),
+            content_type=content_type,
+            extra_metadata=extra_metadata,
         )
 
         # استخراج المحتوى (اختياري)
@@ -246,6 +256,15 @@ class FileInventory:
         except OSError as e:
             logger.debug(f"تعذر حساب hash لـ {file_path}: {e}")
             return ""
+
+    @staticmethod
+    def _safe_extract_extended(file_path: Path, ext: str) -> dict:
+        """يستخرج الميتاداتا الموسّعة بتسامح تام مع الأخطاء"""
+        try:
+            return extract_extended_metadata(file_path, ext)
+        except Exception as e:
+            logger.debug(f"فشل استخراج الميتاداتا الموسّعة من {file_path}: {e}")
+            return {}
 
     @staticmethod
     def _extract_content(file_path: Path, ext: str) -> str:
@@ -367,21 +386,14 @@ def _extract_pptx_text(file_path: Path) -> str:
     return "\n".join(parts)
 
 
+# ملاحظة: تم نقل منطق كشف نوع المحتوى إلى metadata_extractor.detect_content_type
+# في PR-03. هذه الدالة محفوظة للتوافق مع أي كود خارجي يشير إليها، لكنها
+# مجرد وكيل (delegate) للدالة الجديدة.
 def _guess_content_type(ext: str) -> str:
-    """تخمين نوع المحتوى من الامتداد"""
-    ext = ext.lower().lstrip(".")
-    mapping = {
-        "txt": "text/plain", "md": "text/markdown", "csv": "text/csv",
-        "log": "text/plain", "pdf": "application/pdf",
-        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
-        "gif": "image/gif", "bmp": "image/bmp", "svg": "image/svg+xml",
-        "mp4": "video/mp4", "avi": "video/x-msvideo", "mkv": "video/x-matroska",
-        "mp3": "audio/mpeg", "wav": "audio/wav", "flac": "audio/flac",
-        "zip": "application/zip", "rar": "application/vnd.rar", "7z": "application/x-7z-compressed",
-        "py": "text/x-python", "js": "application/javascript", "ts": "application/typescript",
-        "json": "application/json", "xml": "application/xml", "yaml": "application/x-yaml",
-    }
-    return mapping.get(ext, "application/octet-stream")
+    """وكيل للتوافق مع الكود القديم — يُفضّل استخدام detect_content_type مباشرة
+
+    يُرجع نوع المحتوى من قاموس الامتدادات فقط (لا يقرأ magic bytes).
+    """
+    from .metadata_extractor import _EXT_MIME_FALLBACK
+    ext_clean = ext.lower().lstrip(".")
+    return _EXT_MIME_FALLBACK.get(ext_clean, "application/octet-stream")
