@@ -135,6 +135,152 @@ def sample_files(tmp_path):
     }
 
 
+# ─── Fixture: ملفات حقيقية قابلة للاستخراج (txt/pdf/docx/xlsx/pptx) ───────
+# تُستخدم لاختبارات FileInventory التكاملية. تُبنى الملفات فعليًا باستخدام
+# المكتبات (pdfplumber, python-docx, openpyxl, python-pptx) بدلًا من fake bytes.
+@pytest.fixture
+def real_doc_dir(tmp_path):
+    """ينشئ مجلداً يحتوي ملفات حقيقية من الأنواع الخمسة المدعومة
+
+    المحتوى عربي + إنجليزي لاختبار الترميز. كل ملف يحتوي نصًا قابلًا للاستخراج.
+    """
+    # ─── txt: نص مباشر ───
+    (tmp_path / "notes.txt").write_text(
+        "هذه ملاحظات تجريبية\nThis is a test note\nخط ثالث",
+        encoding="utf-8",
+    )
+
+    # ─── md: نص مباشر ───
+    (tmp_path / "readme.md").write_text(
+        "# عنوان\n\nفقرة وصفية بالعربية.",
+        encoding="utf-8",
+    )
+
+    # ─── pdf: يُبنى عبر مكتبة reportlab إن وُجدت، وإلا يُكتب نص فارغ ───
+    _build_real_pdf(tmp_path / "report.pdf")
+
+    # ─── docx: يُبنى عبر python-docx ───
+    _build_real_docx(tmp_path / "document.docx")
+
+    # ─── xlsx: يُبنى عبر openpyxl ───
+    _build_real_xlsx(tmp_path / "spreadsheet.xlsx")
+
+    # ─── pptx: يُبنى عبر python-pptx ───
+    _build_real_pptx(tmp_path / "presentation.pptx")
+
+    # ─── ملف مكرر (نسخة من notes.txt) ───
+    (tmp_path / "notes_copy.txt").write_text(
+        "هذه ملاحظات تجريبية\nThis is a test note\nخط ثالث",
+        encoding="utf-8",
+    )
+
+    # ─── ملف مخفي (يجب تخطيه) ───
+    (tmp_path / ".hidden_secret").write_text("secret", encoding="utf-8")
+
+    # ─── مجلد فرعي مع ملف ───
+    sub = tmp_path / "subfolder"
+    sub.mkdir()
+    (sub / "nested.txt").write_text("نص متداخل", encoding="utf-8")
+
+    # ─── ملف غير مدعوم للاستخراج (jpg ببيانات وهمية) ───
+    (tmp_path / "image.jpg").write_bytes(b"\xff\xd8\xff\xe0 fake")
+
+    return tmp_path
+
+
+def _build_real_pdf(path):
+    """يبني PDF حقيقي بصفحة واحدة تحتوي نصًا عربيًا وإنجليزيًا"""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        c = canvas.Canvas(str(path), pagesize=A4)
+        c.drawString(100, 750, "Hello from PDF")
+        c.drawString(100, 730, "Test content for extraction")
+        c.drawString(100, 710, "Arabic: ahlan wa sahlan")
+        c.showPage()
+        c.save()
+    except ImportError:
+        # fallback: اكتب PDF بسيط يدويًا (نص قابل للاستخراج)
+        # هذا PDF بسيط جدًا بصفحة واحدة — pdfplumber قد يستخرج نصًا منه
+        path.write_bytes(_minimal_pdf_bytes())
+
+
+def _minimal_pdf_bytes() -> bytes:
+    """PDF بسيط بصفحة واحدة يحتوي نصًا يمكن استخراجه"""
+    content = b"BT /F1 12 Tf 100 700 Td (Hello from PDF) Tj ET"
+    return (
+        b"%PDF-1.4\n"
+        b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
+        b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
+        b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n"
+        b"4 0 obj << /Length " + str(len(content)).encode() + b" >> stream\n" +
+        content + b"\nendstream endobj\n"
+        b"5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n"
+        b"xref\n0 6\n0000000000 65535 f \n"
+        b"trailer << /Size 6 /Root 1 0 R >>\nstartxref\n0\n%%EOF\n"
+    )
+
+
+def _build_real_docx(path):
+    """يبني DOCX حقيقي بفقرات وجدول"""
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph("Hello from DOCX")
+    doc.add_paragraph("فقرة عربية تجريبية")
+    doc.add_paragraph("Test content for extraction")
+    # جدول بسيط
+    table = doc.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "Name"
+    table.cell(0, 1).text = "Age"
+    table.cell(1, 0).text = "Ahmad"
+    table.cell(1, 1).text = "30"
+    doc.save(str(path))
+
+
+def _build_real_xlsx(path):
+    """يبني XLSX حقيقي بورقتين وبيانات"""
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws1 = wb.active
+    ws1.title = "Sheet1"
+    ws1.append(["Name", "Age", "City"])
+    ws1.append(["Ahmad", 30, "Damascus"])
+    ws1.append(["Sara", 28, "Cairo"])
+    # ورقة ثانية
+    ws2 = wb.create_sheet("Sheet2")
+    ws2.append(["Product", "Price"])
+    ws2.append(["Book", 15.5])
+    wb.save(str(path))
+
+
+def _build_real_pptx(path):
+    """يبني PPTX حقيقي بشريحتين تحتويان نصًا وجدولًا"""
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    prs = Presentation()
+    # شريحة 1
+    slide1 = prs.slides.add_slide(prs.slide_layouts[1])
+    slide1.shapes.title.text = "First Slide"
+    slide1.placeholders[1].text = "Hello from PPTX\nArabic content"
+    # شريحة 2
+    slide2 = prs.slides.add_slide(prs.slide_layouts[5])
+    left = top = width = height = Inches(2)
+    txBox = slide2.shapes.add_textbox(left, top, width, height)
+    tf = txBox.text_frame
+    tf.text = "Second slide content"
+    # جدول في الشريحة 2
+    table_shape = slide2.shapes.add_table(
+        rows=2, cols=2, left=Inches(1), top=Inches(3),
+        width=Inches(4), height=Inches(1)
+    )
+    table_shape.table.cell(0, 0).text = "Col1"
+    table_shape.table.cell(0, 1).text = "Col2"
+    table_shape.table.cell(1, 0).text = "Val1"
+    table_shape.table.cell(1, 1).text = "Val2"
+    prs.save(str(path))
+
+
 # ─── Mock: ollama ──────────────────────────────────────────────────────────
 @pytest.fixture
 def mock_ollama():
