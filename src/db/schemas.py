@@ -137,6 +137,11 @@ class FileMetadata:
     tags: List[str] = field(default_factory=list)
     parent_dir: str = ""
     content_type: str = "unknown"
+    # ميتاداتا موسّعة حسب نوع الوسيط (PR-03):
+    #   - صور: {width, height, format, mode, exif, captured_at, camera_make, ...}
+    #   - صوت/فيديو: {duration_seconds, bit_rate, format_name, video, audio, tags, ...}
+    # فارغة {} للملفات النصية والمستندات (لا ميتاداتا موسّعة لها).
+    extra_metadata: Dict = field(default_factory=dict)
 
     def __post_init__(self):
         """تهيئة تلقائية بعد إنشاء الكائن
@@ -261,6 +266,8 @@ class FileMetadata:
             if isinstance(value, (int, float)) and value == 0:
                 continue
             if isinstance(value, list) and not value:
+                continue
+            if isinstance(value, dict) and not value:
                 continue
             merged[key] = value
         return FileMetadata.from_dict(merged)
