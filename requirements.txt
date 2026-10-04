@@ -16,6 +16,11 @@ apscheduler>=3.10.0
 networkx>=3.1
 Pillow>=10.0.0
 
+# ─── Central OCR (ocr-core shared library) ─────────────────────────────────
+# مصدر الحقيقة الوحيد للـ OCR: محركات (Paddle/Tesseract) + ميثاق الأدلة البصرية v2
+# + التصحيحات الطبية العربية + معالجة مسبقة. [tesseract] = pytesseract+pillow
+marathon-ocr-core[tesseract] @ git+https://github.com/DrAbdulmalek/ocr-core.git@v0.4.0
+
 # ─── AI / Machine Learning ──────────────────────────────────────────────────
 # Required for classification, embeddings, and vector search
 ollama>=0.1.0
