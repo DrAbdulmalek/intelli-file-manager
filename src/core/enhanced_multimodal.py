@@ -48,15 +48,14 @@ class EnhancedMultimodalProcessor:
         self.ai_model = ai_model
         self.allow_cloud_speech = allow_cloud_speech  # Privacy: disabled by default
 
-        # Lazy-loaded engines
-        self._paddle_ocr = None
+        # Lazy-loaded engines (OCR ممركز الآن عبر ocr_service/ocr-core)
         self._moondream = None
         self._whisper_model = None
         self._medical_ner = None
 
         # Availability flags
         self.tesseract_available = self._check_tesseract()
-        self.paddleocr_available = False  # checked on first use
+        self.paddleocr_available = False  # علم تراثي — الحقيقة: ocr_service.paddle_available()
 
     def _check_tesseract(self) -> bool:
         try:
@@ -65,24 +64,6 @@ class EnhancedMultimodalProcessor:
             return True
         except Exception:
             return False
-
-    def _init_paddleocr(self):
-        if self._paddle_ocr is not None:
-            return
-        try:
-            from paddleocr import PaddleOCR
-            self._paddle_ocr = PaddleOCR(
-                use_angle_cls=True,
-                lang="ar",  # Arabic
-                show_log=False,
-                use_gpu=False,
-            )
-            self.paddleocr_available = True
-            logger.info("تم تحميل PaddleOCR (Arabic)")
-        except ImportError:
-            logger.info("PaddleOCR غير مثبت")
-        except Exception as exc:
-            logger.warning(f"خطأ في تحميل PaddleOCR: {exc}")
 
     def _init_medical_ner(self):
         if self._medical_ner is not None:
@@ -184,70 +165,17 @@ class EnhancedMultimodalProcessor:
         return result
 
     def _enhance_image(self, filepath: str) -> Optional[str]:
-        """Apply basic image enhancement (contrast, sharpness, denoise) for better OCR."""
-        try:
-            from PIL import Image, ImageEnhance, ImageFilter
-
-            img = Image.open(filepath)
-
-            # Convert to grayscale if needed
-            if img.mode != "L":
-                img = img.convert("L")
-
-            # Basic enhancement
-            img = ImageEnhance.Contrast(img).enhance(1.5)
-            img = ImageEnhance.Sharpness(img).enhance(2.0)
-            img = img.filter(ImageFilter.MedianFilter(size=3))
-
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                img.save(tmp.name)
-                return tmp.name
-
-        except Exception as exc:
-            logger.debug(f"خطأ في تحسين الصورة: {exc}")
-            return None
+        """تحسين الصورة عبر ocr-core preprocess (تراجع PIL داخل ocr_service)."""
+        from .ocr_service import enhance_image as _central_enhance
+        return _central_enhance(filepath)
 
     def _ocr_image(self, filepath: str) -> dict:
-        """OCR an image with PaddleOCR → Tesseract fallback."""
-        result = {}
+        """OCR عبر الخدمة المركزية (ocr-core): Paddle→Tesseract يُدار هناك.
 
-        # Try PaddleOCR first (better for Arabic)
-        self._init_paddleocr()
-        if self._paddle_ocr:
-            try:
-                ocr_output = self._paddle_ocr.ocr(filepath, cls=True)
-                if ocr_output and ocr_output[0]:
-                    texts = []
-                    for line in ocr_output[0]:
-                        if line and len(line) >= 2:
-                            texts.append(line[1][0])  # text content
-                    extracted = "\n".join(texts)
-                    if extracted.strip():
-                        result["extracted_text"] = extracted
-                        result["ocr_engine"] = "paddleocr"
-                        result["ocr_success"] = True
-                        return result
-            except Exception as exc:
-                result["paddleocr_error"] = str(exc)
-
-        # Fallback: Tesseract
-        if self.tesseract_available:
-            try:
-                import pytesseract
-                from PIL import Image
-                img = Image.open(filepath)
-                text = pytesseract.image_to_string(img, lang="ara+eng")
-                if text.strip():
-                    result["extracted_text"] = text.strip()
-                    result["ocr_engine"] = "tesseract"
-                    result["ocr_success"] = True
-                    return result
-            except Exception as exc:
-                result["tesseract_error"] = str(exc)
-
-        result["ocr_success"] = False
-        result["extracted_text"] = ""
-        return result
+        العقد محفوظ: extracted_text / ocr_engine / ocr_success [/ ocr_confidence].
+        """
+        from .ocr_service import ocr_image as _central_ocr
+        return _central_ocr(filepath)
 
     def _vision_describe(self, filepath: str) -> Optional[str]:
         """Describe an image using vision-language model via Ollama."""
