@@ -46,4 +46,4 @@ plotly>=5.18.0
 pandas>=2.0.0
 
 # OCR Central Engine
-ocr-core @ git+https://github.com/DrAbdulmalek/ocr-core.git@v0.4.0
+marathon-ocr-core[tesseract] @ git+https://github.com/DrAbdulmalek/ocr-core.git@v0.4.0

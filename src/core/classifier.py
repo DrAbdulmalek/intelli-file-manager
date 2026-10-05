@@ -90,10 +90,9 @@ class SmartFileClassifier:
                     return ""
             elif ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"):
                 try:
-                    import pytesseract
-                    from PIL import Image
-                    img = Image.open(filepath)
-                    return pytesseract.image_to_string(img, lang="ara+eng")[:5000]
+                    from .ocr_service import ocr_image
+                    res = ocr_image(filepath, max_chars=5000)
+                    return res.get("extracted_text") or path.name
                 except Exception:
                     return path.name
         except Exception as e:
