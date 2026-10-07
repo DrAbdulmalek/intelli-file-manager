@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0-dev] — قصاصات التدريب + محرر OCR + المسارد الطبية
+
+### أُضيف
+- **نظام القصاصات التدريبية** (`src/db/snippet_db.py` + `/api/snippets/*`):
+  SQLite مع سير عمل كامل (إنشاء/تحرير مربع/اعتماد/رفض/حذف) لإنتاج بيانات
+  تدريب OCR بشرح بشري — تصحيح كلمة/سطر/فقرة.
+- **محرر OCR الويب** (`web/` → صفحة `/edit-ocr`): محرر مربعات canvas
+  (رسم/سحب/تحجيم بـ8 مقابض/حذف) + تلوين ثقة (أخضر/أصفر/أحمر/رمادي=غير
+  معروفة) + تحرير نص RTL + اقتراحات المسرد الطبي — الأدوات المرجعية
+  (labelme/dots-ocr-editor/ScribeArabic) دُرست بنيويًا فقط.
+- **خدمة المسارد الطبية** (`src/core/glossary_service.py` +
+  `/api/glossary/suggest`): 741 زوجًا طبيًا عربي-إنجليزي مدمجًا من مشروع
+  `arabic-medical-glossary` (تنظيف من مسرد شامل + مصطلحات عالية الثقة)
+  مع تطبيع عربي (تشكيل/همزات) وقابلية الاستبدال بمسرد 21k عبر
+  `INTELLIFILE_GLOSSARY_PATH`.
+- **تصدير HuggingFace** (`src/services/hf_exporter.py` +
+  `scripts/export_training_data.py`): JSONL للقصاصات المعتمدة + رفع
+  صريح يتطلب توكنًا صريحًا (لا اعتمادات ضمنية أبدًا).
+- **وضع خفيف بلا LLM** (`INTELLIFILE_LIGHTWEIGHT=1`): يعطل Ollama/
+  التضمينات الدلالية؛ بحث BM25 وتصنيف بالقواعد فقط.
+- **Rate limiting** على /api/* (نافذة منزلقة داخلية بلا تبعيات جديدة،
+  قابل للضبط عبر INTELLIFILE_RATE_LIMIT/WINDOW).
+- **نقطة `/api/file/serve`** لخدمة صور القصاصات داخل الـsandbox الحالي.
+- ROADMAP.md خطة الإصدارات.
+- اختبارات: 23 وحدة + 8 تكامل جديدة (snippet_db, glossary, exporter,
+  snippets API, rate limit, lightweight, file-serve sandbox).
+
+### ملاحظات
+- ثقة 0.0 تعني "غير معروفة" (سياسة ocr-core) — لا تُختلق درجات أبدًا.
+- الرفع إلى HuggingFace منفصل صريح عن التصدير المحلي.
+
 ## [Unreleased] — 2.2.0-dev
 
 > The work below is merged to `main` but **not yet tagged `v2.2.0`**.
