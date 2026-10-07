@@ -6,24 +6,37 @@
  * سير العمل:
  *  1. أدخل مسار صورة وحمّل قصاصاتها من /api/snippets?source_image=...
  *  2. ارسم مربعًا جديدًا حول كلمة، أو اسحب/كبّر المربعات الموجودة
- *  3. صحّح النص في اللوحة اليمنى (مع اقتراحات المسرد الطبي)
- *  4. اعتمد القصاصة للتدريب أو احذفها
- *  5. صدّر المعتمد إلى JSONL (خطوة HuggingFace منفصلة صريحة)
+ *  3. قسّم مربعًا يضم أكثر من كلمة (S) أو ادمج مربعين متجاورين (M)
+ *     حتى تحصل على كلمة واحدة كاملة وصحيحة — مع تراجع/إعادة (Ctrl+Z / Ctrl+Y)
+ *  4. صحّح النص في اللوحة اليمنى (مع اقتراحات المسرد الطبي)
+ *  5. اعتمد القصاصة للتدريب أو احذفها
+ *  6. راجع السطور المجمعة RTL قبل التصدير، ثم صدّر المعتمد إلى JSONL
+ *     (خطوة HuggingFace منفصلة صريحة)
+ *
+ * مزامنة الخادم: التقسيم/الدمج عمليتان خادميتان فوقيتان (PATCH/POST/DELETE
+ * عبر العقد الموجود) — التراجع المحلي يعيد العرض فقط؛ عكسهما الطبيعي هو
+ * دمجهما معًا أو إعادة تقسيمهما.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { BBoxEditor, type BBox, type Snippet } from "./BBoxEditor";
 import { GlossarySuggest } from "./GlossarySuggest";
+import { LineReviewPanel } from "./LineReviewPanel";
+import { useSnippetHistory } from "@/hooks/useSnippetHistory";
+import { splitBBox, mergeBBox } from "@/lib/snippet-ops";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8421";
 
 export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: string }) {
   const [imageUrl, setImageUrl] = useState(initialImageUrl);
   const [loadedPath, setLoadedPath] = useState(initialImageUrl);
-  const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const {
+    snippets, setAll, mutate, undo, redo, canUndo, canRedo,
+  } = useSnippetHistory<Snippet>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [reviewLines, setReviewLines] = useState<ReviewLine[] | null>(null);
 
   const loadSnippets = useCallback(async (path: string) => {
     if (!path.trim()) return;
@@ -35,14 +48,15 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
         { headers: apiHeaders() },
       );
       const body = await res.json();
-      setSnippets(normalizeSnippets(body.items ?? []));
+      setAll(normalizeSnippets(body.items ?? []));
       setSelectedId(null);
+      setReviewLines(null);
     } catch {
       setMessage("فشل تحميل القصاصات — تأكد أن خادم API يعمل على المنفذ 8421");
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [setAll]);
 
   useEffect(() => {
     if (loadedPath) void loadSnippets(loadedPath);
@@ -51,8 +65,8 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
   const active = snippets.find((s) => s.id === selectedId) ?? null;
 
   const updateActive = useCallback((id: number, bbox: BBox, text: string) => {
-    setSnippets((prev) => prev.map((s) => (s.id === id ? { ...s, bbox, text } : s)));
-  }, []);
+    mutate((prev) => prev.map((s) => (s.id === id ? { ...s, bbox, text } : s)));
+  }, [mutate]);
 
   async function persistSnippet(id: number, bbox: BBox, text: string) {
     try {
@@ -88,7 +102,7 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
         }),
       });
       const created = await res.json();
-      setSnippets((prev) => [
+      mutate((prev) => [
         ...prev,
         {
           id: created.id,
@@ -108,7 +122,7 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
   }
 
   async function handleDelete(id: number) {
-    setSnippets((prev) => prev.filter((s) => s.id !== id));
+    mutate((prev) => prev.filter((s) => s.id !== id));
     try {
       await fetch(`${API}/api/snippets/${id}`, { method: "DELETE", headers: apiHeaders() });
     } catch {
@@ -124,7 +138,7 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
       headers: { "Content-Type": "application/json", ...apiHeaders() },
       body: JSON.stringify({ verified_by: "web-editor" }),
     });
-    setSnippets((prev) => prev.map((x) => (x.id === id ? { ...x, status: "approved" } : x)));
+    mutate((prev) => prev.map((x) => (x.id === id ? { ...x, status: "approved" as const } : x)));
   }
 
   async function handleExport() {
@@ -137,6 +151,182 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
       setMessage(`تم التصدير: ${body.export_path}`);
     } catch {
       setMessage("فشل التصدير");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // تقسيم / دمج — كلمة كلمة بشكل كامل وصحيح (مزامنة خادمية فورية)
+  // ------------------------------------------------------------------
+
+  /** تقسيم القصاصة المحددة عند نقطة X (افتراضيًا المنتصف). */
+  async function splitSelected(atX?: number) {
+    if (!active) return;
+    const splitX = Math.round(atX ?? (active.bbox.x1 + active.bbox.x2) / 2);
+    const [leftB, rightB] = splitBBox(active.bbox, splitX);
+    if (leftB.x2 - leftB.x1 < 4 || rightB.x2 - rightB.x1 < 4) {
+      setMessage("المربع أضيق من أن يُقسَّم (الحد 4 بكسل لكل نصف)");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      // 1) الأصل يصير النصف الأيسر (نصه يُمسح — النصف لم يعد الكلمة كاملة)
+      await persistSnippet(active.id, leftB, "");
+      // 2) النصف الأيمن قصاصة جديدة على الخادم
+      const res = await fetch(`${API}/api/snippets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...apiHeaders() },
+        body: JSON.stringify({
+          source_image: loadedPath,
+          bbox: rightB,
+          level: active.level ?? "word",
+          text: "",
+          ocr_text: active.ocrText ?? "",
+          confidence: 0, // مقسومة يدويًا — ثقة المحرك لم تعد صالحة (لا تُختلق)
+          language: "ar",
+          category: active.category ?? "general",
+        }),
+      });
+      const created = await res.json();
+      mutate((prev) => [
+        ...prev.map((s) =>
+          s.id === active.id
+            ? { ...s, bbox: leftB, text: "", status: "pending" as const }
+            : s,
+        ),
+        {
+          id: created.id,
+          bbox: { x1: created.bbox[0], y1: created.bbox[1], x2: created.bbox[2], y2: created.bbox[3] },
+          text: "",
+          ocrText: created.ocr_text ?? "",
+          confidence: 0,
+          status: (created.status ?? "pending") as Snippet["status"],
+          level: created.level ?? "word",
+          category: created.category ?? "general",
+        },
+      ]);
+      setSelectedId(created.id);
+      setMessage("قُسّمت القصاصة — حرّر نص كل نصف (في RTL ابدأ بالأيمن)");
+    } catch {
+      setMessage("فشل التقسيم على الخادم");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** أقرب جار في نفس السطر (تداخل رأسي ≥50%) — للدمج. */
+  function findMergeNeighbor(target: Snippet): Snippet | null {
+    let best: Snippet | null = null;
+    let bestGap = Infinity;
+    for (const s of snippets) {
+      if (s.id === target.id) continue;
+      const overlap =
+        Math.min(target.bbox.y2, s.bbox.y2) - Math.max(target.bbox.y1, s.bbox.y1);
+      const minH = Math.min(target.bbox.y2 - target.bbox.y1, s.bbox.y2 - s.bbox.y1);
+      if (minH <= 0 || overlap / minH < 0.5) continue;
+      const gap =
+        s.bbox.x1 > target.bbox.x2
+          ? s.bbox.x1 - target.bbox.x2
+          : target.bbox.x1 > s.bbox.x2
+            ? target.bbox.x1 - s.bbox.x2
+            : 0;
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = s;
+      }
+    }
+    return best;
+  }
+
+  /** دمج القصاصة المحددة مع أقرب جار في نفس السطر. */
+  async function mergeWithNeighbor() {
+    if (!active) return;
+    const neighbor = findMergeNeighbor(active);
+    if (!neighbor) {
+      setMessage("لا توجد قصاصة مجاورة في نفس السطر للدمج");
+      return;
+    }
+    const mergedB = mergeBBox([active.bbox, neighbor.bbox]);
+    // ترتيب قرائي RTL: الأيمن (x2 الأكبر) أولًا
+    const [first, second] =
+      active.bbox.x2 >= neighbor.bbox.x2 ? [active, neighbor] : [neighbor, active];
+    const mergedText = [first.text.trim(), second.text.trim()]
+      .filter(Boolean)
+      .join(" ");
+    setBusy(true);
+    setMessage("");
+    try {
+      await persistSnippet(active.id, mergedB, mergedText);
+      await fetch(`${API}/api/snippets/${neighbor.id}`, {
+        method: "DELETE", headers: apiHeaders(),
+      });
+      mutate((prev) =>
+        prev
+          .filter((s) => s.id !== neighbor.id)
+          .map((s) =>
+            s.id === active.id
+              ? { ...s, bbox: mergedB, text: mergedText, status: "pending" as const }
+              : s,
+          ),
+      );
+      setSelectedId(active.id);
+      setMessage(`دُمجت القصاصتان (${active.id} + ${neighbor.id}) — راجع النص المدمج`);
+    } catch {
+      setMessage("فشل الدمج على الخادم");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // اختصارات لوحة المفاتيح — e.code مستقل عن تخطيط اللوحة (عربي/إنجليزي)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (
+        ((e.ctrlKey || e.metaKey) && e.code === "KeyZ" && e.shiftKey) ||
+        ((e.ctrlKey || e.metaKey) && e.code === "KeyY")
+      ) {
+        e.preventDefault();
+        redo();
+      } else if (e.code === "KeyS" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        void splitSelected();
+      } else if (e.code === "KeyM" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        void mergeWithNeighbor();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, snippets, undo, redo]);
+
+  // ------------------------------------------------------------------
+  // مراجعة السطور قبل التصدير (المرحلة 3 — line_aggregator)
+  // ------------------------------------------------------------------
+
+  async function loadReviewLines() {
+    if (!loadedPath) {
+      setMessage("حمّل صورة أولًا");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(
+        `${API}/api/snippets/lines?source_image=${encodeURIComponent(loadedPath)}&approved_only=true`,
+        { headers: apiHeaders() },
+      );
+      const body = await res.json();
+      setReviewLines(body.lines ?? []);
+      setMessage(`معاينة السطور: ${body.count ?? 0} سطر / ${body.words ?? 0} كلمة`);
+    } catch {
+      setMessage("فشل جلب معاينة السطور");
     } finally {
       setBusy(false);
     }
@@ -161,6 +351,13 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm rounded-md"
         >
           تحميل القصاصات
+        </button>
+        <button
+          onClick={() => void loadReviewLines()}
+          disabled={busy || !loadedPath}
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm rounded-md"
+        >
+          مراجعة السطور
         </button>
         <button
           onClick={handleExport}
@@ -229,6 +426,42 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
                 }}
               />
 
+              {/* أدوات كلمة-كلمة: تقسيم / دمج / تراجع / إعادة */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  onClick={() => void splitSelected()}
+                  disabled={busy}
+                  title="قسّم المربع المحدد نصفين (S) — لعزل كلمة التصقت بأخرى"
+                  className="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-white text-sm rounded"
+                >
+                  تقسيم (S)
+                </button>
+                <button
+                  onClick={() => void mergeWithNeighbor()}
+                  disabled={busy}
+                  title="ادمج مع أقرب جار في نفس السطر (M) — لكلمة انشطرت مربعين"
+                  className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-40 text-white text-sm rounded"
+                >
+                  دمج (M)
+                </button>
+                <button
+                  onClick={undo}
+                  disabled={!canUndo || busy}
+                  title="تراجع محلي (Ctrl+Z) — عمليات الخادم تُعكس بدمج/تقسيم مقابل"
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm rounded"
+                >
+                  ↩ تراجع
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={!canRedo || busy}
+                  title="إعادة (Ctrl+Y)"
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm rounded"
+                >
+                  ↪ إعادة
+                </button>
+              </div>
+
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => handleApprove(active.id)}
@@ -247,6 +480,7 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
           ) : (
             <p className="text-slate-500 text-sm">
               انقر على أي مربع لتحريره، أو ارسم مربعًا جديدًا حول كلمة بسحب الفأرة على الصورة.
+              حدد مربعًا ثم S للتقسيم أو M للدمج — حتى تصبح كل قصاصة كلمة واحدة كاملة.
             </p>
           )}
 
@@ -256,6 +490,24 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
           </div>
         </div>
       </div>
+
+      {/* مراجعة السطور المجمعة RTL قبل التصدير */}
+      {reviewLines !== null && (
+        <LineReviewPanel
+          lines={reviewLines}
+          onExport={handleExport}
+          isExporting={busy}
+          previewStats={{
+            total_approved: approvedCount,
+            unique_images: 1,
+            avg_confidence:
+              reviewLines.length > 0
+                ? reviewLines.reduce((a, l) => a + l.avg_confidence, 0) / reviewLines.length
+                : 0,
+            with_text: reviewLines.filter((l) => l.text.trim()).length,
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -267,6 +519,16 @@ function apiHeaders(): Record<string, string> {
   const key = process.env.NEXT_PUBLIC_API_KEY;
   return key ? { "X-API-Key": key } : {};
 }
+
+/** شكل السطر القادم من /api/snippets/lines (line_aggregator). */
+type ReviewLine = {
+  line_index: number;
+  bbox: number[];
+  text: string;
+  words: Array<{ bbox: number[]; text: string; confidence: number; word_index: number }>;
+  avg_confidence: number;
+  direction: string;
+};
 
 /** Server bbox arrays [x1,y1,x2,y2] -> editor objects. */
 function normalizeSnippets(items: Array<Record<string, unknown>>): Snippet[] {

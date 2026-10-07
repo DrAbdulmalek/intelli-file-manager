@@ -887,6 +887,71 @@ def create_app() -> FastAPI:
             raise HTTPException(400, str(exc))
         return {"ok": True, "url": url}
 
+    @_app.get("/api/snippets/lines")
+    async def snippet_lines(
+        source_image: str = Query(..., description="مسار الصورة الأصلية"),
+        approved_only: bool = Query(False, description="المعتمدات فقط"),
+        _auth: str = Depends(_verify_api_key),
+    ):
+        """تجميع القصاصات في سطور بترتيب RTL الصحيح — معاينة قبل التصدير.
+
+        المرحلة 3 (محادثة DeepSeek): line_aggregator يرتب الكلمات داخل كل سطر
+        بحسب x2 تنازليًا (يمين ← يسار) لتفادي النص المقلوب.
+        """
+        from src.db.snippet_db import SnippetDB
+        from src.services.line_aggregator import LineAggregator
+        db = SnippetDB()
+        snippets = db.get_by_source(source_image)
+        if approved_only:
+            snippets = [s for s in snippets if s.status == "approved"]
+        rows = [
+            {
+                "id": s.id,
+                "bbox": list(s.bbox),
+                "text": s.text or s.ocr_text,
+                "confidence": s.confidence,
+                "source": "snippet-db",
+            }
+            for s in snippets
+        ]
+        lines = LineAggregator().aggregate(rows, reading_direction="rtl")
+        return {
+            "lines": [ln.to_dict() for ln in lines],
+            "count": len(lines),
+            "words": sum(ln.word_count for ln in lines),
+        }
+
+    @_app.post("/api/snippets/validate")
+    async def validate_snippets(
+        source_image: str = Query(..., description="مسار الصورة الأصلية"),
+        approved_only: bool = Query(True, description="المعتمدات فقط (افتراضي)"),
+        _auth: str = Depends(_verify_api_key),
+    ):
+        """بوابات الجودة قبل التصدير — bbox/نص/ثقة/أرقام/وحدات طبية.
+
+        المرحلة 3 (محادثة DeepSeek): dataset_validator يفحص أن الأرقام لم
+        تتغير بين ocr_text والنص المصحح (guardrails) ووحدات الجرعات الطبية.
+        """
+        from src.db.snippet_db import SnippetDB
+        from src.services.dataset_validator import DatasetValidator
+        db = SnippetDB()
+        snippets = db.get_by_source(source_image)
+        if approved_only:
+            snippets = [s for s in snippets if s.status == "approved"]
+        rows = [
+            {
+                "id": s.id,
+                "bbox": list(s.bbox),
+                "text": s.text,
+                "ocr_text": s.ocr_text,
+                "confidence": s.confidence,
+                "category": s.category,
+            }
+            for s in snippets
+        ]
+        result = DatasetValidator().validate_all(rows, source_image)
+        return result.to_dict()
+
     @_app.get("/api/glossary/suggest")
     async def glossary_suggest(
         text: str = Query(..., min_length=1, description="نص جزئي للبحث"),
