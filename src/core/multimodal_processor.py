@@ -26,12 +26,12 @@ class MultimodalProcessor:
         self._check_ocr()
 
     def _check_ocr(self):
-        """التحقق من تثبيت OCR"""
+        """توفر OCR — الخدمة المركزية (ocr-core) تتكفل بالمحركات والتراجع الرشيق."""
         try:
-            import pytesseract  # noqa: F401
+            from . import ocr_service  # noqa: F401
             self._ocr_available = True
-        except ImportError:
-            logger.info("Tesseract OCR غير مثبت")
+        except Exception:
+            self._ocr_available = False
 
     def process_image(self, filepath: str) -> dict:
         """تحليل صورة ووصف محتواها
@@ -52,16 +52,14 @@ class MultimodalProcessor:
             # فقط نُسجّل الخطأ لو لم نحصل على أي ميتاداتا
             result["error"] = basic["error"]
 
-        # OCR
+        # OCR — عبر الخدمة المركزية (ocr-core)؛ العقد القديم محفوظ
         if self._ocr_available:
-            try:
-                import pytesseract
-                text = pytesseract.image_to_string(filepath, lang="ara+eng")
-                result["extracted_text"] = text.strip()
-                result["ocr_success"] = True
-            except Exception as e:
-                result["ocr_success"] = False
-                result["ocr_error"] = str(e)
+            from .ocr_service import ocr_image
+            ocr_res = ocr_image(filepath)
+            for key in ("extracted_text", "ocr_success", "ocr_error",
+                        "ocr_engine", "ocr_confidence", "ocr_postprocess"):
+                if key in ocr_res:
+                    result[key] = ocr_res[key]
 
         # وصف AI
         try:
