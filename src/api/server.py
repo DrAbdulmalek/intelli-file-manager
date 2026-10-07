@@ -18,11 +18,13 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Security, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Security, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
@@ -143,6 +145,33 @@ class NerRequest(BaseModel):
     text: str = Field(..., min_length=1, description="النص الطبي")
     use_llm: bool = Field(False, description="استخدام LLM للتحسين")
 
+# --- Training snippets (قصاصات قابلة للتدريب) --------------------------
+
+class BBoxModel(BaseModel):
+    x1: int = Field(ge=0)
+    y1: int = Field(ge=0)
+    x2: int = Field(ge=0)
+    y2: int = Field(ge=0)
+
+class SnippetCreate(BaseModel):
+    source_image: str = Field(..., description="مسار الصورة الأصلية")
+    bbox: BBoxModel
+    level: str = Field("word", description="word | line | block | character")
+    text: str = Field("", description="النص الصحيح")
+    ocr_text: str = Field("", description="نص OCR الخام")
+    confidence: float = Field(0.0, ge=0.0, le=1.0, description="0.0 = غير معروفة")
+    language: str = Field("ar")
+    category: str = Field("general", description="medical | general | formula | table")
+
+class SnippetUpdate(BaseModel):
+    bbox: Optional[BBoxModel] = None
+    text: Optional[str] = None
+    category: Optional[str] = None
+
+class SnippetReview(BaseModel):
+    verified_by: str = Field("", description="من راجع القصاصة")
+    reason: str = Field("", description="سبب الرفض (للرفض فقط)")
+
 class OrganizeRequest(BaseModel):
     source_dir: str = Field(..., description="مجلد المصدر")
     target_dir: str = Field("", description="مجلد الهدف")
@@ -177,9 +206,39 @@ def create_app() -> FastAPI:
             "http://localhost:8420",
         ],
         allow_credentials=False,
-        allow_methods=["GET", "POST", "DELETE"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["X-API-Key", "Content-Type"],
     )
+
+    # -----------------------------------------------------------------
+    # Lightweight mode (وضع خفيف بلا LLM) — INTELLIFILE_LIGHTWEIGHT=1
+    # يمنع تهيئة محركات الـLLM/التضمين؛ البحث يعمل BM25 فقط والتصنيف
+    # بالقواعد. مفيد للأجهزة الضعيفة أو أول تشغيل قبل تنزيل Ollama.
+    # -----------------------------------------------------------------
+    lightweight = os.environ.get("INTELLIFILE_LIGHTWEIGHT", "").strip() in ("1", "true", "yes")
+
+    # -----------------------------------------------------------------
+    # Simple in-process rate limiting (slowapi-free, per-client sliding window)
+    # -----------------------------------------------------------------
+    _rate_buckets: dict[str, list[float]] = {}
+    _RATE_LIMIT = int(os.environ.get("INTELLIFILE_RATE_LIMIT", "120"))  # requests
+    _RATE_WINDOW = float(os.environ.get("INTELLIFILE_RATE_WINDOW", "60.0"))  # seconds
+
+    @ _app.middleware("http")
+    async def _rate_limit_middleware(request: Request, call_next):
+        if request.url.path.startswith("/api/"):
+            client = request.client.host if request.client else "unknown"
+            now = time.time()
+            bucket = _rate_buckets.setdefault(client, [])
+            # drop stale entries
+            bucket[:] = [t for t in bucket if now - t < _RATE_WINDOW]
+            if len(bucket) >= _RATE_LIMIT:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "تم تجاوز حد الطلبات — حاول لاحقًا (rate limit)"},
+                )
+            bucket.append(now)
+        return await call_next(request)
 
     # Lazy-loaded engines
     _engines: dict[str, Any] = {}
@@ -201,8 +260,11 @@ def create_app() -> FastAPI:
             _engines[name] = SmartTagger()
 
         elif name == "copilot":
-            from src.core.file_copilot import FileCopilot
-            _engines[name] = FileCopilot()
+            if lightweight:
+                _engines[name] = None  # وضع خفيف — بلا LLM
+            else:
+                from src.core.file_copilot import FileCopilot
+                _engines[name] = FileCopilot()
 
         elif name == "multimodal":
             from src.core.enhanced_multimodal import EnhancedMultimodalProcessor
@@ -217,8 +279,11 @@ def create_app() -> FastAPI:
             _engines[name] = FileHandler()
 
         elif name == "embeddings":
-            from src.ai.embeddings import EmbeddingEngine
-            _engines[name] = EmbeddingEngine(model_name="paraphrase-multilingual-MiniLM-L12-v2")
+            if lightweight:
+                _engines[name] = None  # وضع خفيف — بلا تضمينات دلالية
+            else:
+                from src.ai.embeddings import EmbeddingEngine
+                _engines[name] = EmbeddingEngine(model_name="paraphrase-multilingual-MiniLM-L12-v2")
 
         return _engines.get(name)
 
@@ -249,16 +314,27 @@ def create_app() -> FastAPI:
         except Exception:
             engines["embeddings"] = False
 
-        # Check Ollama (async)
-        try:
-            import httpx
-            async with httpx.AsyncClient() as client:
-                r = await client.get("http://localhost:11434/api/tags", timeout=3.0)
-                engines["ollama"] = r.status_code == 200
-        except Exception:
-            engines["ollama"] = False
+        # Check Ollama (async) — skipped entirely in lightweight mode
+        engines["ollama"] = False
+        if not lightweight:
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    r = await client.get("http://localhost:11434/api/tags", timeout=3.0)
+                    engines["ollama"] = r.status_code == 200
+            except Exception:
+                engines["ollama"] = False
+        engines["lightweight_mode"] = lightweight
 
         return HealthResponse(status="ok", version="2.1.0", engines=engines)
+
+    # -------------------------------------------------------------------
+    # Lightweight-mode flag is exposed via /api/health engines dict
+    # (checked by the web app to hide LLM-only features).
+    # -------------------------------------------------------------------
+    @_app.get("/api/health/mode")
+    async def health_mode():
+        return {"lightweight": lightweight}
 
     # -------------------------------------------------------------------
     # Embeddings (sentence-transformers)
@@ -678,6 +754,155 @@ def create_app() -> FastAPI:
             "categories": CATEGORIES,
             "version": "2.0.0",
         }
+
+    # -------------------------------------------------------------------
+    # File serving for the OCR snippet editor (sandboxed by _validate_path)
+    # -------------------------------------------------------------------
+
+    @_app.get("/api/file/serve")
+    async def file_serve(filepath: str = Query(..., description="مسار الصورة داخل المجلدات المسموحة")):
+        """يخدم صورة من المجلدات المسموحة لمحرر القصاصات (لا يخرج عن الـsandbox)."""
+        from fastapi.responses import FileResponse
+        try:
+            validated = _validate_path(filepath, must_exist=True)
+        except HTTPException:
+            raise
+        suffix = validated.suffix.lower()
+        media = {
+            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".webp": "image/webp", ".bmp": "image/bmp", ".gif": "image/gif",
+            ".tif": "image/tiff", ".tiff": "image/tiff",
+        }.get(suffix)
+        if media is None:
+            raise HTTPException(400, "الملف ليس صورة مدعومة")
+        return FileResponse(validated, media_type=media)
+
+    # -------------------------------------------------------------------
+    # Training snippets (قصاصات قابلة للتدريب) + المسارد الطبية
+    # -------------------------------------------------------------------
+
+    @_app.post("/api/snippets")
+    async def create_snippet(req: SnippetCreate, _auth: str = Depends(_verify_api_key)):
+        from src.db.snippet_db import SnippetDB, TrainingSnippet
+        if req.bbox.x2 <= req.bbox.x1 or req.bbox.y2 <= req.bbox.y1:
+            raise HTTPException(400, "bbox غير صالح — يتطلب x2 > x1 و y2 > y1")
+        db = SnippetDB()
+        snippet = TrainingSnippet(
+            source_image=req.source_image,
+            level=req.level,  # type: ignore[arg-type]
+            bbox=(req.bbox.x1, req.bbox.y1, req.bbox.x2, req.bbox.y2),
+            text=req.text, ocr_text=req.ocr_text,
+            confidence=req.confidence, language=req.language,
+            category=req.category,
+        )
+        snippet_id = db.insert(snippet)
+        return {"id": snippet_id, **db.to_dict(snippet) | {"id": snippet_id}}
+
+    @_app.get("/api/snippets")
+    async def list_snippets(
+        status: str = Query("", description="فلترة بالحالة: pending|approved|rejected"),
+        source_image: str = Query("", description="فلترة بالصورة المصدر"),
+        limit: int = Query(100, ge=1, le=1000),
+        _auth: str = Depends(_verify_api_key),
+    ):
+        from src.db.snippet_db import SnippetDB
+        db = SnippetDB()
+        if source_image:
+            snippets = db.get_by_source(source_image)
+        elif status:
+            snippets = db.list_by_status(status)  # type: ignore[arg-type]
+        else:
+            conn = db._connect()
+            rows = conn.execute("SELECT * FROM snippets ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            conn.close()
+            snippets = [db._row_to_snippet(r) for r in rows]
+        return {"items": [db.to_dict(s) for s in snippets[:limit]], "count": len(snippets)}
+
+    @_app.get("/api/snippets/stats")
+    async def snippet_stats(_auth: str = Depends(_verify_api_key)):
+        from src.db.snippet_db import SnippetDB
+        return SnippetDB().stats()
+
+    @_app.patch("/api/snippets/{snippet_id}")
+    async def update_snippet(snippet_id: int, req: SnippetUpdate, _auth: str = Depends(_verify_api_key)):
+        from src.db.snippet_db import SnippetDB
+        db = SnippetDB()
+        changed = False
+        if req.bbox is not None:
+            if req.bbox.x2 <= req.bbox.x1 or req.bbox.y2 <= req.bbox.y1:
+                raise HTTPException(400, "bbox غير صالح — يتطلب x2 > x1 و y2 > y1")
+            changed |= db.update_bbox(
+                snippet_id, (req.bbox.x1, req.bbox.y1, req.bbox.x2, req.bbox.y2)
+            )
+        if req.text is not None:
+            changed |= db.update_text(snippet_id, req.text)
+        if req.category is not None:
+            changed |= db.update_category(snippet_id, req.category)
+        if not changed:
+            raise HTTPException(404, "القصاصة غير موجودة أو لا توجد تغييرات")
+        updated = db.get(snippet_id)
+        return {"ok": True, "id": snippet_id, "snippet": db.to_dict(updated) if updated else None}
+
+    @_app.post("/api/snippets/{snippet_id}/approve")
+    async def approve_snippet(snippet_id: int, req: SnippetReview, _auth: str = Depends(_verify_api_key)):
+        from src.db.snippet_db import SnippetDB
+        if not SnippetDB().approve(snippet_id, req.verified_by):
+            raise HTTPException(404, "القصاصة غير موجودة")
+        return {"ok": True, "status": "approved"}
+
+    @_app.post("/api/snippets/{snippet_id}/reject")
+    async def reject_snippet(snippet_id: int, req: SnippetReview, _auth: str = Depends(_verify_api_key)):
+        from src.db.snippet_db import SnippetDB
+        if not SnippetDB().reject(snippet_id, req.reason):
+            raise HTTPException(404, "القصاصة غير موجودة")
+        return {"ok": True, "status": "rejected"}
+
+    @_app.delete("/api/snippets/{snippet_id}")
+    async def delete_snippet(snippet_id: int, _auth: str = Depends(_verify_api_key)):
+        from src.db.snippet_db import SnippetDB
+        if not SnippetDB().delete(snippet_id):
+            raise HTTPException(404, "القصاصة غير موجودة")
+        return {"ok": True, "deleted": snippet_id}
+
+    @_app.post("/api/snippets/export-hf")
+    async def export_snippets_hf(
+        include_unchanged: bool = Query(False),
+        _auth: str = Depends(_verify_api_key),
+    ):
+        """تصدير القصاصات المعتمدة محليًا JSONL — الرفع إلى HF خطوة منفصلة صريحة."""
+        from src.services.hf_exporter import HFExporter
+        from src.db.snippet_db import SnippetDB
+        exporter = HFExporter(SnippetDB())
+        out = exporter.export(include_unchanged=include_unchanged)
+        return {"ok": True, "export_path": str(out)}
+
+    @_app.post("/api/snippets/export-hf/push")
+    async def push_snippets_hf(token: str = Query(..., min_length=8), _auth: str = Depends(_verify_api_key)):
+        """رفع صريح إلى HuggingFace — يتطلب توكن في الطلب (لا يُخزَّن أبدًا)."""
+        from src.services.hf_exporter import HFExporter
+        from src.db.snippet_db import SnippetDB
+        try:
+            url = HFExporter(SnippetDB()).push_to_hf(token)
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(400, str(exc))
+        return {"ok": True, "url": url}
+
+    @_app.get("/api/glossary/suggest")
+    async def glossary_suggest(
+        text: str = Query(..., min_length=1, description="نص جزئي للبحث"),
+        limit: int = Query(8, ge=1, le=25),
+        _auth: str = Depends(_verify_api_key),
+    ):
+        """اقتراحات المسرد الطبي (عربي/إنجليزي) لمحرر OCR — دون اتصال."""
+        from src.core.glossary_service import get_glossary_service
+        suggestions = get_glossary_service().suggest(text, limit=limit)
+        return {"suggestions": suggestions, "count": len(suggestions)}
+
+    @_app.get("/api/glossary/info")
+    async def glossary_info(_auth: str = Depends(_verify_api_key)):
+        from src.core.glossary_service import get_glossary_service
+        svc = get_glossary_service()
+        return {"path": str(svc.path), "terms": svc.size}
 
     return _app
 
