@@ -5,7 +5,6 @@ import os
 
 from src.core.organization import (
     STATUS_BLOCKED_PREFLIGHT,
-    STATUS_PLANNED,
     STATUS_SKIPPED_EXCLUDED,
     build_organization_plan,
     classify_os_error,
@@ -25,7 +24,7 @@ def test_excluded_source_is_skipped_before_filesystem_checks(tmp_path):
 def test_missing_source_preserves_errno(tmp_path):
     item = preflight_item(tmp_path / "missing.txt", tmp_path / "out.txt")
     assert item.status == STATUS_BLOCKED_PREFLIGHT
-    assert item.error_category == "unknown_os_error"
+    assert item.error_category == "source_missing"
     assert item.errno == errno.ENOENT
 
 
