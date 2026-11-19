@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 from datetime import datetime
 from .config import Config
+from .path_policy import iter_files
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +85,7 @@ class FileAgent:
         duplicates = []
 
         dir_path = Path(directory)
-        for item in dir_path.rglob("*"):
-            if not item.is_file():
-                continue
+        for item in iter_files(dir_path):
             try:
                 h = compute_file_hash(str(item))
                 if h in hashes:
