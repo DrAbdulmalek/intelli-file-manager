@@ -73,12 +73,18 @@ def _access(path: Path, mode: int) -> bool:
         return os.access(path, mode)
 
 
+def _raise_walk_error(error: OSError) -> None:
+    raise error
+
+
 def _tree_summary(root: Path) -> tuple[int, int, bool]:
     """Return regular-file count, byte count, and whether any symlink exists."""
     count = 0
     total_bytes = 0
     has_symlink = False
-    for current, dirs, files in os.walk(root, topdown=True, followlinks=False):
+    for current, dirs, files in os.walk(
+        root, topdown=True, followlinks=False, onerror=_raise_walk_error
+    ):
         current_path = Path(current)
         kept_dirs = []
         for name in dirs:
@@ -93,7 +99,7 @@ def _tree_summary(root: Path) -> tuple[int, int, bool]:
             try:
                 info = child.lstat()
             except OSError:
-                continue
+                raise
             if stat.S_ISLNK(info.st_mode):
                 has_symlink = True
             elif stat.S_ISREG(info.st_mode):
