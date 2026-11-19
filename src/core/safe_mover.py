@@ -393,7 +393,7 @@ class SafeMover:
         # النقل الذرّي
         try:
             _atomic_move(src, final_dst)
-        except OSError as e:
+        except (OSError, SafeMoveError) as e:
             result.success = False
             result.error = f"فشل النقل: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -408,7 +408,7 @@ class SafeMover:
                 logger.error(f"فشل حساب checksum بعد النقل: {e} — محاولة rollback")
                 try:
                     _atomic_move(final_dst, src)
-                except OSError:
+                except (OSError, SafeMoveError):
                     logger.error(f"فشل rollback من {final_dst} إلى {src}")
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النقل: {e}"
@@ -446,7 +446,7 @@ class SafeMover:
                 result.sidecar_moved = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
-            except OSError as e:
+            except (OSError, SafeMoveError) as e:
                 # فشل نقل sidecar ليس فادحًا — السجل يحذّر فقط
                 logger.warning(f"فشل نقل sidecar من {src_sidecar} إلى {dst_sidecar}: {e}")
                 result.sidecar_moved = False
@@ -558,7 +558,7 @@ class SafeMover:
         # النسخ الذرّي
         try:
             _atomic_copy(src, final_dst)
-        except OSError as e:
+        except (OSError, SafeMoveError) as e:
             result.success = False
             result.error = f"فشل النسخ: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -608,7 +608,7 @@ class SafeMover:
                 result.sidecar_copied = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
-            except OSError as e:
+            except (OSError, SafeMoveError) as e:
                 logger.warning(f"فشل نسخ sidecar: {e}")
                 result.sidecar_copied = False
 
