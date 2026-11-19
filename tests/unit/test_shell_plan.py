@@ -83,3 +83,7 @@ def test_missing_source_stops_plan(tmp_path):
 def test_unsafe_plans_are_rejected(moves):
     with pytest.raises(PlanError):
         render_move_script(moves)
+
+def test_dot_source_cannot_move_into_its_own_child():
+    with pytest.raises(PlanError):
+        render_move_script([(".", "child")])
