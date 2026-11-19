@@ -395,6 +395,25 @@ class TestSafeMoverCollision:
         assert target.exists()
         assert not dst.exists()
 
+    def test_move_retains_source_when_staged_copy_fails_verification(
+        self, safe_mover: SafeMover, tmp_workspace: Path, monkeypatch
+    ):
+        """لا يُحذف المصدر إذا فشل التحقق من الملف المؤقت قبل النشر."""
+        import src.core.safe_mover as safe_mover_module
+
+        src = tmp_workspace / "src" / "file2.txt"
+        dst = tmp_workspace / "dst" / "corrupt.txt"
+
+        def corrupt_copy(_source, destination, **_kwargs):
+            Path(destination).write_bytes(b"corrupted staging data")
+
+        monkeypatch.setattr(safe_mover_module.shutil, "copy2", corrupt_copy)
+        result = safe_mover.move(src, dst)
+
+        assert not result.success
+        assert src.read_text(encoding="utf-8") == "محتوى ملف 2"
+        assert not dst.exists()
+
     def test_resolve_collision_no_conflict(self, tmp_workspace: Path):
         """_resolve_collision بدون تضارب"""
         src = tmp_workspace / "src" / "file1.txt"
