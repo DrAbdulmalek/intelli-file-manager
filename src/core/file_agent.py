@@ -109,12 +109,11 @@ class FileAgent:
         file_count = 0
         extensions = {}
 
-        for item in dir_path.rglob("*"):
-            if item.is_file():
-                file_count += 1
-                total_size += item.stat().st_size
-                ext = item.suffix.lower() or "بدون امتداد"
-                extensions[ext] = extensions.get(ext, 0) + 1
+        for item in iter_files(dir_path):
+            file_count += 1
+            total_size += item.stat().st_size
+            ext = item.suffix.lower() or "بدون امتداد"
+            extensions[ext] = extensions.get(ext, 0) + 1
 
         top_exts = sorted(extensions.items(), key=lambda x: x[1], reverse=True)[:10]
 
