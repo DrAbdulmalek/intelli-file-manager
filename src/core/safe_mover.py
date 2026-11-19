@@ -20,7 +20,6 @@ PR-07 من development-roadmap-v1.0 (IFM Phase A)
 """
 from __future__ import annotations
 
-import errno
 import hashlib
 import logging
 import os
@@ -332,10 +331,11 @@ class SafeMover:
             source_info = src.lstat()
         except OSError as e:
             result.success = False
-            result.error = f"الملف المصدر غير متاح: {e}"
+            result.error = f"الملف المصدر غير موجود أو غير متاح: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
-        if stat.S_ISLNK(source_info.st_mode) or not stat.S_ISREG(source_info.st_mode):
+        if (stat.S_ISLNK(source_info.st_mode)
+                or not stat.S_ISREG(source_info.st_mode)):
             result.success = False
             result.error = "يُسمح بنقل الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -359,8 +359,10 @@ class SafeMover:
             result.error = f"فشل حساب checksum للمصدر: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
-        source_identity = (source_info.st_dev, source_info.st_ino,
-                           source_info.st_size, source_info.st_mtime_ns)
+        source_identity = (
+            source_info.st_dev, source_info.st_ino,
+            source_info.st_size, source_info.st_mtime_ns,
+        )
 
         # ضمان وجود مجلد الوجهة
         try:
@@ -373,7 +375,8 @@ class SafeMover:
 
         # حل التضارب
         try:
-            if do_overwrite and os.path.lexists(str(dst)) and src.resolve() != dst.resolve():
+            if (do_overwrite and os.path.lexists(str(dst))
+                    and src.resolve() != dst.resolve()):
                 raise SafeMoveError(
                     "overwrite=True مرفوض: لا يدعم SafeMover الاستبدال التدميري؛ "
                     "الملف الموجود في الوجهة محفوظ دون تغيير"
@@ -398,12 +401,16 @@ class SafeMover:
             _atomic_copy(src, final_dst)
             destination_digest = compute_sha256(final_dst)
             source_info_now = src.lstat()
-            source_identity_now = (source_info_now.st_dev, source_info_now.st_ino,
-                                   source_info_now.st_size, source_info_now.st_mtime_ns)
+            source_identity_now = (
+                source_info_now.st_dev, source_info_now.st_ino,
+                source_info_now.st_size, source_info_now.st_mtime_ns,
+            )
             source_digest_now = compute_sha256(src)
-            if (destination_digest != source_digest
-                    or source_digest_now != source_digest
-                    or source_identity_now != source_identity):
+            if (
+                destination_digest != source_digest
+                or source_digest_now != source_digest
+                or source_identity_now != source_identity
+            ):
                 raise ChecksumMismatchError(
                     "تعذّر إثبات تطابق الوجهة مع المصدر؛ أُبقي المصدر دون حذف"
                 )
