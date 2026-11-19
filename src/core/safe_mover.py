@@ -337,7 +337,7 @@ class SafeMover:
         if (stat.S_ISLNK(source_info.st_mode)
                 or not stat.S_ISREG(source_info.st_mode)):
             result.success = False
-            result.error = "يُسمح بنقل الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
+            result.error = "يُسمح بنقل/نسخ الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
         try:
@@ -491,10 +491,11 @@ class SafeMover:
             source_info = src.lstat()
         except OSError as e:
             result.success = False
-            result.error = f"الملف المصدر غير متاح: {e}"
+            result.error = f"الملف المصدر غير موجود أو غير متاح: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
-        if stat.S_ISLNK(source_info.st_mode) or not stat.S_ISREG(source_info.st_mode):
+        if (stat.S_ISLNK(source_info.st_mode)
+                or not stat.S_ISREG(source_info.st_mode)):
             result.success = False
             result.error = "يُسمح بنقل الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -529,7 +530,8 @@ class SafeMover:
 
         # حل التضارب
         try:
-            if do_overwrite and os.path.lexists(str(dst)) and src.resolve() != dst.resolve():
+            if (do_overwrite and os.path.lexists(str(dst))
+                    and src.resolve() != dst.resolve()):
                 raise SafeMoveError(
                     "overwrite=True مرفوض: لا يدعم SafeMover الاستبدال التدميري؛ "
                     "الملف الموجود في الوجهة محفوظ دون تغيير"
