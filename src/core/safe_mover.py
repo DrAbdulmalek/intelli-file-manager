@@ -1,10 +1,10 @@
 """SafeMover — نقل ونسخ آمن ذرّي مع تحقّق checksum ومعالجة sidecar
 
 هذه الوحدة تنفّذ عمليات النقل/النسخ بأمان:
-  - نقل ذرّي: كتابة إلى ملف مؤقت ثم rename (POSIX atomic rename)
+  - نشر ذري دون استبدال: ملف مؤقت + تحقق SHA-256 + hard-link حصري
   - تحقّق SHA-256 قبل وبعد العملية (integrity verification)
   - معالجة sidecar: نقل/نسخ ملف .ifm_meta_<name>.json مع الملف الأصلي
-  - حل تضارب الأسماء: إضافة لاحقة _1, _2, ... تلقائيًا
+  - حل تضارب الأسماء: إضافة لاحقة _1, _2, ... مع فشل آمن عند سباق الاسم
   - تنظيف الملف المؤقت عند الفشل (rollback)
   - لا توجد إجراءات تدميرية: لا يحذف الملف المصدر عند الفشل
   - لا AI، لا medical — فقط عمليات ملفات آمنة
@@ -20,10 +20,13 @@ PR-07 من development-roadmap-v1.0 (IFM Phase A)
 """
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import logging
 import os
 import shutil
+import stat
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -144,6 +147,23 @@ def _sidecar_path(file_path: Union[str, Path]) -> Path:
     return p.parent / f".ifm_meta_{p.name}.json"
 
 
+def _path_has_symlink_component(path: Union[str, Path]) -> bool:
+    """Fail closed when any existing path component is a symlink or uninspectable."""
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        if stat.S_ISLNK(info.st_mode):
+            return True
+    return False
+
+
 def _resolve_collision(dst: Path, src: Path) -> tuple[Path, bool]:
     """يحل تضارب الأسماء بإضافة لاحقة _1, _2, ...
 
@@ -173,52 +193,121 @@ def _resolve_collision(dst: Path, src: Path) -> tuple[Path, bool]:
     )
 
 
-def _atomic_move(src: Path, dst: Path) -> None:
-    """نقل ذرّي: محاولة os.rename أولًا، fallback إلى copy+delete عبر الأجهزة
-
-    يعتمد على atomicity الخاص بـ rename على نفس نظام الملفات.
-    لو src و dst على أنظمة ملفات مختلفة، نستخدم tempfile + copy + delete.
-    """
+def _fsync_file(path: Path) -> None:
+    """Flush file contents to stable storage where the platform permits."""
+    fd = os.open(str(path), os.O_RDONLY)
     try:
-        os.rename(str(src), str(dst))
-    except OSError as e:
-        # EXDEV: cross-device link not permitted
-        if getattr(e, "errno", None) == 18:  # errno.EXDEV
-            # نسخ عبر الأجهزة ثم حذف المصدر
-            with tempfile.NamedTemporaryFile(
-                prefix=".ifm_tmp_",
-                dir=str(dst.parent),
-                delete=False,
-            ) as tmp:
-                tmp_path = Path(tmp.name)
-            try:
-                shutil.copy2(str(src), str(tmp_path))
-                os.rename(str(tmp_path), str(dst))
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-            src.unlink()
-        else:
-            raise
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _linux_renameat2_no_replace(temporary: Path, destination: Path) -> bool:
+    """Use Linux renameat2(RENAME_NOREPLACE); return False if unavailable.
+
+    The kernel/filesystem must implement RENAME_NOREPLACE. Unsupported cases
+    fall back to the hard-link publication path, which itself fails closed.
+    """
+    if not hasattr(os, "uname") or os.uname().sysname != "Linux":
+        return False
+    try:
+        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    except AttributeError:
+        return False
+
+    renameat2.argtypes = [
+        ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        -100, os.fsencode(temporary), -100, os.fsencode(destination), 1
+    )
+    if result == 0:
+        return True
+
+    error_number = ctypes.get_errno()
+    unsupported = {
+        errno.ENOSYS,
+        errno.EINVAL,
+        getattr(errno, "EOPNOTSUPP", errno.ENOSYS),
+        getattr(errno, "ENOTSUP", errno.ENOSYS),
+    }
+    if error_number in unsupported:
+        return False
+    if error_number == errno.EEXIST:
+        raise FileExistsError(error_number, os.strerror(error_number), str(destination))
+    raise OSError(error_number, os.strerror(error_number), str(destination))
+
+
+def _publish_no_replace(temporary: Path, destination: Path) -> None:
+    """Atomically publish without replacing an existing destination.
+
+    Prefer Linux renameat2(RENAME_NOREPLACE), which is supported by the Linux
+    exFAT driver. If unavailable/unsupported, use atomic hard-link creation.
+    Never fall back to ordinary rename/replace on POSIX.
+    """
+    if _linux_renameat2_no_replace(temporary, destination):
+        return
+    os.link(str(temporary), str(destination))
+    temporary.unlink()
 
 
 def _atomic_copy(src: Path, dst: Path) -> None:
-    """نسخ ذرّي: كتابة إلى ملف مؤقت في نفس مجلد الوجهة ثم rename"""
-    with tempfile.NamedTemporaryFile(
-        prefix=".ifm_tmp_",
-        dir=str(dst.parent),
-        delete=False,
-    ) as tmp:
-        tmp_path = Path(tmp.name)
+    """Copy, verify, fsync, then atomically publish without replacing a target."""
+    source_info = src.lstat()
+    if not stat.S_ISREG(source_info.st_mode):
+        raise SafeMoveError("المصدر ليس ملفًا عاديًا؛ تُرفض الروابط والأنواع الخاصة")
+
+    fd, temporary_name = tempfile.mkstemp(prefix=".ifm_tmp_", dir=str(dst.parent))
+    os.close(fd)
+    tmp_path = Path(temporary_name)
     try:
-        shutil.copy2(str(src), str(tmp_path))
-        os.rename(str(tmp_path), str(dst))
-    finally:
-        if tmp_path.exists() and tmp_path != dst:
+        source_digest_before = compute_sha256(src)
+        source_identity_before = (source_info.st_dev, source_info.st_ino,
+                                  source_info.st_size, source_info.st_mtime_ns)
+        shutil.copy2(str(src), str(tmp_path), follow_symlinks=False)
+        _fsync_file(tmp_path)
+
+        source_info_after = src.lstat()
+        source_identity_after = (source_info_after.st_dev, source_info_after.st_ino,
+                                 source_info_after.st_size, source_info_after.st_mtime_ns)
+        source_digest_after = compute_sha256(src)
+        temporary_digest = compute_sha256(tmp_path)
+        if (not source_digest_before
+                or source_digest_before != source_digest_after
+                or source_digest_before != temporary_digest
+                or source_identity_before != source_identity_after):
+            raise ChecksumMismatchError(
+                f"المصدر تغيّر أثناء النسخ أو لم تتطابق النسخة المؤقتة: {src}"
+            )
+
+        _publish_no_replace(tmp_path, dst)
+        # Directory fsync is best-effort: the destination is already published,
+        # so a platform-specific fsync failure must not misreport it as absent.
+        try:
+            dir_fd = os.open(str(dst.parent), os.O_RDONLY)
             try:
-                tmp_path.unlink()
-            except OSError:
-                pass
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError as exc:
+            logger.warning("تعذر fsync لمجلد الوجهة %s: %s", dst.parent, exc)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+def _atomic_move(src: Path, dst: Path) -> None:
+    """Verified copy-publish-delete; the source is deleted only after publish.
+
+    This works across filesystems without relying on EXDEV-specific magic.
+    If publication or verification fails, the source is retained. If source
+    deletion fails after publication, both copies remain and the error is
+    reported; data is never discarded to simulate a successful move.
+    """
+    _atomic_copy(src, dst)
+    src.unlink()
 
 
 # ─── SafeMover ──────────────────────────────────────────────────────────────
@@ -234,7 +323,7 @@ class SafeMover:
             print(f"فشل: {result.error}")
 
     الخصائص:
-      - ذرّي: استخدم rename عبر ملف مؤقت
+      - نشر حصري: لا يستبدل ملفًا موجودًا حتى عند سباق التزامن
       - مُتحقَّق: SHA-256 قبل وبعد
       - آمن: لا يحذف المصدر عند الفشل
       - يحترم sidecar: ينقل/ينسخ .ifm_meta_<name>.json تلقائيًا
@@ -243,7 +332,7 @@ class SafeMover:
     Options:
       - verify_checksum: افتراضيًا True، يتحقّق بعد العملية
       - move_sidecar: افتراضيًا True، ينقل/ينسخ sidecar إن وُجد
-      - overwrite: افتراضيًا False، يُضيف لاحقة عند التضارب
+      - overwrite: لا يسمح باستبدال تدميري؛ يحتفظ بالوجهة الموجودة
     """
 
     def __init__(
@@ -294,22 +383,49 @@ class SafeMover:
             final_path=str(dst),
         )
 
-        # التحقق من وجود المصدر
-        if not src.exists():
+        # Reject missing paths, symlinks, and non-regular files before reading.
+        try:
+            source_info = src.lstat()
+        except OSError as e:
             result.success = False
-            result.error = f"الملف المصدر غير موجود: {src}"
+            result.error = f"الملف المصدر غير موجود أو غير متاح: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
-
-        # حساب checksum قبل النقل
+        if (stat.S_ISLNK(source_info.st_mode)
+                or not stat.S_ISREG(source_info.st_mode)):
+            result.success = False
+            result.error = "يُسمح بنقل/نسخ الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        if (_path_has_symlink_component(src)
+                or _path_has_symlink_component(dst.parent)):
+            result.success = False
+            result.error = "رُفض المسار لاحتوائه على رابط رمزي أو مكوّن تعذّر فحصه"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
         try:
+            if src.resolve(strict=True) == dst.resolve(strict=False):
+                result.success = True
+                result.final_path = str(src)
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
+        except OSError:
+            pass
+
+        # Always compute an internal digest, even when result checksum reporting is disabled.
+        try:
+            source_digest = compute_sha256(src)
             if verify:
-                result.checksum_before = compute_sha256(src)
+                result.checksum_before = source_digest
         except OSError as e:
             result.success = False
             result.error = f"فشل حساب checksum للمصدر: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
+        source_identity = (
+            source_info.st_dev, source_info.st_ino,
+            source_info.st_size, source_info.st_mtime_ns,
+        )
 
         # ضمان وجود مجلد الوجهة
         try:
@@ -319,16 +435,26 @@ class SafeMover:
             result.error = f"فشل إنشاء مجلد الوجهة: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
+        if _path_has_symlink_component(dst.parent):
+            result.success = False
+            result.error = "رُفض مجلد الوجهة لاحتوائه على رابط رمزي أو مكوّن تعذّر فحصه"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        if _path_has_symlink_component(dst.parent):
+            result.success = False
+            result.error = "رُفض مجلد الوجهة لاحتوائه على رابط رمزي أو مكوّن تعذّر فحصه"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
 
         # حل التضارب
         try:
-            if do_overwrite:
-                # لو overwrite=True، نحذف الوجهة إن وُجدت
-                if dst.exists() and src.resolve() != dst.resolve():
-                    dst.unlink()
-                final_dst, renamed = dst, False
-            else:
-                final_dst, renamed = _resolve_collision(dst, src)
+            if (do_overwrite and os.path.lexists(str(dst))
+                    and src.resolve() != dst.resolve()):
+                raise SafeMoveError(
+                    "overwrite=True مرفوض: لا يدعم SafeMover الاستبدال التدميري؛ "
+                    "الملف الموجود في الوجهة محفوظ دون تغيير"
+                )
+            final_dst, renamed = _resolve_collision(dst, src)
         except SafeMoveError as e:
             result.success = False
             result.error = str(e)
@@ -343,63 +469,51 @@ class SafeMover:
         dst_sidecar = _sidecar_path(final_dst)
         sidecar_existed = src_sidecar.exists()
 
-        # النقل الذرّي
+        # Stage and verify the destination while retaining the source.
         try:
-            _atomic_move(src, final_dst)
-        except OSError as e:
+            _atomic_copy(src, final_dst)
+            destination_digest = compute_sha256(final_dst)
+            source_info_now = src.lstat()
+            source_identity_now = (
+                source_info_now.st_dev, source_info_now.st_ino,
+                source_info_now.st_size, source_info_now.st_mtime_ns,
+            )
+            source_digest_now = compute_sha256(src)
+            if (
+                destination_digest != source_digest
+                or source_digest_now != source_digest
+                or source_identity_now != source_identity
+            ):
+                raise ChecksumMismatchError(
+                    "تعذّر إثبات تطابق الوجهة مع المصدر؛ أُبقي المصدر دون حذف"
+                )
+            # Source deletion is the final commit step, after verified publication.
+            src.unlink()
+        except (OSError, SafeMoveError) as e:
             result.success = False
-            result.error = f"فشل النقل: {e}"
+            result.error = (
+                f"فشل إتمام النقل؛ قد تبقى نسخة في الوجهة، والمصدر لم يُحذف إلا "
+                f"بعد التحقق: {e}"
+            )
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
-        # تحقّق checksum بعد النقل
         if verify:
-            try:
-                result.checksum_after = compute_sha256(final_dst)
-            except OSError as e:
-                # فشل التحقق — إعادة الملف إلى موضعه
-                logger.error(f"فشل حساب checksum بعد النقل: {e} — محاولة rollback")
-                try:
-                    _atomic_move(final_dst, src)
-                except OSError:
-                    logger.error(f"فشل rollback من {final_dst} إلى {src}")
-                result.success = False
-                result.error = f"فشل حساب checksum بعد النقل: {e}"
-                result.duration_ms = (time.monotonic() - start) * 1000
-                return result
-
-            if result.checksum_before != result.checksum_after:
-                # عدم تطابق — rollback
-                logger.error(
-                    f"عدم تطابق checksum: قبل={result.checksum_before} "
-                    f"بعد={result.checksum_after} — rollback"
-                )
-                try:
-                    _atomic_move(final_dst, src)
-                except OSError:
-                    logger.error(f"فشل rollback من {final_dst} إلى {src}")
-                result.success = False
-                result.error = (
-                    f"عدم تطابق checksum بعد النقل "
-                    f"(قبل={result.checksum_before[:12]}..., "
-                    f"بعد={result.checksum_after[:12]}...)"
-                )
-                result.duration_ms = (time.monotonic() - start) * 1000
-                return result
+            result.checksum_after = destination_digest
 
         # نقل sidecar
         if do_sidecar and sidecar_existed:
             try:
-                if dst_sidecar.exists() and src_sidecar.resolve() != dst_sidecar.resolve():
-                    # دمج — ندمج الوسوم
-                    _merge_sidecar(dst_sidecar, src_sidecar)
-                    src_sidecar.unlink()
-                else:
-                    _atomic_move(src_sidecar, dst_sidecar)
+                if os.path.lexists(str(dst_sidecar)):
+                    # Never merge-and-delete metadata implicitly; preserve source sidecar.
+                    raise FileExistsError(
+                        f"sidecar destination already exists; source metadata retained: {dst_sidecar}"
+                    )
+                _atomic_move(src_sidecar, dst_sidecar)
                 result.sidecar_moved = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
-            except OSError as e:
+            except (OSError, SafeMoveError) as e:
                 # فشل نقل sidecar ليس فادحًا — السجل يحذّر فقط
                 logger.warning(f"فشل نقل sidecar من {src_sidecar} إلى {dst_sidecar}: {e}")
                 result.sidecar_moved = False
@@ -445,12 +559,34 @@ class SafeMover:
             final_path=str(dst),
         )
 
-        # التحقق من وجود المصدر
-        if not src.exists():
+        # Reject missing paths, symlinks, and non-regular files before reading.
+        try:
+            source_info = src.lstat()
+        except OSError as e:
             result.success = False
-            result.error = f"الملف المصدر غير موجود: {src}"
+            result.error = f"الملف المصدر غير موجود أو غير متاح: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
+        if (stat.S_ISLNK(source_info.st_mode)
+                or not stat.S_ISREG(source_info.st_mode)):
+            result.success = False
+            result.error = "يُسمح بنقل الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        if (_path_has_symlink_component(src)
+                or _path_has_symlink_component(dst.parent)):
+            result.success = False
+            result.error = "رُفض المسار لاحتوائه على رابط رمزي أو مكوّن تعذّر فحصه"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        try:
+            if src.resolve(strict=True) == dst.resolve(strict=False):
+                result.success = True
+                result.final_path = str(src)
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
+        except OSError:
+            pass
 
         # checksum قبل
         try:
@@ -473,12 +609,13 @@ class SafeMover:
 
         # حل التضارب
         try:
-            if do_overwrite:
-                if dst.exists() and src.resolve() != dst.resolve():
-                    dst.unlink()
-                final_dst, renamed = dst, False
-            else:
-                final_dst, renamed = _resolve_collision(dst, src)
+            if (do_overwrite and os.path.lexists(str(dst))
+                    and src.resolve() != dst.resolve()):
+                raise SafeMoveError(
+                    "overwrite=True مرفوض: لا يدعم SafeMover الاستبدال التدميري؛ "
+                    "الملف الموجود في الوجهة محفوظ دون تغيير"
+                )
+            final_dst, renamed = _resolve_collision(dst, src)
         except SafeMoveError as e:
             result.success = False
             result.error = str(e)
@@ -496,7 +633,7 @@ class SafeMover:
         # النسخ الذرّي
         try:
             _atomic_copy(src, final_dst)
-        except OSError as e:
+        except (OSError, SafeMoveError) as e:
             result.success = False
             result.error = f"فشل النسخ: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -508,12 +645,11 @@ class SafeMover:
                 result.checksum_after = compute_sha256(final_dst)
             except OSError as e:
                 logger.error(f"فشل حساب checksum بعد النسخ: {e} — حذف النسخة")
-                try:
-                    final_dst.unlink()
-                except OSError:
-                    pass
                 result.success = False
-                result.error = f"فشل حساب checksum بعد النسخ: {e}"
+                result.error = (
+                    f"فشل حساب checksum بعد النسخ؛ لم نحذف الوجهة لتجنب حذف ملف "
+                    f"قد يكون استبدله طرف آخر: {e}"
+                )
                 result.duration_ms = (time.monotonic() - start) * 1000
                 return result
 
@@ -522,13 +658,10 @@ class SafeMover:
                     f"عدم تطابق checksum بعد النسخ: قبل={result.checksum_before} "
                     f"بعد={result.checksum_after} — حذف النسخة"
                 )
-                try:
-                    final_dst.unlink()
-                except OSError:
-                    pass
                 result.success = False
                 result.error = (
-                    f"عدم تطابق checksum بعد النسخ "
+                    f"عدم تطابق checksum بعد النسخ؛ احتفظنا بالوجهة ولم نحذفها "
+                    f"لتجنب حذف ملف قد يكون استبدله طرف آخر "
                     f"(قبل={result.checksum_before[:12]}..., "
                     f"بعد={result.checksum_after[:12]}...)"
                 )
@@ -538,14 +671,15 @@ class SafeMover:
         # نسخ sidecar
         if do_sidecar and sidecar_existed:
             try:
-                if dst_sidecar.exists() and src_sidecar.resolve() != dst_sidecar.resolve():
-                    _merge_sidecar(dst_sidecar, src_sidecar)
-                else:
-                    _atomic_copy(src_sidecar, dst_sidecar)
+                if os.path.lexists(str(dst_sidecar)):
+                    raise FileExistsError(
+                        f"sidecar destination already exists; source metadata retained: {dst_sidecar}"
+                    )
+                _atomic_copy(src_sidecar, dst_sidecar)
                 result.sidecar_copied = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
-            except OSError as e:
+            except (OSError, SafeMoveError) as e:
                 logger.warning(f"فشل نسخ sidecar: {e}")
                 result.sidecar_copied = False
 
