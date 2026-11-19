@@ -20,10 +20,12 @@ PR-07 من development-roadmap-v1.0 (IFM Phase A)
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import logging
 import os
 import shutil
+import stat
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -173,52 +175,71 @@ def _resolve_collision(dst: Path, src: Path) -> tuple[Path, bool]:
     )
 
 
-def _atomic_move(src: Path, dst: Path) -> None:
-    """نقل ذرّي: محاولة os.rename أولًا، fallback إلى copy+delete عبر الأجهزة
-
-    يعتمد على atomicity الخاص بـ rename على نفس نظام الملفات.
-    لو src و dst على أنظمة ملفات مختلفة، نستخدم tempfile + copy + delete.
-    """
+def _fsync_file(path: Path) -> None:
+    """Flush file contents to stable storage where the platform permits."""
+    fd = os.open(str(path), os.O_RDONLY)
     try:
-        os.rename(str(src), str(dst))
-    except OSError as e:
-        # EXDEV: cross-device link not permitted
-        if getattr(e, "errno", None) == 18:  # errno.EXDEV
-            # نسخ عبر الأجهزة ثم حذف المصدر
-            with tempfile.NamedTemporaryFile(
-                prefix=".ifm_tmp_",
-                dir=str(dst.parent),
-                delete=False,
-            ) as tmp:
-                tmp_path = Path(tmp.name)
-            try:
-                shutil.copy2(str(src), str(tmp_path))
-                os.rename(str(tmp_path), str(dst))
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-            src.unlink()
-        else:
-            raise
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _publish_no_replace(temporary: Path, destination: Path) -> None:
+    """Atomically publish a same-filesystem temporary file without clobbering.
+
+    os.link is intentionally used as an atomic create-if-absent operation.
+    Unlike os.rename/os.replace, it fails with FileExistsError if another
+    process creates the destination after our earlier collision check.
+    Filesystems that do not support hard links fail closed; no unsafe fallback
+    to a replacing rename is attempted.
+    """
+    os.link(str(temporary), str(destination))
+    temporary.unlink()
 
 
 def _atomic_copy(src: Path, dst: Path) -> None:
-    """نسخ ذرّي: كتابة إلى ملف مؤقت في نفس مجلد الوجهة ثم rename"""
-    with tempfile.NamedTemporaryFile(
-        prefix=".ifm_tmp_",
-        dir=str(dst.parent),
-        delete=False,
-    ) as tmp:
-        tmp_path = Path(tmp.name)
+    """Copy, verify, fsync, then atomically publish without replacing a target."""
+    source_info = src.lstat()
+    if not stat.S_ISREG(source_info.st_mode):
+        raise SafeMoveError("المصدر ليس ملفًا عاديًا؛ تُرفض الروابط والأنواع الخاصة")
+
+    fd, temporary_name = tempfile.mkstemp(prefix=".ifm_tmp_", dir=str(dst.parent))
+    os.close(fd)
+    tmp_path = Path(temporary_name)
     try:
-        shutil.copy2(str(src), str(tmp_path))
-        os.rename(str(tmp_path), str(dst))
+        shutil.copy2(str(src), str(tmp_path), follow_symlinks=False)
+        _fsync_file(tmp_path)
+
+        source_digest = compute_sha256(src)
+        temporary_digest = compute_sha256(tmp_path)
+        if not source_digest or source_digest != temporary_digest:
+            raise ChecksumMismatchError(
+                f"فشل التحقق من النسخة المؤقتة قبل النشر: {src}"
+            )
+
+        _publish_no_replace(tmp_path, dst)
+        # Persist the directory entry when supported. A failure is surfaced:
+        # the published file remains intact and the caller receives the error.
+        dir_fd = os.open(str(dst.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     finally:
-        if tmp_path.exists() and tmp_path != dst:
-            try:
-                tmp_path.unlink()
-            except OSError:
-                pass
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+def _atomic_move(src: Path, dst: Path) -> None:
+    """Verified copy-publish-delete; the source is deleted only after publish.
+
+    This works across filesystems without relying on EXDEV-specific magic.
+    If publication or verification fails, the source is retained. If source
+    deletion fails after publication, both copies remain and the error is
+    reported; data is never discarded to simulate a successful move.
+    """
+    _atomic_copy(src, dst)
+    src.unlink()
 
 
 # ─── SafeMover ──────────────────────────────────────────────────────────────
@@ -294,12 +315,27 @@ class SafeMover:
             final_path=str(dst),
         )
 
-        # التحقق من وجود المصدر
-        if not src.exists():
+        # Reject missing paths, symlinks, and non-regular files before reading.
+        try:
+            source_info = src.lstat()
+        except OSError as e:
             result.success = False
-            result.error = f"الملف المصدر غير موجود: {src}"
+            result.error = f"الملف المصدر غير متاح: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
+        if stat.S_ISLNK(source_info.st_mode) or not stat.S_ISREG(source_info.st_mode):
+            result.success = False
+            result.error = "يُسمح بنقل الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        try:
+            if src.resolve(strict=True) == dst.resolve(strict=False):
+                result.success = True
+                result.final_path = str(src)
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
+        except OSError:
+            pass
 
         # حساب checksum قبل النقل
         try:
@@ -322,13 +358,12 @@ class SafeMover:
 
         # حل التضارب
         try:
-            if do_overwrite:
-                # لو overwrite=True، نحذف الوجهة إن وُجدت
-                if dst.exists() and src.resolve() != dst.resolve():
-                    dst.unlink()
-                final_dst, renamed = dst, False
-            else:
-                final_dst, renamed = _resolve_collision(dst, src)
+            if do_overwrite and os.path.lexists(str(dst)) and src.resolve() != dst.resolve():
+                raise SafeMoveError(
+                    "overwrite=True مرفوض: لا يدعم SafeMover الاستبدال التدميري؛ "
+                    "الملف الموجود في الوجهة محفوظ دون تغيير"
+                )
+            final_dst, renamed = _resolve_collision(dst, src)
         except SafeMoveError as e:
             result.success = False
             result.error = str(e)
@@ -390,12 +425,12 @@ class SafeMover:
         # نقل sidecar
         if do_sidecar and sidecar_existed:
             try:
-                if dst_sidecar.exists() and src_sidecar.resolve() != dst_sidecar.resolve():
-                    # دمج — ندمج الوسوم
-                    _merge_sidecar(dst_sidecar, src_sidecar)
-                    src_sidecar.unlink()
-                else:
-                    _atomic_move(src_sidecar, dst_sidecar)
+                if os.path.lexists(str(dst_sidecar)):
+                    # Never merge-and-delete metadata implicitly; preserve source sidecar.
+                    raise FileExistsError(
+                        f"sidecar destination already exists; source metadata retained: {dst_sidecar}"
+                    )
+                _atomic_move(src_sidecar, dst_sidecar)
                 result.sidecar_moved = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
@@ -445,12 +480,27 @@ class SafeMover:
             final_path=str(dst),
         )
 
-        # التحقق من وجود المصدر
-        if not src.exists():
+        # Reject missing paths, symlinks, and non-regular files before reading.
+        try:
+            source_info = src.lstat()
+        except OSError as e:
             result.success = False
-            result.error = f"الملف المصدر غير موجود: {src}"
+            result.error = f"الملف المصدر غير متاح: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
+        if stat.S_ISLNK(source_info.st_mode) or not stat.S_ISREG(source_info.st_mode):
+            result.success = False
+            result.error = "يُسمح بنقل الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        try:
+            if src.resolve(strict=True) == dst.resolve(strict=False):
+                result.success = True
+                result.final_path = str(src)
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
+        except OSError:
+            pass
 
         # checksum قبل
         try:
@@ -473,12 +523,12 @@ class SafeMover:
 
         # حل التضارب
         try:
-            if do_overwrite:
-                if dst.exists() and src.resolve() != dst.resolve():
-                    dst.unlink()
-                final_dst, renamed = dst, False
-            else:
-                final_dst, renamed = _resolve_collision(dst, src)
+            if do_overwrite and os.path.lexists(str(dst)) and src.resolve() != dst.resolve():
+                raise SafeMoveError(
+                    "overwrite=True مرفوض: لا يدعم SafeMover الاستبدال التدميري؛ "
+                    "الملف الموجود في الوجهة محفوظ دون تغيير"
+                )
+            final_dst, renamed = _resolve_collision(dst, src)
         except SafeMoveError as e:
             result.success = False
             result.error = str(e)
@@ -538,10 +588,11 @@ class SafeMover:
         # نسخ sidecar
         if do_sidecar and sidecar_existed:
             try:
-                if dst_sidecar.exists() and src_sidecar.resolve() != dst_sidecar.resolve():
-                    _merge_sidecar(dst_sidecar, src_sidecar)
-                else:
-                    _atomic_copy(src_sidecar, dst_sidecar)
+                if os.path.lexists(str(dst_sidecar)):
+                    raise FileExistsError(
+                        f"sidecar destination already exists; source metadata retained: {dst_sidecar}"
+                    )
+                _atomic_copy(src_sidecar, dst_sidecar)
                 result.sidecar_copied = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
