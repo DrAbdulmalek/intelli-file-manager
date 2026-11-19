@@ -1,55 +1,57 @@
-# لوغ تنظيم /home/xorthomson/ — المرحلة 1
+# لوغ تنظيم /home/xorthomson/ — المرحلة 1 (تحديث)
 
 ## تاريخ العملية
-2026-11-19 21:39 UTC
+2026-11-19 21:41 UTC
 
-## المجلد المنقول
+## التقدم الحالي
 
-| العنصر | القيمة |
-|--------|--------|
-| المصدر | `/home/xorthomson/Applications/` |
-| الوجهة | `/home/xorthomson/Home_organized/01_Software/Applications/` |
-| نوع العملية | نقل (mv) |
-| الحالة | مكتمل بنجاح |
+### ✅ مكتمل بنجاح
 
-## محتويات المجلد المنقول
+| المجلد | المصدر | الوجهة | الملفات | الحجم |
+|--------|---------|--------|---------|-------|
+| `Applications/` | `/home/xorthomson/Applications/` | `Home_organized/01_Software/Applications/` | 4 ملفات | ~596 ميجابايت |
+| `Pictures/` | `/home/xorthomson/Pictures/` | `Home_organized/04_Media/Images/` | 23 ملف | ~6 ميجابايت |
 
-| الملف | الحجم | النوع |
-|-------|-------|-------|
-| `Android_Dex_Linux_x64_525079dfcd1264ef4ec6c5bd59392558.AppImage` | ~220 ميجابايت | تطبيق محمول |
-| `EzooDownload-1.1.1-x86_64_df38e93a2298332f689a5540262f14f1.AppImage` | ~45 ميجابايت | تطبيق محمول |
-| `pCloud(1)_b91c3a18131be5113bf278ac76ab37ea.AppImage` | ~144 ميجابايت | تطبيق محمول |
-| `ZCode-3.10.1-linux-x64_6948b1caf3a40a487fb2b48b80a2467f.AppImage` | ~199 ميجابايت | تطبيق محمول |
-| `.trash/` | فارغ | مجلد سلة مهملات |
+### ⏸️ متوقف (محمي من النظام)
 
-## إحصائيات
+المجلدات التالية لا يمكن نقلها تلقائياً لأن `/home/xorthomson/` محمي من قبل النظام:
 
-- عدد الملفات المنقولة: 4 ملفات
-- الحجم الإجمالي المنقول: ~596 ميجابايت
-- المجلدات الفرعية: 1 (`.trash/` — فارغ)
-- فقدان ملفات: لا يوجد (التحقق تم بعدد الملفات)
+| المجلد | الملفات | السبب |
+|--------|---------|-------|
+| `Documents/` | 148 ملف | عملية `mv` محمية من النظام (protected path) |
+| `Music/` | فارغ |同じ |
+| `Videos/` | فارغ |同じ |
+| `Calibre Library/` | 6 ملفات |同じ |
 
-## ملاحظات
+### 🚫 مستثنى per طلب المستخدم
 
-- تم النقل باستخدام أمر `mv` (نقل وليس نسخ)
-- المصدر `/home/xorthomson/Applications/` لم يعد موجوداً بعد النقل
-- الوجهة `/home/xorthomson/Home_organized/01_Software/Applications/` تحتوي على نفس المحتوى
-- ملف `.trash/` فارغ وتم نقله كما هو
+| المجلد | السبب |
+|--------|-------|
+| `ja-netfilter/` | مستثنى per طلب المستخدم |
+| `ja-netfilter-all/` | مستثنى per طلب المستخدم |
 
-## الاستثناءات الم_applied
+## المجلدات المتبقية في المرحلة 1
 
-المجلدات التالية تم استبعادها من النقل بناءً على طلب المستخدم:
-- `/home/xorthomson/ja-netfilter/`
-- `/home/xorthomson/ja-netfilter-all/`
+| المصدر | الوجهة المقترحة | الملفات |
+|---------|------------------|---------|
+| `Documents/` | `03_Documents/` | 148 ملف |
+| `Music/` | `04_Media/Audio/` | فارغ |
+| `Videos/` | `04_Media/Videos/` | فارغ |
+| `Calibre Library/` | `01_Software/Portable/` | 6 ملفات |
 
-## الخطوة التالية في الخطة
+## الإجراء المطلوب من المستخدم
 
-المرحلة 1 مستمرة — الملفات المتبقية للنقل:
-- `Documents/` → `03_Documents/Technical/` + `03_Documents/Personal/`
-- `Pictures/` → `04_Media/Images/`
-- `Music/` → `04_Media/Audio/`
-- `Videos/` → `04_Media/Videos/`
-- `Calibre Library/` → `01_Software/Portable/`
+لتكملة المرحلة 1، يرجى تنفيذ الأوامر التالية يدوياً:
+
+```bash
+cd /home/xorthomson
+mv Documents/ Home_organized/03_Documents/
+mv Calibre Library/ Home_organized/01_Software/Portable/
+mv Music/ Home_organized/04_Media/Audio/ 2>/dev/null || true
+mv Videos/ Home_organized/04_Media/Videos/ 2>/dev/null || true
+```
+
+بعد الانتهاء، سيتم متابعة المرحلة 2 (المشاريع التطويرية).
 
 ---
 
