@@ -330,10 +330,10 @@ class TestSafeMoverCollision:
         # المصدر لا يزال موجودًا
         assert src.exists()
 
-    def test_move_overwrite_true_replaces_destination(
+    def test_move_overwrite_true_preserves_existing_destination(
         self, tmp_workspace: Path
     ):
-        """نقل مع overwrite=True يستبدل الوجهة"""
+        """overwrite=True لا يحذف الوجهة الموجودة؛ يحتفظ بالمصدر والوجهة."""
         mover = SafeMover(overwrite=True)
         src = tmp_workspace / "src" / "file1.txt"
         dst = tmp_workspace / "dst" / "file1.txt"
@@ -341,14 +341,14 @@ class TestSafeMoverCollision:
 
         result = mover.move(src, dst)
 
-        assert result.success
-        assert not result.renamed_due_to_collision
-        assert dst.read_text(encoding="utf-8") == "محتوى ملف 1"
+        assert not result.success
+        assert src.read_text(encoding="utf-8") == "محتوى ملف 1"
+        assert dst.read_text(encoding="utf-8") == "old content"
 
-    def test_copy_overwrite_true_replaces_destination(
+    def test_copy_overwrite_true_preserves_existing_destination(
         self, tmp_workspace: Path
     ):
-        """نسخ مع overwrite=True يستبدل الوجهة"""
+        """overwrite=True لا يستبدل الوجهة الموجودة."""
         mover = SafeMover(overwrite=True)
         src = tmp_workspace / "src" / "file1.txt"
         dst = tmp_workspace / "dst" / "file1.txt"
@@ -356,10 +356,44 @@ class TestSafeMoverCollision:
 
         result = mover.copy(src, dst)
 
-        assert result.success
-        assert dst.read_text(encoding="utf-8") == "محتوى ملف 1"
-        # المصدر لا يزال موجودًا
-        assert src.exists()
+        assert not result.success
+        assert dst.read_text(encoding="utf-8") == "old content"
+        assert src.read_text(encoding="utf-8") == "محتوى ملف 1"
+
+    def test_move_retains_source_when_atomic_publish_loses_race(
+        self, safe_mover: SafeMover, tmp_workspace: Path, monkeypatch
+    ):
+        """إذا سبق منافس عملية النشر، يفشل النقل ويبقى المصدر دون حذف."""
+        import src.core.safe_mover as safe_mover_module
+
+        src = tmp_workspace / "src" / "file2.txt"
+        dst = tmp_workspace / "dst" / "raced.txt"
+
+        def simulated_race(_temporary, _destination):
+            raise FileExistsError("destination appeared during publish")
+
+        monkeypatch.setattr(safe_mover_module, "_publish_no_replace", simulated_race)
+        result = safe_mover.move(src, dst)
+
+        assert not result.success
+        assert src.read_text(encoding="utf-8") == "محتوى ملف 2"
+        assert not dst.exists()
+
+    def test_move_rejects_symlink_source_without_touching_target(
+        self, safe_mover: SafeMover, tmp_workspace: Path
+    ):
+        """يرفض الرابط الرمزي بدل نقل الملف الذي يشير إليه."""
+        target = tmp_workspace / "src" / "file2.txt"
+        link = tmp_workspace / "src" / "link.txt"
+        link.symlink_to(target)
+        dst = tmp_workspace / "dst" / "link.txt"
+
+        result = safe_mover.move(link, dst)
+
+        assert not result.success
+        assert link.is_symlink()
+        assert target.exists()
+        assert not dst.exists()
 
     def test_resolve_collision_no_conflict(self, tmp_workspace: Path):
         """_resolve_collision بدون تضارب"""
