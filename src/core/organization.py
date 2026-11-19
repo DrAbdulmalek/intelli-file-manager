@@ -195,7 +195,7 @@ def preflight_item(
         except OSError as exc:
             item.status = STATUS_BLOCKED_PREFLIGHT
             item.reason = "Source cannot be inspected."
-            item.error_category = classify_os_error(exc)
+            item.error_category = "source_missing" if exc.errno == errno.ENOENT else classify_os_error(exc)
             item.errno = exc.errno
             return item
 
