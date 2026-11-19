@@ -20,6 +20,8 @@ PR-07 من development-roadmap-v1.0 (IFM Phase A)
 """
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import logging
 import os
@@ -200,15 +202,53 @@ def _fsync_file(path: Path) -> None:
         os.close(fd)
 
 
-def _publish_no_replace(temporary: Path, destination: Path) -> None:
-    """Atomically publish a same-filesystem temporary file without clobbering.
+def _linux_renameat2_no_replace(temporary: Path, destination: Path) -> bool:
+    """Use Linux renameat2(RENAME_NOREPLACE); return False if unavailable.
 
-    os.link is intentionally used as an atomic create-if-absent operation.
-    Unlike os.rename/os.replace, it fails with FileExistsError if another
-    process creates the destination after our earlier collision check.
-    Filesystems that do not support hard links fail closed; no unsafe fallback
-    to a replacing rename is attempted.
+    The kernel/filesystem must implement RENAME_NOREPLACE. Unsupported cases
+    fall back to the hard-link publication path, which itself fails closed.
     """
+    if not hasattr(os, "uname") or os.uname().sysname != "Linux":
+        return False
+    try:
+        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    except AttributeError:
+        return False
+
+    renameat2.argtypes = [
+        ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        -100, os.fsencode(temporary), -100, os.fsencode(destination), 1
+    )
+    if result == 0:
+        return True
+
+    error_number = ctypes.get_errno()
+    unsupported = {
+        errno.ENOSYS,
+        errno.EINVAL,
+        getattr(errno, "EOPNOTSUPP", errno.ENOSYS),
+        getattr(errno, "ENOTSUP", errno.ENOSYS),
+    }
+    if error_number in unsupported:
+        return False
+    if error_number == errno.EEXIST:
+        raise FileExistsError(error_number, os.strerror(error_number), str(destination))
+    raise OSError(error_number, os.strerror(error_number), str(destination))
+
+
+def _publish_no_replace(temporary: Path, destination: Path) -> None:
+    """Atomically publish without replacing an existing destination.
+
+    Prefer Linux renameat2(RENAME_NOREPLACE), which is supported by the Linux
+    exFAT driver. If unavailable/unsupported, use atomic hard-link creation.
+    Never fall back to ordinary rename/replace on POSIX.
+    """
+    if _linux_renameat2_no_replace(temporary, destination):
+        return
     os.link(str(temporary), str(destination))
     temporary.unlink()
 
