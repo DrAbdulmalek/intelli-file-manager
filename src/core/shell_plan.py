@@ -34,8 +34,11 @@ def render_move_script(
         src, dst = _clean(item[0], "المصدر"), _clean(item[1], "الهدف")
         if src == dst:
             raise PlanError(f"المصدر والهدف متطابقان: {src}")
-        if dst.startswith(src.rstrip("/") + "/"):
-            raise PlanError(f"الهدف داخل المصدر نفسه: {dst}")
+        try:
+            if posixpath.commonpath((src, dst)) == src:
+                raise PlanError(f"الهدف داخل المصدر نفسه: {dst}")
+        except ValueError:
+            pass
         if dst in seen_dst:
             raise PlanError(f"تصادم أهداف: {seen_dst[dst]} و{src} → {dst}")
         seen_dst[dst] = src
