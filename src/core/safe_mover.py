@@ -349,15 +349,18 @@ class SafeMover:
         except OSError:
             pass
 
-        # حساب checksum قبل النقل
+        # Always compute an internal digest, even when result checksum reporting is disabled.
         try:
+            source_digest = compute_sha256(src)
             if verify:
-                result.checksum_before = compute_sha256(src)
+                result.checksum_before = source_digest
         except OSError as e:
             result.success = False
             result.error = f"فشل حساب checksum للمصدر: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
+        source_identity = (source_info.st_dev, source_info.st_ino,
+                           source_info.st_size, source_info.st_mtime_ns)
 
         # ضمان وجود مجلد الوجهة
         try:
@@ -390,49 +393,33 @@ class SafeMover:
         dst_sidecar = _sidecar_path(final_dst)
         sidecar_existed = src_sidecar.exists()
 
-        # النقل الذرّي
+        # Stage and verify the destination while retaining the source.
         try:
-            _atomic_move(src, final_dst)
+            _atomic_copy(src, final_dst)
+            destination_digest = compute_sha256(final_dst)
+            source_info_now = src.lstat()
+            source_identity_now = (source_info_now.st_dev, source_info_now.st_ino,
+                                   source_info_now.st_size, source_info_now.st_mtime_ns)
+            source_digest_now = compute_sha256(src)
+            if (destination_digest != source_digest
+                    or source_digest_now != source_digest
+                    or source_identity_now != source_identity):
+                raise ChecksumMismatchError(
+                    "تعذّر إثبات تطابق الوجهة مع المصدر؛ أُبقي المصدر دون حذف"
+                )
+            # Source deletion is the final commit step, after verified publication.
+            src.unlink()
         except (OSError, SafeMoveError) as e:
             result.success = False
-            result.error = f"فشل النقل: {e}"
+            result.error = (
+                f"فشل إتمام النقل؛ قد تبقى نسخة في الوجهة، والمصدر لم يُحذف إلا "
+                f"بعد التحقق: {e}"
+            )
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
-        # تحقّق checksum بعد النقل
         if verify:
-            try:
-                result.checksum_after = compute_sha256(final_dst)
-            except OSError as e:
-                # فشل التحقق — إعادة الملف إلى موضعه
-                logger.error(f"فشل حساب checksum بعد النقل: {e} — محاولة rollback")
-                try:
-                    _atomic_move(final_dst, src)
-                except (OSError, SafeMoveError):
-                    logger.error(f"فشل rollback من {final_dst} إلى {src}")
-                result.success = False
-                result.error = f"فشل حساب checksum بعد النقل: {e}"
-                result.duration_ms = (time.monotonic() - start) * 1000
-                return result
-
-            if result.checksum_before != result.checksum_after:
-                # عدم تطابق — rollback
-                logger.error(
-                    f"عدم تطابق checksum: قبل={result.checksum_before} "
-                    f"بعد={result.checksum_after} — rollback"
-                )
-                try:
-                    _atomic_move(final_dst, src)
-                except OSError:
-                    logger.error(f"فشل rollback من {final_dst} إلى {src}")
-                result.success = False
-                result.error = (
-                    f"عدم تطابق checksum بعد النقل "
-                    f"(قبل={result.checksum_before[:12]}..., "
-                    f"بعد={result.checksum_after[:12]}...)"
-                )
-                result.duration_ms = (time.monotonic() - start) * 1000
-                return result
+            result.checksum_after = destination_digest
 
         # نقل sidecar
         if do_sidecar and sidecar_existed:
@@ -570,12 +557,11 @@ class SafeMover:
                 result.checksum_after = compute_sha256(final_dst)
             except OSError as e:
                 logger.error(f"فشل حساب checksum بعد النسخ: {e} — حذف النسخة")
-                try:
-                    final_dst.unlink()
-                except OSError:
-                    pass
                 result.success = False
-                result.error = f"فشل حساب checksum بعد النسخ: {e}"
+                result.error = (
+                    f"فشل حساب checksum بعد النسخ؛ لم نحذف الوجهة لتجنب حذف ملف "
+                    f"قد يكون استبدله طرف آخر: {e}"
+                )
                 result.duration_ms = (time.monotonic() - start) * 1000
                 return result
 
@@ -584,13 +570,10 @@ class SafeMover:
                     f"عدم تطابق checksum بعد النسخ: قبل={result.checksum_before} "
                     f"بعد={result.checksum_after} — حذف النسخة"
                 )
-                try:
-                    final_dst.unlink()
-                except OSError:
-                    pass
                 result.success = False
                 result.error = (
-                    f"عدم تطابق checksum بعد النسخ "
+                    f"عدم تطابق checksum بعد النسخ؛ احتفظنا بالوجهة ولم نحذفها "
+                    f"لتجنب حذف ملف قد يكون استبدله طرف آخر. 
                     f"(قبل={result.checksum_before[:12]}..., "
                     f"بعد={result.checksum_after[:12]}...)"
                 )
