@@ -1,0 +1,57 @@
+# لوغ تنظيم /home/xorthomson/ — المرحلة 1
+
+## تاريخ العملية
+2026-11-19 21:39 UTC
+
+## المجلد المنقول
+
+| العنصر | القيمة |
+|--------|--------|
+| المصدر | `/home/xorthomson/Applications/` |
+| الوجهة | `/home/xorthomson/Home_organized/01_Software/Applications/` |
+| نوع العملية | نقل (mv) |
+| الحالة | مكتمل بنجاح |
+
+## محتويات المجلد المنقول
+
+| الملف | الحجم | النوع |
+|-------|-------|-------|
+| `Android_Dex_Linux_x64_525079dfcd1264ef4ec6c5bd59392558.AppImage` | ~220 ميجابايت | تطبيق محمول |
+| `EzooDownload-1.1.1-x86_64_df38e93a2298332f689a5540262f14f1.AppImage` | ~45 ميجابايت | تطبيق محمول |
+| `pCloud(1)_b91c3a18131be5113bf278ac76ab37ea.AppImage` | ~144 ميجابايت | تطبيق محمول |
+| `ZCode-3.10.1-linux-x64_6948b1caf3a40a487fb2b48b80a2467f.AppImage` | ~199 ميجابايت | تطبيق محمول |
+| `.trash/` | فارغ | مجلد سلة مهملات |
+
+## إحصائيات
+
+- عدد الملفات المنقولة: 4 ملفات
+- الحجم الإجمالي المنقول: ~596 ميجابايت
+- المجلدات الفرعية: 1 (`.trash/` — فارغ)
+- فقدان ملفات: لا يوجد (التحقق تم بعدد الملفات)
+
+## ملاحظات
+
+- تم النقل باستخدام أمر `mv` (نقل وليس نسخ)
+- المصدر `/home/xorthomson/Applications/` لم يعد موجوداً بعد النقل
+- الوجهة `/home/xorthomson/Home_organized/01_Software/Applications/` تحتوي على نفس المحتوى
+- ملف `.trash/` فارغ وتم نقله كما هو
+
+## الاستثناءات الم_applied
+
+المجلدات التالية تم استبعادها من النقل بناءً على طلب المستخدم:
+- `/home/xorthomson/ja-netfilter/`
+- `/home/xorthomson/ja-netfilter-all/`
+
+## الخطوة التالية في الخطة
+
+المرحلة 1 مستمرة — الملفات المتبقية للنقل:
+- `Documents/` → `03_Documents/Technical/` + `03_Documents/Personal/`
+- `Pictures/` → `04_Media/Images/`
+- `Music/` → `04_Media/Audio/`
+- `Videos/` → `04_Media/Videos/`
+- `Calibre Library/` → `01_Software/Portable/`
+
+---
+
+مُنشأ بواسطة: AlphaCode  
+المشروع: intelli-file-manager (DrAbdulmalek/intelli-file-manager)
