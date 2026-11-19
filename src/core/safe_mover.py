@@ -145,6 +145,23 @@ def _sidecar_path(file_path: Union[str, Path]) -> Path:
     return p.parent / f".ifm_meta_{p.name}.json"
 
 
+def _path_has_symlink_component(path: Union[str, Path]) -> bool:
+    """Fail closed when any existing path component is a symlink or uninspectable."""
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        if stat.S_ISLNK(info.st_mode):
+            return True
+    return False
+
+
 def _resolve_collision(dst: Path, src: Path) -> tuple[Path, bool]:
     """يحل تضارب الأسماء بإضافة لاحقة _1, _2, ...
 
@@ -340,6 +357,12 @@ class SafeMover:
             result.error = "يُسمح بنقل/نسخ الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
+        if (_path_has_symlink_component(src)
+                or _path_has_symlink_component(dst.parent)):
+            result.success = False
+            result.error = "رُفض المسار لاحتوائه على رابط رمزي أو مكوّن تعذّر فحصه"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
         try:
             if src.resolve(strict=True) == dst.resolve(strict=False):
                 result.success = True
@@ -370,6 +393,16 @@ class SafeMover:
         except OSError as e:
             result.success = False
             result.error = f"فشل إنشاء مجلد الوجهة: {e}"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        if _path_has_symlink_component(dst.parent):
+            result.success = False
+            result.error = "رُفض مجلد الوجهة لاحتوائه على رابط رمزي أو مكوّن تعذّر فحصه"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        if _path_has_symlink_component(dst.parent):
+            result.success = False
+            result.error = "رُفض مجلد الوجهة لاحتوائه على رابط رمزي أو مكوّن تعذّر فحصه"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
@@ -498,6 +531,12 @@ class SafeMover:
                 or not stat.S_ISREG(source_info.st_mode)):
             result.success = False
             result.error = "يُسمح بنقل الملفات العادية فقط؛ الروابط والأنواع الخاصة مرفوضة"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+        if (_path_has_symlink_component(src)
+                or _path_has_symlink_component(dst.parent)):
+            result.success = False
+            result.error = "رُفض المسار لاحتوائه على رابط رمزي أو مكوّن تعذّر فحصه"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
         try:
