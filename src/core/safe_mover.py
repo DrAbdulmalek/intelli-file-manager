@@ -573,7 +573,7 @@ class SafeMover:
                 result.success = False
                 result.error = (
                     f"عدم تطابق checksum بعد النسخ؛ احتفظنا بالوجهة ولم نحذفها "
-                    f"لتجنب حذف ملف قد يكون استبدله طرف آخر. 
+                    f"لتجنب حذف ملف قد يكون استبدله طرف آخر "
                     f"(قبل={result.checksum_before[:12]}..., "
                     f"بعد={result.checksum_after[:12]}...)"
                 )
