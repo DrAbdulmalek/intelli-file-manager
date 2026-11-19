@@ -17,6 +17,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .path_policy import iter_files
+
 logger = logging.getLogger(__name__)
 
 # Arabic text normalizer for better BM25 matching
@@ -226,9 +228,7 @@ class HybridSearchEngine:
         texts_for_bm25: list[str] = []
         doc_ids_for_bm25: list[str] = []
 
-        for item in dir_path.rglob("*"):
-            if not item.is_file() or item.name.startswith("."):
-                continue
+        for item in iter_files(dir_path):
             if extensions and item.suffix.lower() not in extensions:
                 continue
             try:
