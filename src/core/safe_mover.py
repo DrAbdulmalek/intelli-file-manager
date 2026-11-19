@@ -1,10 +1,10 @@
 """SafeMover — نقل ونسخ آمن ذرّي مع تحقّق checksum ومعالجة sidecar
 
 هذه الوحدة تنفّذ عمليات النقل/النسخ بأمان:
-  - نقل ذرّي: كتابة إلى ملف مؤقت ثم rename (POSIX atomic rename)
+  - نشر ذري دون استبدال: ملف مؤقت + تحقق SHA-256 + hard-link حصري
   - تحقّق SHA-256 قبل وبعد العملية (integrity verification)
   - معالجة sidecar: نقل/نسخ ملف .ifm_meta_<name>.json مع الملف الأصلي
-  - حل تضارب الأسماء: إضافة لاحقة _1, _2, ... تلقائيًا
+  - حل تضارب الأسماء: إضافة لاحقة _1, _2, ... مع فشل آمن عند سباق الاسم
   - تنظيف الملف المؤقت عند الفشل (rollback)
   - لا توجد إجراءات تدميرية: لا يحذف الملف المصدر عند الفشل
   - لا AI، لا medical — فقط عمليات ملفات آمنة
@@ -207,24 +207,36 @@ def _atomic_copy(src: Path, dst: Path) -> None:
     os.close(fd)
     tmp_path = Path(temporary_name)
     try:
+        source_digest_before = compute_sha256(src)
+        source_identity_before = (source_info.st_dev, source_info.st_ino,
+                                  source_info.st_size, source_info.st_mtime_ns)
         shutil.copy2(str(src), str(tmp_path), follow_symlinks=False)
         _fsync_file(tmp_path)
 
-        source_digest = compute_sha256(src)
+        source_info_after = src.lstat()
+        source_identity_after = (source_info_after.st_dev, source_info_after.st_ino,
+                                 source_info_after.st_size, source_info_after.st_mtime_ns)
+        source_digest_after = compute_sha256(src)
         temporary_digest = compute_sha256(tmp_path)
-        if not source_digest or source_digest != temporary_digest:
+        if (not source_digest_before
+                or source_digest_before != source_digest_after
+                or source_digest_before != temporary_digest
+                or source_identity_before != source_identity_after):
             raise ChecksumMismatchError(
-                f"فشل التحقق من النسخة المؤقتة قبل النشر: {src}"
+                f"المصدر تغيّر أثناء النسخ أو لم تتطابق النسخة المؤقتة: {src}"
             )
 
         _publish_no_replace(tmp_path, dst)
-        # Persist the directory entry when supported. A failure is surfaced:
-        # the published file remains intact and the caller receives the error.
-        dir_fd = os.open(str(dst.parent), os.O_RDONLY)
+        # Directory fsync is best-effort: the destination is already published,
+        # so a platform-specific fsync failure must not misreport it as absent.
         try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+            dir_fd = os.open(str(dst.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError as exc:
+            logger.warning("تعذر fsync لمجلد الوجهة %s: %s", dst.parent, exc)
     finally:
         if tmp_path.exists():
             tmp_path.unlink()
@@ -255,7 +267,7 @@ class SafeMover:
             print(f"فشل: {result.error}")
 
     الخصائص:
-      - ذرّي: استخدم rename عبر ملف مؤقت
+      - نشر حصري: لا يستبدل ملفًا موجودًا حتى عند سباق التزامن
       - مُتحقَّق: SHA-256 قبل وبعد
       - آمن: لا يحذف المصدر عند الفشل
       - يحترم sidecar: ينقل/ينسخ .ifm_meta_<name>.json تلقائيًا
@@ -264,7 +276,7 @@ class SafeMover:
     Options:
       - verify_checksum: افتراضيًا True، يتحقّق بعد العملية
       - move_sidecar: افتراضيًا True، ينقل/ينسخ sidecar إن وُجد
-      - overwrite: افتراضيًا False، يُضيف لاحقة عند التضارب
+      - overwrite: لا يسمح باستبدال تدميري؛ يحتفظ بالوجهة الموجودة
     """
 
     def __init__(
