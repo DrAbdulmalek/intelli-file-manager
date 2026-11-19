@@ -76,6 +76,23 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
+### 2026-11-20 - GPT-6 (independent implementation; branch only)
+- Created branch `fix/unified-path-policy-shell-plan-2026-11-20`; no changes to `main`.
+- Added shared `src/core/path_policy.py` and migrated classifier, file agent,
+  file handler, hybrid/semantic search, smart tagger, and emergent category
+  traversal to it. The policy prunes hidden/excluded directories and rejects
+  symlinked files and directories.
+- Fixed emergent-category statistics lookup (`extensions` vs
+  `extension_distribution`) so categories can be generated from collected data.
+- Added `src/core/shell_plan.py`; it quotes paths, rejects invalid/nested plans,
+  refuses pre-existing destinations (including symlinks), and detects a move
+  skipped by `mv -nT` after execution.
+- Added focused unit tests for path traversal, symlink exclusion, category
+  generation, move quoting, collisions, and unsafe plans.
+- Validation status: tests have **not** been executed in this environment;
+  GitHub Actions results are pending after PR creation. No claim of passing
+  tests or CI is made. Manual code review remains required before merge.
+
 ### 2026-07-22 - Mistral (Vibe)
 
 | Time (UTC) | Action | Repository | Status |
