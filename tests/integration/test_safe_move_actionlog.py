@@ -379,6 +379,35 @@ class TestSafeMoverCollision:
         assert src.read_text(encoding="utf-8") == "محتوى ملف 2"
         assert not dst.exists()
 
+    def test_publish_prefers_linux_renameat2_when_supported(
+        self, tmp_workspace: Path, monkeypatch
+    ):
+        """يستخدم مسار renameat2 المحاكى قبل اللجوء إلى hard-link."""
+        import src.core.safe_mover as safe_mover_module
+
+        temporary = tmp_workspace / "dst" / ".staged"
+        destination = tmp_workspace / "dst" / "published.txt"
+        temporary.write_text("payload")
+        calls = []
+
+        def simulated_renameat2(source, target):
+            calls.append((source, target))
+            os.rename(source, target)
+            return True
+
+        def forbidden_link(*_args, **_kwargs):
+            raise AssertionError("hard-link fallback should not run")
+
+        monkeypatch.setattr(
+            safe_mover_module, "_linux_renameat2_no_replace", simulated_renameat2
+        )
+        monkeypatch.setattr(safe_mover_module.os, "link", forbidden_link)
+        safe_mover_module._publish_no_replace(temporary, destination)
+
+        assert calls == [(temporary, destination)]
+        assert destination.read_text() == "payload"
+        assert not temporary.exists()
+
     def test_move_rejects_symlink_source_without_touching_target(
         self, safe_mover: SafeMover, tmp_workspace: Path
     ):
