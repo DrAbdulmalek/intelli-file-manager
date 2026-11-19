@@ -84,11 +84,13 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
   symlinked files and directories.
 - Fixed emergent-category statistics lookup (`extensions` vs
   `extension_distribution`) so categories can be generated from collected data.
-- Added `src/core/shell_plan.py`; it quotes paths, rejects invalid/nested plans,
-  refuses pre-existing destinations (including symlinks), and detects a move
-  skipped by `mv -nT` after execution.
-- Added focused unit tests for path traversal, symlink exclusion, category
-  generation, move quoting, collisions, and unsafe plans.
+- Added focused unit tests for path traversal, symlink exclusion, and
+  emergent-category generation.
+- **Deferred shell-script generation**: the repository's active SafeMover /
+  read-only preflight design (PRs #54 and #56) must remain the sole route for
+  file operations. A standalone `mv` script could bypass checksum verification,
+  transaction safeguards, and the file-only execution boundary. Revisit only
+  as a reviewed SafeMover integration; no shell executor is included here.
 - Validation status: tests have **not** been executed in this environment;
   GitHub Actions results are pending after PR creation. No claim of passing
   tests or CI is made. Manual code review remains required before merge.
