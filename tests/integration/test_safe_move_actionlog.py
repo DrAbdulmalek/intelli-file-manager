@@ -395,6 +395,38 @@ class TestSafeMoverCollision:
         assert target.exists()
         assert not dst.exists()
 
+    def test_move_rejects_symlinked_source_parent(self, safe_mover: SafeMover,
+                                                  tmp_workspace: Path):
+        """يرفض مسار المصدر إذا كان أحد مكوناته الأب رابطًا رمزيًا."""
+        real_dir = tmp_workspace / "real-source"
+        real_dir.mkdir()
+        source = real_dir / "data.txt"
+        source.write_text("keep")
+        linked_dir = tmp_workspace / "linked-source"
+        linked_dir.symlink_to(real_dir, target_is_directory=True)
+        destination = tmp_workspace / "dst" / "data.txt"
+
+        result = safe_mover.move(linked_dir / "data.txt", destination)
+
+        assert not result.success
+        assert source.read_text() == "keep"
+        assert not destination.exists()
+
+    def test_copy_rejects_symlinked_destination_parent(self, safe_mover: SafeMover,
+                                                       tmp_workspace: Path):
+        """يرفض مجلد الوجهة إذا كان رابطًا رمزيًا إلى مجلد آخر."""
+        real_dir = tmp_workspace / "real-destination"
+        real_dir.mkdir()
+        linked_dir = tmp_workspace / "linked-destination"
+        linked_dir.symlink_to(real_dir, target_is_directory=True)
+        source = tmp_workspace / "src" / "file2.txt"
+
+        result = safe_mover.copy(source, linked_dir / "copied.txt")
+
+        assert not result.success
+        assert source.exists()
+        assert not (real_dir / "copied.txt").exists()
+
     def test_move_retains_source_when_staged_copy_fails_verification(
         self, safe_mover: SafeMover, tmp_workspace: Path, monkeypatch
     ):
