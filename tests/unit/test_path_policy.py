@@ -65,3 +65,37 @@ def test_relative_parts_ignores_hidden_ancestor_of_root(tmp_path):
     root = tmp_path / ".hidden-parent" / "root"
     assert relative_parts(root, root / "a" / "b.txt") == ("a", "b.txt")
     assert is_hidden_relative(root, root / ".private" / "b.txt")
+
+
+def test_excluded_directories_remain_excluded_when_hidden_files_are_enabled(tmp_path):
+    touch(tmp_path / ".git" / "HEAD")
+    touch(tmp_path / ".custom-hidden" / "visible-if-not-pruned.txt")
+    found = {p.relative_to(tmp_path).as_posix() for p in iter_files(tmp_path, skip_hidden=False)}
+    assert found == {".custom-hidden/visible-if-not-pruned.txt"}
+
+
+def test_file_agent_duplicate_scan_does_not_enter_hidden_trees(tmp_path):
+    from src.core.file_agent import FileAgent
+
+    touch(tmp_path / "visible.txt", "same-content")
+    touch(tmp_path / ".git" / "objects" / "hidden-copy.txt", "same-content")
+    assert FileAgent().detect_duplicates(str(tmp_path)) == []
+
+
+def test_file_handler_scan_does_not_enter_hidden_trees(tmp_path):
+    from src.core.file_handler import FileHandler
+
+    touch(tmp_path / "visible.txt")
+    touch(tmp_path / ".ssh" / "id_rsa.txt")
+    touch(tmp_path / "nested" / "nested-visible.txt")
+    found = {item["name"] for item in FileHandler().scan_directory(str(tmp_path))}
+    assert found == {"visible.txt", "nested-visible.txt"}
+
+
+def test_file_handler_can_scan_root_under_hidden_ancestor(tmp_path):
+    from src.core.file_handler import FileHandler
+
+    root = tmp_path / ".alphacode" / "scratch"
+    touch(root / "visible.txt")
+    found = {item["name"] for item in FileHandler().scan_directory(str(root))}
+    assert found == {"visible.txt"}
