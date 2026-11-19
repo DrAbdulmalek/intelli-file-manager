@@ -2,7 +2,7 @@
 
 **Status:** Proposal for implementation  
 **Scope:** Desktop-first local file organization  
-**Evidence source:** Sanitized operational notes committed on 2026-11-19 in `LOGS/home_organization_stage1.log`  
+**Evidence source:** Manually authored operational notes committed on 2026-11-19 in `LOGS/home_organization_stage1.log` (the source file contains an absolute home path and is not sanitized)  
 **Non-goal:** This document does not authorize moving any user's files or changing protected operating-system locations.
 
 ## 1. What the operational log tells us
@@ -102,8 +102,8 @@ Add tests before implementation is considered complete:
 
 ## 6. Implementation boundary
 
-This proposal is intentionally documentation-only. It does not change `SafeMover`, `RuleEngine`, the filesystem watcher, or existing operation semantics. Implementation should be a separate focused PR after the current mover's rollback, collision, symlink, and cross-device behavior has been independently reviewed.
+This proposal is intentionally documentation-only. It does not change `SafeMover`, `RuleEngine`, the filesystem watcher, or existing operation semantics. A first read-only preflight implementation and focused tests are proposed separately in PR #54. That implementation deliberately blocks all execution until the current mover's rollback, collision, symlink, and cross-device behavior has been independently reviewed.
 
 ## 7. Evidence and limitations
 
-The source log reports successful moves for two folders, blocked attempts for several others, and two user-requested exclusions. It does not include command output, errno values, filesystem metadata, checksums, or a complete before/after manifest. Therefore this proposal converts the observed workflow into testable product requirements without claiming that IntelliFile itself caused or resolved the operating-system restriction.
+The source log reports successful moves for two folders, blocked attempts for several others, and two user-requested exclusions. It also contains an absolute home path; redact that path in any shareable copy. The log's claims are treated as reported observations, not independently verified filesystem facts. It does not include command output, errno values, filesystem metadata, checksums, or a complete before/after manifest. Therefore this proposal converts the observed workflow into testable product requirements without claiming that IntelliFile itself caused or resolved the operating-system restriction.
