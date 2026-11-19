@@ -17,6 +17,8 @@ A real organization session recorded these outcomes:
 
 This is useful workflow evidence, not an IntelliFile runtime/crash log. It does **not** prove whether the block came from permissions, a sandbox, a desktop portal, filesystem policy, or another OS mechanism. IntelliFile must report the observed error rather than guessing its cause.
 
+The log's suggested shell commands are not safe to reuse verbatim: `Calibre Library/` is unquoted despite containing a space, and `2>/dev/null || true` suppresses errors for the empty media-folder moves. The application must use filesystem APIs, preserve each error, and report per-item outcomes instead of copying these commands.
+
 ## 2. Product improvements justified by this evidence
 
 ### P0 — Preflight every planned operation
