@@ -76,6 +76,24 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
+### 2026-11-20 - GPT-6 (review of uploaded IntelliFile patch; regression-only follow-up)
+- Reviewed the uploaded `intellifile-path-policy.patch` against current `main`.
+- Confirmed the shared path policy, traversal migrations, emergent-category
+  statistics-key fix, and baseline regression tests are already present in
+  `main`; did not reapply or overwrite those implementations.
+- Added focused regression coverage for the local AlphaCode/file-agent use
+  cases: duplicate detection must not enter hidden trees; FileHandler must
+  ignore hidden subtrees while still scanning a selected root beneath a
+  hidden ancestor; excluded directories remain excluded when hidden files are
+  explicitly included.
+- Deliberately did **not** add the proposed `shell_plan.py`: a generated
+  `mv -nT` script is still a separate filesystem executor, bypasses SafeMover's
+  checksum/transaction boundary, and has unresolved symlink/path-race and
+  command-semantics concerns. Keep all actual file operations behind the
+  reviewed SafeMover path; no shell execution was added.
+- Validation: changes are committed to a review branch only. No local pytest
+  execution is claimed; GitHub Actions must validate the PR before merge.
+
 ### 2026-11-20 - GPT-6 (independent implementation; branch only)
 - Created branch `fix/unified-path-policy-shell-plan-2026-11-20`; no changes to `main`.
 - Added shared `src/core/path_policy.py` and migrated classifier, file agent,
