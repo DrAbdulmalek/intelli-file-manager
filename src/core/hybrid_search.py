@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .path_policy import iter_files
+from .sensitive_barrier import is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +314,11 @@ class HybridSearchEngine:
     def _extract_text(self, filepath: str) -> str:
         """Extract text content from a file for indexing."""
         path = Path(filepath)
+        # حاجز الحساسية (عقد PR #63 — ثابت غير قابل للتجاوز): ملفات المرضى
+        # والبيانات الطبية لا تُقرأ ولا تُفهرس إطلاقاً — لا محتوى يدخل الفهرس
+        if is_sensitive_path(path):
+            logger.warning(f"محظور: ملف حساس مستثنى من الفهرسة الهجينة: {filepath}")
+            return ""
         ext = path.suffix.lower()
         try:
             if ext in (".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml",
