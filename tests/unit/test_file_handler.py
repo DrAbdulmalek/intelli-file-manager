@@ -394,3 +394,27 @@ class TestMoveFileWithConflict:
         dest = Path(result["dest"])
         assert dest.exists()
         assert dest.parent.name == "مستندات"
+
+
+
+def test_scan_directory_does_not_enter_hidden_subtrees(tmp_path):
+    """لا يدخل المسح شجرة مخفية حتى لو كانت أسماء الملفات داخلها ظاهرة."""
+    visible = tmp_path / "visible.txt"
+    visible.write_text("visible")
+    hidden = tmp_path / ".ssh" / "id_rsa.txt"
+    hidden.parent.mkdir()
+    hidden.write_text("must not be scanned")
+
+    found = {item["path"] for item in FileHandler().scan_directory(str(tmp_path))}
+    assert found == {str(visible)}
+
+
+def test_scan_directory_allows_explicit_hidden_root(tmp_path):
+    """اختيار المستخدم لجذر مخفي صراحةً لا يعني تجاهل محتوياته."""
+    root = tmp_path / ".alphacode" / "scratch"
+    root.mkdir(parents=True)
+    visible = root / "visible.txt"
+    visible.write_text("selected root")
+
+    found = {item["path"] for item in FileHandler().scan_directory(str(root))}
+    assert found == {str(visible)}

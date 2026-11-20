@@ -22,10 +22,12 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import errno
 import hashlib
 import logging
 import os
 import shutil
+import stat
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -140,6 +142,39 @@ class OverwriteForbiddenError(SafeMoveError):
     """محاولة الكتابة فوق ملف موجود — محظور وفق تعليمات المستخدم"""
 
 
+def _reject_symlink_components(path: Union[str, Path]) -> None:
+    """يرفض أي مكوّن symlink في المسار، ويفشل مغلقاً عند تعذر فحصه."""
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            # ما دام أحد الآباء غير موجود فلا يمكن أن توجد مكونات لاحقة تحته.
+            break
+        except OSError as exc:
+            raise SafeMoveError(f"تعذر فحص مكوّن المسار {current}: {exc}") from exc
+        if stat.S_ISLNK(info.st_mode):
+            raise SafeMoveError(f"المسار يحتوي رابطاً رمزياً محظوراً: {current}")
+        if current != absolute and not stat.S_ISDIR(info.st_mode):
+            raise SafeMoveError(f"مكوّن وسيط ليس مجلداً: {current}")
+
+
+def _validate_safe_file_paths(src: Path, dst: Path) -> None:
+    """يتحقق من مساري المصدر والوجهة قبل أي قراءة أو إنشاء أو نشر."""
+    _reject_symlink_components(src)
+    _reject_symlink_components(dst)
+    try:
+        source_info = src.lstat()
+    except FileNotFoundError:
+        return  # تتولى الواجهة إرجاع SourceNotFoundError بصورة موحدة.
+    except OSError as exc:
+        raise SafeMoveError(f"تعذر فحص المصدر {src}: {exc}") from exc
+    if not stat.S_ISREG(source_info.st_mode):
+        raise SafeMoveError(f"المصدر ليس ملفاً عادياً: {src}")
+
+
 # ─── دوال مساعدة ───────────────────────────────────────────────────────────
 
 def compute_sha256(file_path: Union[str, Path], *, chunk_size: int = _CHECKSUM_CHUNK_SIZE) -> str:
@@ -215,6 +250,7 @@ def _atomic_move(src: Path, dst: Path) -> None:
 
     لا يتبع الروابط الرمزية، لا يعبر نقاط التركيب، لا يُعدّل صلاحيات.
     """
+    _validate_safe_file_paths(src, dst)
     src_str = str(src)
     dst_str = str(dst)
 
@@ -244,14 +280,14 @@ def _atomic_move(src: Path, dst: Path) -> None:
             )
             if ret == 0:
                 return
-            errno = ctypes.get_errno()
-            if errno == 17:  # EEXIST — الوجهة موجودة
+            link_errno = ctypes.get_errno()
+            if link_errno == 17:  # EEXIST — الوجهة موجودة
                 raise FileExistsError(
                     f"الوجهة موجودة بالفعل (RENAME_NOREPLACE): {dst}"
                 )
-            if errno == 18:  # EXDEV — أنظمة ملفات مختلفة
-                raise OSError(errno, "cross-device link not permitted", dst_str)
-            raise OSError(errno, os.strerror(errno), dst_str)
+            if link_errno == 18:  # EXDEV — أنظمة ملفات مختلفة
+                raise OSError(link_errno, "cross-device link not permitted", dst_str)
+            raise OSError(link_errno, os.strerror(link_errno), dst_str)
         except (FileExistsError, OSError):
             # Fallback إلى os.link + unlink للأنظمة التي لا تدعم renameat2
             pass
@@ -284,12 +320,13 @@ def _atomic_move(src: Path, dst: Path) -> None:
                         f"الوجهة موجودة (سباق ما بعد الفحص — رفض بلا استبدال): {dst}"
                     )
                 except OSError as link_err:
-                    # أنظمة ملفات بلا hardlink: تراجع إلى os.replace (نافذة
-                    # سباق نظرية ضيقة — موثقة بدل فشل كامل على FUSE/شبكة)
-                    logger.warning(
-                        f"os.link غير مدعوم ({link_err}) — fallback إلى os.replace: {dst}"
-                    )
-                    os.replace(str(tmp_path), str(dst))
+                    # لا fallback إلى os.replace مطلقاً: قد يستبدل شاغلاً ظهر
+                    # بعد الفحص. عند غياب hard-link نغلق العملية بأمان.
+                    raise OSError(
+                        getattr(link_err, "errno", errno.EOPNOTSUPP),
+                        f"تعذر النشر الذري دون استبدال؛ رُفض fallback غير الآمن: {link_err}",
+                        str(dst),
+                    ) from link_err
                 if _linked:
                     try:
                         tmp_path.unlink()
@@ -333,6 +370,7 @@ def _atomic_copy(src: Path, dst: Path) -> None:
 
     يرفض الكتابة فوق أي موجود — لو الوجهة موجودة يُرفع FileExistsError.
     """
+    _validate_safe_file_paths(src, dst)
     # رفض إذا كانت الوجهة مجلداً — الخطأ الصريح خارج try (عيب جولة DeepSeek 7:
     # IsADirectoryError صنف فرعي من OSError وكان يُبتلع بـexcept OSError: pass)
     try:
@@ -366,11 +404,12 @@ def _atomic_copy(src: Path, dst: Path) -> None:
                 f"الوجهة موجودة (سباق ما بعد الفحص — رفض بلا استبدال): {dst}"
             )
         except OSError as link_err:
-            # أنظمة ملفات بلا hardlink: تراجع إلى os.replace (نافذة نظرية)
-            logger.warning(
-                f"os.link غير مدعوم ({link_err}) — fallback إلى os.replace: {dst}"
-            )
-            os.replace(str(tmp_path), str(dst))
+            # Fail closed: os.replace قد يستبدل ملفاً ظهر بعد فحص التضارب.
+            raise OSError(
+                getattr(link_err, "errno", errno.EOPNOTSUPP),
+                f"تعذر النشر الذري دون استبدال؛ رُفض fallback غير الآمن: {link_err}",
+                str(dst),
+            ) from link_err
     finally:
         if tmp_path is not None and tmp_path.exists() and tmp_path != dst:
             try:
@@ -465,28 +504,37 @@ class SafeMover:
             final_path=str(dst),
         )
 
-        # التحقق من وجود المصدر (مع تحذير TOCTOU — يتم معالجته عند الفتح الفعلي)
-        if not src.exists():
-            result.success = False
-            result.error = f"الملف المصدر غير موجود: {src}"
-            result.duration_ms = (time.monotonic() - start) * 1000
-            return result
-
-        # no-op: النقل إلى نفس الموضع الفعلي — العقد الموثق في الاختبارات:
-        # ينجح دون فعل (idempotent)، لا تضارب مع نفسه ولا لاحقة
         try:
-            if src.resolve() == dst.resolve():
-                if verify:
-                    result.checksum_before = compute_sha256(src)
-                    result.checksum_after = result.checksum_before
-                result.success = True
-                result.final_path = str(dst)
+            # التحقق من وجود المصدر (مع تحذير TOCTOU — يتم معالجته عند الفتح الفعلي)
+            if not src.exists():
+                result.success = False
+                result.error = f"الملف المصدر غير موجود: {src}"
                 result.duration_ms = (time.monotonic() - start) * 1000
-                logger.info(f"نقل إلى نفس الموضع — no-op: {src}")
                 return result
-        except OSError as e:
+
+            # no-op: النقل إلى نفس الموضع الفعلي — العقد الموثق في الاختبارات:
+            # ينجح دون فعل (idempotent)، لا تضارب مع نفسه ولا لاحقة.
+            # يعمل قبل رفض symlink (وجهة symlink تحلّ للمصدر نفسه = no-op)
+            try:
+                if src.resolve() == dst.resolve():
+                    if verify:
+                        result.checksum_before = compute_sha256(src)
+                        result.checksum_after = result.checksum_before
+                    result.success = True
+                    result.final_path = str(dst)
+                    result.duration_ms = (time.monotonic() - start) * 1000
+                    logger.info(f"نقل إلى نفس الموضع — no-op: {src}")
+                    return result
+            except OSError as e:
+                result.success = False
+                result.error = f"فشل فحص تطابق المسارين: {e}"
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
+
+            _validate_safe_file_paths(src, dst)
+        except SafeMoveError as e:
             result.success = False
-            result.error = f"فشل فحص تطابق المسارين: {e}"
+            result.error = str(e)
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
@@ -648,6 +696,14 @@ class SafeMover:
             destination=str(dst),
             final_path=str(dst),
         )
+
+        try:
+            _validate_safe_file_paths(src, dst)
+        except SafeMoveError as e:
+            result.success = False
+            result.error = str(e)
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
 
         # التحقق من وجود المصدر
         if not src.exists():
