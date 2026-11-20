@@ -158,6 +158,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed all medical/DICOM/SyncManager scope creep
 
 ## Unreleased
+- Session handoff is local-only by default, writes a private no-clobber file, and requires explicit flags for remote Mem0 upload/testing.
+
+## Unreleased
+- Verification secret scanning now reports file paths only and never prints matched secret values.
+
+## Unreleased
+- Moved marathon-ocr-core from base requirements to an opt-in, commit-pinned OCR integration requirements file.
 - Hardened read-only organization preflight against hidden/system and nested mount traversal; manifest output now uses exclusive no-clobber publication and rejects symlinked parents.
 
 ## Unreleased
