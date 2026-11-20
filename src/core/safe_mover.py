@@ -284,12 +284,13 @@ def _atomic_move(src: Path, dst: Path) -> None:
                         f"الوجهة موجودة (سباق ما بعد الفحص — رفض بلا استبدال): {dst}"
                     )
                 except OSError as link_err:
-                    # أنظمة ملفات بلا hardlink: تراجع إلى os.replace (نافذة
-                    # سباق نظرية ضيقة — موثقة بدل فشل كامل على FUSE/شبكة)
-                    logger.warning(
-                        f"os.link غير مدعوم ({link_err}) — fallback إلى os.replace: {dst}"
-                    )
-                    os.replace(str(tmp_path), str(dst))
+                    # لا fallback إلى os.replace مطلقاً: قد يستبدل شاغلاً ظهر
+                    # بعد الفحص. عند غياب hard-link نغلق العملية بأمان.
+                    raise OSError(
+                        getattr(link_err, "errno", errno.EOPNOTSUPP),
+                        f"تعذر النشر الذري دون استبدال؛ رُفض fallback غير الآمن: {link_err}",
+                        str(dst),
+                    ) from link_err
                 if _linked:
                     try:
                         tmp_path.unlink()
@@ -366,11 +367,12 @@ def _atomic_copy(src: Path, dst: Path) -> None:
                 f"الوجهة موجودة (سباق ما بعد الفحص — رفض بلا استبدال): {dst}"
             )
         except OSError as link_err:
-            # أنظمة ملفات بلا hardlink: تراجع إلى os.replace (نافذة نظرية)
-            logger.warning(
-                f"os.link غير مدعوم ({link_err}) — fallback إلى os.replace: {dst}"
-            )
-            os.replace(str(tmp_path), str(dst))
+            # Fail closed: os.replace قد يستبدل ملفاً ظهر بعد فحص التضارب.
+            raise OSError(
+                getattr(link_err, "errno", errno.EOPNOTSUPP),
+                f"تعذر النشر الذري دون استبدال؛ رُفض fallback غير الآمن: {link_err}",
+                str(dst),
+            ) from link_err
     finally:
         if tmp_path is not None and tmp_path.exists() and tmp_path != dst:
             try:
