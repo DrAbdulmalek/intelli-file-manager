@@ -409,6 +409,24 @@ class SafeMover:
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
+        # no-op: النقل إلى نفس الموضع الفعلي — العقد الموثق في الاختبارات:
+        # ينجح دون فعل (idempotent)، لا تضارب مع نفسه ولا لاحقة
+        try:
+            if src.resolve() == dst.resolve():
+                if verify:
+                    result.checksum_before = compute_sha256(src)
+                    result.checksum_after = result.checksum_before
+                result.success = True
+                result.final_path = str(dst)
+                result.duration_ms = (time.monotonic() - start) * 1000
+                logger.info(f"نقل إلى نفس الموضع — no-op: {src}")
+                return result
+        except OSError as e:
+            result.success = False
+            result.error = f"فشل فحص تطابق المسارين: {e}"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+
         # حساب checksum قبل النقل (يفتح الملف فعليًا — يقلل نافذة TOCTOU)
         try:
             if verify:
