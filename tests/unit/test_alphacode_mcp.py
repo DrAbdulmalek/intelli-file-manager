@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import io
 import json
-import os
 
 import pytest
 
@@ -122,7 +121,7 @@ def test_validate_plan_rejects_traversal_and_existing_destination(tmp_path, monk
 def test_mcp_requires_initialization_before_tools():
     state = {"phase": "new"}
     early = dispatch({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, state)
-    assert early["error"]["code"] == -32002
+    assert early["error"]["code"] == -32000
 
     initialized = dispatch({
         "jsonrpc": "2.0",
@@ -134,12 +133,15 @@ def test_mcp_requires_initialization_before_tools():
     assert dispatch({"jsonrpc": "2.0", "method": "notifications/initialized"}, state) is None
 
     listed = dispatch({"jsonrpc": "2.0", "id": 3, "method": "tools/list"}, state)
-    names = {tool["name"] for tool in listed["result"]["tools"]}
+    tools = listed["result"]["tools"]
+    names = {tool["name"] for tool in tools}
     assert names == {
         "intellifile.status",
         "intellifile.inventory",
         "intellifile.validate_plan",
     }
+    assert all(tool["annotations"]["readOnlyHint"] is True for tool in tools)
+    assert all(tool["annotations"]["destructiveHint"] is False for tool in tools)
 
 
 def test_mcp_exposes_no_mutation_tools_and_unknown_tool_is_rejected():
