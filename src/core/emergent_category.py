@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Dict, List
 from collections import Counter
 
+from .path_policy import iter_files
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +37,7 @@ class EmergentCategoryEngine:
         if stats is None:
             return {}
 
-        extensions = stats.get("extension_distribution", {})
+        extensions = stats.get("extension_distribution") or stats.get("extensions") or {}
 
         # تجميع الامتدادات في مجموعات ذكية
         categories = self._cluster_extensions(extensions)
@@ -73,9 +75,7 @@ class EmergentCategoryEngine:
         result = self.analyze_directory(directory)
 
         moves = []
-        for item in dir_path.rglob("*"):
-            if not item.is_file() or item.name.startswith("."):
-                continue
+        for item in iter_files(dir_path):
             ext = item.suffix.lower()
             # البحث عن التصنيف الأمثل
             for cat_name, cat_info in result["proposed_structure"]["categories"].items():
@@ -98,15 +98,14 @@ class EmergentCategoryEngine:
         total_size = 0
         extensions = Counter()
 
-        for item in dir_path.rglob("*"):
-            if item.is_file() and not item.name.startswith("."):
-                try:
-                    size = item.stat().st_size
-                    total_size += size
-                    ext = item.suffix.lower() or "(بدون)"
-                    extensions[ext] += 1
-                except Exception:
-                    continue
+        for item in iter_files(dir_path):
+            try:
+                size = item.stat().st_size
+                total_size += size
+                ext = item.suffix.lower() or "(بدون)"
+                extensions[ext] += 1
+            except Exception:
+                continue
 
         return {
             "total": sum(extensions.values()),
