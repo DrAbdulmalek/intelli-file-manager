@@ -6,7 +6,7 @@
      _atomic_move و_atomic_copy (IsADirectoryError صنف فرعي من OSError).
   2. فجوة TOCTOU في فرع EXDEV و_atomic_copy: os.replace(tmp, dst)
      يستبدل صامتاً إن ظهرت الوجهة بين الفحص والكتابة — الآن os.link
-     (يرفض ذرياً) مع fallback موثق للأنظمة بلا hardlink.
+     (يرفض ذرياً)، والفشل مغلق إذا لم يدعم النظام النشر دون استبدال.
   3. فشل src.unlink بعد ربط/نسخ ناجح كان يترك حالة «كلاهما موجود» غير
      موثقة — الآن يُزال أثر العملية ويرفع خطأ صريح.
   4. دمج sidecar عند التراجع عن نقل كان يحذف sidecar الشاغل صامتاً
@@ -226,3 +226,57 @@ def test_rollback_copy_unrecorded_checksum_still_deletes(tmp_path):
     log.rollback_last()
 
     assert not copied.exists()
+
+
+
+# ─── 6) لا fallback إلى os.replace عند غياب hard-link ─────────────────────
+
+def test_atomic_copy_fails_closed_without_noreplace_primitive(tmp_path, monkeypatch):
+    """غياب hard-link لا يجيز os.replace؛ المصدر والوجهة يبقيان سليمين."""
+    src = tmp_path / "src.txt"
+    src.write_text("SOURCE")
+    dst = tmp_path / "dst.txt"
+
+    def unsupported_link(*args, **kwargs):
+        raise OSError(errno.EOPNOTSUPP, "hard links unsupported")
+
+    def forbidden_replace(*args, **kwargs):
+        raise AssertionError("os.replace must never be used as no-clobber fallback")
+
+    monkeypatch.setattr(os, "link", unsupported_link)
+    monkeypatch.setattr(os, "replace", forbidden_replace)
+
+    with pytest.raises(OSError, match="تعذر النشر الذري دون استبدال"):
+        _atomic_copy(src, dst)
+
+    assert src.read_text() == "SOURCE"
+    assert not dst.exists()
+    assert not list(tmp_path.glob(".ifm_tmp_*"))
+
+
+def test_atomic_move_exdev_fails_closed_without_noreplace_primitive(tmp_path, monkeypatch):
+    """فرع EXDEV يفشل مغلقاً إذا تعذر hard-link؛ لا يستبدل الوجهة."""
+    src = tmp_path / "src.txt"
+    src.write_text("SOURCE")
+    dst = tmp_path / "dst.txt"
+    calls = {"count": 0}
+
+    def unsupported_link(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise OSError(errno.EXDEV, "cross-device")
+        raise OSError(errno.EOPNOTSUPP, "hard links unsupported")
+
+    def forbidden_replace(*args, **kwargs):
+        raise AssertionError("os.replace must never be used as no-clobber fallback")
+
+    monkeypatch.setattr(sm, "_renameat2_available", False)
+    monkeypatch.setattr(os, "link", unsupported_link)
+    monkeypatch.setattr(os, "replace", forbidden_replace)
+
+    with pytest.raises(OSError, match="تعذر النشر الذري دون استبدال"):
+        _atomic_move(src, dst)
+
+    assert src.read_text() == "SOURCE"
+    assert not dst.exists()
+    assert not list(tmp_path.glob(".ifm_tmp_*"))
