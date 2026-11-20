@@ -489,3 +489,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+## 2026-11-20 — privacy redaction follow-up (PR #59)
+- Removed the absolute home path, username, exact inventory counts, personal directory names, and references to the uncommitted raw report from the published lessons document.
+- Reframed the document as reusable engineering lessons; raw local reports and LOGS remain outside the repository.
