@@ -110,24 +110,42 @@ class TestRenameFile:
 class TestDeleteFile:
     """اختبار دالة حذف الملفات"""
 
-    def test_delete_file_permanent(self, tmp_path, sample_files):
-        """يتحقق من حذف ملف بشكل نهائي (بدون سلة المحذوفات)
+    def test_delete_file_to_trash(self, tmp_path, sample_files):
+        """يتحقق من نقل ملف إلى سلة المحذوفات (بدلاً من الحذف النهائي)
 
         يختبر:
           - نجاح العملية (success=True)
-          - عدم وجود الملف بعد الحذف
+          - عدم وجود الملف في الموقع الأصلي بعد النقل
+          - تسجيل العملية في السجل
         """
         config = Config(database_path=str(tmp_path / "intellifile"))
         handler = FileHandler(config)
 
-        # إنشاء ملف مؤقت للحذف (للتأكد من عدم حذف الملف الأصلي)
+        # إنشاء ملف مؤقت للنقل إلى سلة المحذوفات
         test_file = tmp_path / "to_delete.txt"
-        test_file.write_text("سيتم حذف هذا الملف")
+        test_file.write_text("سيتم نقله إلى سلة المحذوفات")
 
-        result = handler.delete_file(str(test_file), use_trash=False)
+        result = handler.delete_file(str(test_file), use_trash=True)
 
         assert result["success"] is True
         assert not test_file.exists()
+        assert len(handler.history) == 1
+        assert handler.history[0]["type"] == "delete"
+
+    def test_delete_file_permanent_is_forbidden(self, tmp_path):
+        """يتحقق من أن الحذف النهائي محظور وفق تعليمات المستخدم"""
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+
+        test_file = tmp_path / "to_delete.txt"
+        test_file.write_text("محاولة حذف نهائي")
+
+        result = handler.delete_file(str(test_file), use_trash=False)
+
+        assert result["success"] is False
+        assert "محظور" in result["error"]
+        # الملف يجب أن يبقى موجوداً
+        assert test_file.exists()
 
     def test_delete_nonexistent_file(self, tmp_path):
         """يتحقق من أن حذف ملف غير موجود يُرجع خطأ"""
@@ -147,10 +165,10 @@ class TestDeleteFile:
         test_file = tmp_path / "history_test.txt"
         test_file.write_text("test")
 
-        handler.delete_file(str(test_file), use_trash=False)
+        handler.delete_file(str(test_file), use_trash=True)
 
         assert len(handler.history) == 1
-        assert handler.history[0]["type"] in ("delete", "delete_permanent")
+        assert handler.history[0]["type"] == "delete"
 
 
 class TestCreateCategoryFolders:
@@ -450,10 +468,10 @@ class TestBackupPolicy:
         big = tmp_path / "big.bin"
         big.write_bytes(b"x" * 100)
 
-        result = handler.delete_file(str(big), use_trash=False)
+        # الواجهة الجديدة (#66): الحذف النهائي محظور — نختبر النسخ الاحتياطي مباشرة
+        backup = handler._backup_file(big)
 
-        assert result["success"] is True
-        assert not big.exists()
+        assert backup is None
         # لا نسخ احتياطي للملف الكبير — منع تضخم مجلد backups
         assert list(handler._backup_dir.glob("*")) == []
 
@@ -466,8 +484,9 @@ class TestBackupPolicy:
         small = tmp_path / "small.txt"
         small.write_text("بيانات", encoding="utf-8")
 
-        handler.delete_file(str(small), use_trash=False)
+        backup = handler._backup_file(small)
 
+        assert backup is not None
         backups = list(handler._backup_dir.glob("small*"))
         assert len(backups) == 1
 
@@ -535,3 +554,25 @@ class TestDeleteToTrash:
         assert handler.history[0]["dest"].startswith(
             str(Path.home() / ".local/share/Trash/files")
         )
+
+def test_scan_directory_does_not_enter_hidden_subtrees(tmp_path):
+    """لا يدخل المسح شجرة مخفية حتى لو كانت أسماء الملفات داخلها ظاهرة."""
+    visible = tmp_path / "visible.txt"
+    visible.write_text("visible")
+    hidden = tmp_path / ".ssh" / "id_rsa.txt"
+    hidden.parent.mkdir()
+    hidden.write_text("must not be scanned")
+
+    found = {item["path"] for item in FileHandler().scan_directory(str(tmp_path))}
+    assert found == {str(visible)}
+
+
+def test_scan_directory_allows_explicit_hidden_root(tmp_path):
+    """اختيار المستخدم لجذر مخفي صراحةً لا يعني تجاهل محتوياته."""
+    root = tmp_path / ".alphacode" / "scratch"
+    root.mkdir(parents=True)
+    visible = root / "visible.txt"
+    visible.write_text("selected root")
+
+    found = {item["path"] for item in FileHandler().scan_directory(str(root))}
+    assert found == {str(visible)}
