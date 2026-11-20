@@ -13,6 +13,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 - Added `iter_entries_reported` to shared Path Policy to report hidden/excluded paths, symlinks, mount boundaries, depth limits, and read errors without following links or reading file contents.
 - Added synthetic tests for allowlist boundaries, hidden/sensitive exclusions, symlinks, truncation, plan validation, MCP lifecycle, and stdio framing.
 - Added `docs/ALPHACODE_MCP_INTEGRATION.md` with local MCP client configuration instructions.
+- Added `scripts/alphacode_mcp_probe.py`, a read-only device-side discovery tool that reports only launcher executable basenames and MCP configuration key names, never values or secrets.
 - **Not verified:** whether the installed AlphaCode build exposes an MCP stdio client or its exact configuration location. The device-side client registration and end-to-end connection remain blocked until tested on the device.
 - No user files were accessed; no operational logs or personal paths were committed. No changes to `main`; PR remains Draft pending CI and review.
 
