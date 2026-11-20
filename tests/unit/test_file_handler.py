@@ -130,7 +130,7 @@ class TestDeleteFile:
         assert handler.history[0]["type"] == "delete"
 
     def test_delete_file_permanent_is_forbidden(self, tmp_path):
-        """يتحقق من أن الحذف النهائي محظور per تعليمات المستخدم"""
+        """يتحقق من أن الحذف النهائي محظور وفق تعليمات المستخدم"""
         config = Config(database_path=str(tmp_path / "intellifile"))
         handler = FileHandler(config)
 

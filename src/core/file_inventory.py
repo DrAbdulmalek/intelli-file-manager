@@ -12,7 +12,7 @@
 
 لا تشمل هذه الوحدة:
   - أي ذكاء اصطناعي (AI/embeddings) — مرحلة B
-  - أي ميزات طبية — ممنوعة per PRODUCT_IDENTITY.md
+  - أي ميزات طبية — ممنوعة وفق PRODUCT_IDENTITY.md
   - أي تخزين دائم — مسؤولية طبقة db
 
 PR-02 من development-roadmap-v1.0 (FileInventory + اختبارات تكامل)
@@ -260,7 +260,7 @@ class FileInventory:
         document_text = ""
         content_blocked = False
         if self.include_content and ext in TEXT_EXTRACTABLE_EXT and stat.st_size <= self.max_file_size:
-            # حظر استخراج المحتوى من الملفات الحساسة per تعليمات المستخدم
+            # حظر استخراج المحتوى من الملفات الحساسة وفق تعليمات المستخدم
             if is_sensitive_path(file_path, skip_dirs=self.skip_dirs):
                 content_blocked = True
                 logger.debug(f"محظور استخراج المحتوى من ملف حساس: {file_path}")

@@ -91,12 +91,15 @@ SENSITIVE_PATH_PARTS = frozenset(
         "dicom",
         "medical",
         "patient",
+        "patients",  # الجمع الشائع — إغلاق جولة 12: كان يمرّ بالمسار exact
         "مرضى",
+        "المرضى",  # صيغة التعريف — نفس الإغلاق
         "تقرير طبي",
         "تقرير_طبي",
         "clinics",
         "clinic",
         "hospital",
+        "hospitals",
         "مستشفى",
         "عيادة",
         # مجلدات نظام حساسة
@@ -305,8 +308,8 @@ def block_if_sensitive(
     if is_sensitive_path(file_path, skip_dirs=skip_dirs):
         path = Path(file_path)
         msg = (
-            f"محظور: archivo حساس — لا يُسمح بـ '{operation}' على: {path}. "
-            f"البيانات الطبية والأنظمة الحساسة محمية per تعليمات المستخدم."
+            f"محظور: ملف حساس — لا يُسمح بـ '{operation}' على: {path}. "
+            f"البيانات الطبية والأنظمة الحساسة محمية وفق تعليمات المستخدم."
         )
         logger.warning(msg)
         raise SensitiveFileBlockedError(msg)
@@ -379,8 +382,8 @@ def safe_extract_content(
     if is_sensitive_path(file_path, skip_dirs=skip_dirs):
         path = Path(file_path)
         logger.warning(
-            f"محظور: archivo حساس — لا يُسمح بـ '{operation}' على: {path}. "
-            f"البيانات الطبية والأنظمة الحساسة محمية per تعليمات المستخدم."
+            f"محظور: ملف حساس — لا يُسمح بـ '{operation}' على: {path}. "
+            f"البيانات الطبية والأنظمة الحساسة محمية وفق تعليمات المستخدم."
         )
         return None
     return extractor(file_path)
@@ -407,8 +410,8 @@ def safe_ocr_image(
     if is_sensitive_path(filepath, skip_dirs=skip_dirs):
         path = Path(filepath)
         logger.warning(
-            f"محظور: archivo حساس — لا يُسمح بـ '{operation}' على: {path}. "
-            f"البيانات الطبية والأنظمة الحساسة محمية per تعليمات المستخدم."
+            f"محظور: ملف حساس — لا يُسمح بـ '{operation}' على: {path}. "
+            f"البيانات الطبية والأنظمة الحساسة محمية وفق تعليمات المستخدم."
         )
         return None
     return ocr_func(filepath)
