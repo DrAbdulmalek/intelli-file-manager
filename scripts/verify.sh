@@ -46,9 +46,10 @@ add_check() { CHECKS+=("$1|$2|$3"); }
 # لأن ما يلي البادئة في هذا الملف يبدأ بـ '[' وليس بمحرف أبجدي رقمي.
 SECRET_PATTERNS='ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,}|m0-[a-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-proj-[A-Za-z0-9_-]{20,}|xox[bp]-[A-Za-z0-9-]{20,}|AIza[0-9A-Za-z_-]{35}'
 
-SECRET_HITS="$(git grep -I -n -E "$SECRET_PATTERNS" -- . 2>/dev/null || true)"
-if [[ -n "$SECRET_HITS" ]]; then
-    add_check "secrets" "fail" "$(echo "$SECRET_HITS" | head -5)"
+# لا نطبع سطور المطابقة لأنها قد تحتوي قيمة السر نفسها؛ نعرض أسماء الملفات فقط.
+SECRET_FILES="$(git grep -I -l -E "$SECRET_PATTERNS" -- . 2>/dev/null || true)"
+if [[ -n "$SECRET_FILES" ]]; then
+    add_check "secrets" "fail" "$(printf '%s\n' "$SECRET_FILES" | head -5)"
     SECRETS_OK=0
 else
     add_check "secrets" "pass" "لا أسرار متتبعة"
