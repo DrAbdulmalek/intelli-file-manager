@@ -570,6 +570,21 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
 
+## 2026-11-20 — GPT-6 security follow-up (PR #48)
+- Changed session handoff to local-only by default; Mem0 cloud upload now requires explicit --mem0.
+- Handoff output is created exclusively with mode 0600, rejects existing targets, symlinked path components, and output paths outside the selected project directory.
+- Remote Mem0 integration test now refuses to run unless --confirm-remote is explicitly supplied.
+- Updated AGENTS.md workflow guidance and added unit tests for no-clobber output, symlink rejection, project-root confinement, and remote-test opt-in.
+- No CI/local test result is claimed for the updated head.
+
+## 2026-11-20 — verification secret-output follow-up (PR #48)
+- Changed verify.sh secret scanning to report only matched file paths, never matching line contents that could include secret values.
+- Added a regression guard for path-only secret reporting and removed secret inventory details from memory/context.md.
+
+## 2026-11-20 — optional OCR dependency follow-up (PR #48)
+- Removed the GitHub VCS dependency on marathon-ocr-core from the base requirements so normal installation does not require a GitHub fetch.
+- Added requirements-ocr-core.txt as an explicit optional integration pinned to commit 5613a1c05f7b657678a810b96c6ba5cab3b92e53; documented prebuilt wheelhouse use for offline deployments.
+- Added a static regression test and documented the optional install in README.
 ## 2026-11-20 — GPT-6 review follow-up (PR #54)
 - Hardened directory preflight summaries to skip hidden/system subtrees and prune nested mount points; mount-inspection failures fail closed and the explicitly selected root remains allowed.
 - Changed manifest publication from os.replace() to exclusive os.link() publication; existing destinations and symlinked parent paths are rejected, and unsupported no-clobber publication fails closed.
