@@ -87,3 +87,90 @@ def test_errno_categories_are_stable():
     assert classify_os_error(PermissionError(errno.EACCES, "denied")) == "permission_denied"
     assert classify_os_error(OSError(errno.EXDEV, "cross-device")) == "cross_device"
     assert classify_os_error(OSError(12345, "unknown")) == "unknown_os_error"
+
+
+
+def test_manifest_never_overwrites_existing_file(tmp_path):
+    plan = build_organization_plan([], base_dir=tmp_path)
+    target = tmp_path / "private" / "plan.json"
+    first = write_plan_manifest(plan, target)
+    original = first.read_bytes()
+
+    import pytest
+    with pytest.raises(FileExistsError):
+        write_plan_manifest(plan, target)
+
+    assert target.read_bytes() == original
+    assert not list(target.parent.glob(".ifm-plan-*"))
+
+
+def test_manifest_rejects_symlinked_parent(tmp_path):
+    import pytest
+
+    real = tmp_path / "real"
+    real.mkdir()
+    linked = tmp_path / "linked"
+    try:
+        linked.symlink_to(real, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    plan = build_organization_plan([], base_dir=tmp_path)
+    with pytest.raises(OSError, match="symlinked manifest path"):
+        write_plan_manifest(plan, linked / "plan.json")
+    assert not (real / "plan.json").exists()
+
+
+def test_manifest_never_uses_replace_fallback(tmp_path, monkeypatch):
+    import pytest
+
+    plan = build_organization_plan([], base_dir=tmp_path)
+
+    def forbidden_replace(*args, **kwargs):
+        raise AssertionError("manifest publication must not call os.replace")
+
+    monkeypatch.setattr(os, "replace", forbidden_replace)
+    target = write_plan_manifest(plan, tmp_path / "plan.json")
+    assert target.exists()
+    assert not list(tmp_path.glob(".ifm-plan-*"))
+
+
+def test_directory_preflight_prunes_nested_mount_points(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "visible.txt").write_text("visible")
+    nested = root / "mounted"
+    nested.mkdir()
+    (nested / "hidden-by-mount.txt").write_text("not traversed")
+    destination = tmp_path / "out"
+    destination.mkdir()
+
+    real_is_mount = Path.is_mount
+
+    def fake_is_mount(self):
+        if self == nested:
+            return True
+        return real_is_mount(self)
+
+    monkeypatch.setattr(Path, "is_mount", fake_is_mount)
+    item = preflight_item(root, destination / "source")
+
+    assert item.error_category == "mount_boundary"
+    assert item.file_count == 1
+
+
+def test_directory_preflight_skips_hidden_system_trees(tmp_path):
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "visible.txt").write_text("visible")
+    hidden = root / ".ssh"
+    hidden.mkdir()
+    (hidden / "private-key.txt").write_text("not counted")
+    destination = tmp_path / "out"
+    destination.mkdir()
+
+    item = preflight_item(root, destination / "source")
+
+    assert item.file_count == 1
