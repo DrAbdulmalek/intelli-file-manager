@@ -108,6 +108,10 @@ def iter_entries_reported(
                     yield path, info, None, "symlink"
                     continue
                 info = entry.stat(follow_symlinks=False)
+                # st_dev alone misses bind mounts on the same filesystem.
+                if os.path.ismount(path):
+                    yield path, info, None, "mount_boundary"
+                    continue
                 if stat.S_ISDIR(info.st_mode):
                     if entry.name in skipped:
                         yield path, info, None, "excluded_directory"
