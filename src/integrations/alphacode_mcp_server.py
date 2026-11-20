@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from src.core.path_policy import iter_entries_reported
+
 SERVER_NAME = "intellifile-alphacode"
 SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = "2025-11-25"
@@ -127,7 +129,6 @@ def _inventory(root_arg: str, max_entries: int = 300) -> dict[str, Any]:
     except OSError as exc:
         raise IntegrationError("Unable to inspect the selected root.") from exc
 
-    stack: list[tuple[Path, tuple[str, ...], int]] = [(root, (), 0)]
     files: list[dict[str, Any]] = []
     totals: dict[str, int] = {}
     counts = {
@@ -135,55 +136,53 @@ def _inventory(root_arg: str, max_entries: int = 300) -> dict[str, Any]:
         "symlinks": 0, "mount_boundaries": 0, "unreadable": 0,
     }
     truncated = False
-    while stack:
-        directory, relative, depth = stack.pop()
-        try:
-            with os.scandir(directory) as iterator:
-                entries = sorted(iterator, key=lambda entry: entry.name.casefold(), reverse=True)
-        except OSError:
+    skip_dirs = SKIP_DIRS | frozenset({
+        ".git", ".ssh", ".gnupg", ".config", ".cache", ".local",
+        ".venv", "venv", "node_modules", "__pycache__", ".tox",
+        ".aws", ".azure", ".kube", "secrets", "credentials", "keyrings",
+        "medical", "patient", "clinical",
+    })
+    for path, info, error, reason in iter_entries_reported(
+        root, skip_hidden=True, skip_dirs=skip_dirs, max_depth=32
+    ):
+        relative = path.relative_to(root)
+        parts = relative.parts
+        if error is not None:
             counts["unreadable"] += 1
             continue
-        for entry in entries:
-            name = entry.name
-            rel_parts = relative + (name,)
-            if name.startswith(".") or name.casefold() in SKIP_DIRS or _is_sensitive_parts(rel_parts):
-                counts["excluded"] += 1
-                continue
-            try:
-                if entry.is_symlink():
-                    counts["symlinks"] += 1
-                    continue
-                info = entry.stat(follow_symlinks=False)
-                if stat.S_ISDIR(info.st_mode):
-                    counts["directories"] += 1
-                    if info.st_dev != root_device:
-                        counts["mount_boundaries"] += 1
-                        continue
-                    if depth < 32:
-                        stack.append((Path(entry.path), rel_parts, depth + 1))
-                    else:
-                        counts["excluded"] += 1
-                    continue
-                if not stat.S_ISREG(info.st_mode):
-                    counts["excluded"] += 1
-                    continue
-                if info.st_dev != root_device:
-                    counts["mount_boundaries"] += 1
-                    continue
-                counts["files"] += 1
-                suffix = Path(name).suffix.casefold()
-                totals[suffix or "[no_extension]"] = totals.get(suffix or "[no_extension]", 0) + 1
-                if len(files) < max_entries:
-                    files.append({
-                        "relative_path": Path(*rel_parts).as_posix(),
-                        "size_bytes": info.st_size,
-                        "mtime_ns": info.st_mtime_ns,
-                        "extension": suffix,
-                    })
-                else:
-                    truncated = True
-            except OSError:
-                counts["unreadable"] += 1
+        if reason == "symlink":
+            counts["symlinks"] += 1
+            continue
+        if reason == "mount_boundary":
+            counts["mount_boundaries"] += 1
+            continue
+        if reason is not None:
+            counts["excluded"] += 1
+            continue
+        if info is None:
+            counts["unreadable"] += 1
+            continue
+        if stat.S_ISDIR(info.st_mode):
+            counts["directories"] += 1
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            counts["excluded"] += 1
+            continue
+        if _is_sensitive_parts(parts):
+            counts["excluded"] += 1
+            continue
+        counts["files"] += 1
+        suffix = path.suffix.casefold()
+        totals[suffix or "[no_extension]"] = totals.get(suffix or "[no_extension]", 0) + 1
+        if len(files) < max_entries:
+            files.append({
+                "relative_path": relative.as_posix(),
+                "size_bytes": info.st_size,
+                "mtime_ns": info.st_mtime_ns,
+                "extension": suffix,
+            })
+        else:
+            truncated = True
     files.sort(key=lambda item: item["relative_path"].casefold())
     return {
         "root": str(root),
