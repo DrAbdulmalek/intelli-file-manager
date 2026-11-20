@@ -2,6 +2,7 @@
 import json
 import logging
 from pathlib import Path
+from .sensitive_barrier import is_sensitive_path
 from typing import List, Tuple
 
 from .path_policy import iter_files
@@ -58,7 +59,11 @@ class SemanticSearchEngine:
             return False
 
     def _extract_text(self, filepath: str) -> str:
-        """استخراج نص من الملف"""
+        """استخراج نص من الملف — محظور على الملفات الحساسة (حاجز الحساسية)"""
+        # حاجز الحساسية: لا يُقرأ محتوى الملفات الحساسة ولا يُفهرس (P0/F1)
+        if is_sensitive_path(filepath):
+            logger.warning(f"محظور: استخراج نص من ملف حساس: {filepath}")
+            return ""
         path = Path(filepath)
         ext = path.suffix.lower()
 
