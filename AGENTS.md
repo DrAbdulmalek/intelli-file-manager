@@ -210,15 +210,15 @@ Next: <what the next session should do>
 ```
 الجلسة تبدأ
     ↓
-1. اقرأ AGENTS.md
+1. اقرأ AGENTS.md والذاكرة المحلية داخل memory/
     ↓
-2. search_memories(query="<اسم المشروع> context")
+2. استخدم Mem0 فقط إذا طلب المستخدم ذلك صراحةً — لا cloud fallback
     ↓
 3. نفّذ المهمة (+ ./scripts/verify.sh قبل الالتزام)
     ↓
-4. add_memory / update_memory للدروس المستفادة
+4. حدّث الذاكرة المحلية/سجل العمل أولاً
     ↓
-5. اكتب session-handoff.md
+5. أنشئ session-handoff جديداً دون استبدال ملف موجود
     ↓
 6. Commit (على فرع) → PR مسودة
 ```
@@ -227,7 +227,7 @@ Next: <what the next session should do>
 
 ```bash
 export MEM0_API_KEY="..."   # من البيئة فقط
-python3 scripts/test_mem0_memory.py   # حفظ + بحث + عبر الجلسات
+python3 scripts/test_mem0_memory.py --confirm-remote   # اختبار شبكي صريح يكتب بيانات اختبار إلى Mem0
 ```
 
 ## 12. المراجع
