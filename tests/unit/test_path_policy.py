@@ -106,3 +106,21 @@ def test_reported_traversal_marks_depth_limit_without_duplicate_directory(tmp_pa
 
     assert len(two_entries) == 1
     assert two_entries[0][3] == "depth_limit"
+
+
+
+def test_reported_traversal_marks_mount_boundaries(tmp_path, monkeypatch):
+    touch(tmp_path / "mounted" / "inside.txt")
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        os.path,
+        "ismount",
+        lambda path: Path(path).name == "mounted" or real_ismount(path),
+    )
+
+    entries = list(iter_entries_reported(tmp_path))
+    mounted = [entry for entry in entries if entry[0].name == "mounted"]
+
+    assert len(mounted) == 1
+    assert mounted[0][3] == "mount_boundary"
+    assert not any(entry[0].name == "inside.txt" for entry in entries)
