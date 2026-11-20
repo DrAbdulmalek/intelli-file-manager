@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `src/core/tree_manifest.py` + `scripts/tree_manifest.py`: لقطة قبل نقل شجرة وتحقق بعدها
   (يرى المخفي والمجلدات الفارغة، لا يتبع الروابط، يفشل عند الفقد أو عدم اكتمال القراءة).
 - `docs/LOCAL_AGENT_FILE_OPERATIONS.md`: بروتوكول وبرومبت للوكيل المحلي مبنيان على أخطاء لوغ WD.
+- `docs/ALPHACODE_PROTOCOL_v2.0.md`: البروتوكول الموحد للوكيل + التحسين المستمر — هدف مزدوج
+  (تنظيم آمن + تغذية هندسية راجعة)، سياسة خدمات خارجية بمستويات بيانات (الطبي الحساس والأسرار
+  لا تُرسل)، مراجعة قدرات إلزامية قبل التعديل، 10 أنواع لوغ، فصل OPERATIONAL/ENGINEERING،
+  ومهمة أولى READ_ONLY_DIAGNOSTICS بلا أي نقل.
+- `docs/OBSERVABILITY_ENGINE_DESIGN.md`: تصميم مقترح لمحرك التحسين المستمر — تحويل أخطاء
+  التشغيل إلى اختبارات regression، وخريطة فجوات صريحة على أساس `src/db/observability/` الموجود.
 
 ### أُصلح
 - **سياسة اجتياز موحّدة** (`src/core/path_policy.py`): المخفي يُحدَّد نسبةً إلى

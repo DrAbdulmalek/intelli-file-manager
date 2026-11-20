@@ -76,6 +76,21 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
+### 2026-11-20 - Claude (protocol v2.0 merge; docs only)
+- Recreated (previous local-only commit was lost with a sandbox clone) the merged
+  AlphaCode + IntelliFile Continuous Improvement Protocol v2.0 in
+  `docs/ALPHACODE_PROTOCOL_v2.0.md`: dual goal (safe file ops + engineering
+  feedback), external-AI policy with 5 data levels (SENSITIVE_MEDICAL and
+  SECURITY_SECRETS never leave the machine), 20-question capability audit with
+  PROVEN/UNPROVEN/CONTRADICTED labels, 10 log types (A–J), OPERATIONAL vs
+  ENGINEERING log separation, READ_ONLY_DIAGNOSTICS first mission with stage gate.
+- Added `docs/OBSERVABILITY_ENGINE_DESIGN.md`: proposed engine structure with an
+  explicit existing-vs-proposed mapping onto `src/db/observability/` (nothing
+  new claimed as existing), findings→regression-tests table, GitHub content
+  separation policy.
+- Docs only — no code or file-operation changes, consistent with the protocol's
+  own stage gate. P0 implementation lives on `feat/p0-safety-hardening`.
+
 ### 2026-11-20 - Claude (independent review; sandbox patch, not pushed)
 - Reviewed LOGS/wd_backup_organization.log: contradictions (Android/ deleted with APK left,
   Books/ deleted after 63GB moved, 2 folders missing from final tree, 5 vs 6 deleted dirs),
