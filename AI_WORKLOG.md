@@ -489,3 +489,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+## 2026-11-20 — privacy redaction follow-up (PR #53)
+- Removed the tracked/unredacted LOGS path reference and identifying source details from the preflight proposal.
+- Reframed evidence as privately reviewed local observations; raw logs and file inventories remain outside the repository.
