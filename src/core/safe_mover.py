@@ -26,6 +26,7 @@ import hashlib
 import logging
 import os
 import shutil
+import stat
 import tempfile
 import time
 from dataclasses import dataclass, field, asdict
@@ -140,6 +141,39 @@ class OverwriteForbiddenError(SafeMoveError):
     """محاولة الكتابة فوق ملف موجود — محظور وفق تعليمات المستخدم"""
 
 
+def _reject_symlink_components(path: Union[str, Path]) -> None:
+    """يرفض أي مكوّن symlink في المسار، ويفشل مغلقاً عند تعذر فحصه."""
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            # ما دام أحد الآباء غير موجود فلا يمكن أن توجد مكونات لاحقة تحته.
+            break
+        except OSError as exc:
+            raise SafeMoveError(f"تعذر فحص مكوّن المسار {current}: {exc}") from exc
+        if stat.S_ISLNK(info.st_mode):
+            raise SafeMoveError(f"المسار يحتوي رابطاً رمزياً محظوراً: {current}")
+        if current != absolute and not stat.S_ISDIR(info.st_mode):
+            raise SafeMoveError(f"مكوّن وسيط ليس مجلداً: {current}")
+
+
+def _validate_safe_file_paths(src: Path, dst: Path) -> None:
+    """يتحقق من مساري المصدر والوجهة قبل أي قراءة أو إنشاء أو نشر."""
+    _reject_symlink_components(src)
+    _reject_symlink_components(dst)
+    try:
+        source_info = src.lstat()
+    except FileNotFoundError:
+        return  # تتولى الواجهة إرجاع SourceNotFoundError بصورة موحدة.
+    except OSError as exc:
+        raise SafeMoveError(f"تعذر فحص المصدر {src}: {exc}") from exc
+    if not stat.S_ISREG(source_info.st_mode):
+        raise SafeMoveError(f"المصدر ليس ملفاً عادياً: {src}")
+
+
 # ─── دوال مساعدة ───────────────────────────────────────────────────────────
 
 def compute_sha256(file_path: Union[str, Path], *, chunk_size: int = _CHECKSUM_CHUNK_SIZE) -> str:
@@ -215,6 +249,7 @@ def _atomic_move(src: Path, dst: Path) -> None:
 
     لا يتبع الروابط الرمزية، لا يعبر نقاط التركيب، لا يُعدّل صلاحيات.
     """
+    _validate_safe_file_paths(src, dst)
     src_str = str(src)
     dst_str = str(dst)
 
@@ -334,6 +369,7 @@ def _atomic_copy(src: Path, dst: Path) -> None:
 
     يرفض الكتابة فوق أي موجود — لو الوجهة موجودة يُرفع FileExistsError.
     """
+    _validate_safe_file_paths(src, dst)
     # رفض إذا كانت الوجهة مجلداً — الخطأ الصريح خارج try (عيب جولة DeepSeek 7:
     # IsADirectoryError صنف فرعي من OSError وكان يُبتلع بـexcept OSError: pass)
     try:
@@ -466,6 +502,14 @@ class SafeMover:
             destination=str(dst),
             final_path=str(dst),
         )
+
+        try:
+            _validate_safe_file_paths(src, dst)
+        except SafeMoveError as e:
+            result.success = False
+            result.error = str(e)
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
 
         # التحقق من وجود المصدر (مع تحذير TOCTOU — يتم معالجته عند الفتح الفعلي)
         if not src.exists():
@@ -650,6 +694,14 @@ class SafeMover:
             destination=str(dst),
             final_path=str(dst),
         )
+
+        try:
+            _validate_safe_file_paths(src, dst)
+        except SafeMoveError as e:
+            result.success = False
+            result.error = str(e)
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
 
         # التحقق من وجود المصدر
         if not src.exists():
