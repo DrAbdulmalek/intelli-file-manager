@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, HardDrive } from 'lucide-react';
+import { Sparkles, HardDrive, PenLine } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { SIDEBAR_ITEMS } from './constants';
 import { formatFileSize } from './helpers';
@@ -54,6 +54,17 @@ export const Sidebar = React.memo(function Sidebar({ activeTab, onTabChange, tot
             )}
           </motion.button>
         ))}
+      </nav>
+
+      {/* OCR Editor — standalone page */}
+      <nav className="px-3 pb-3">
+        <a
+          href="/edit-ocr"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all duration-200"
+        >
+          <span><PenLine className="h-4 w-4" /></span>
+          <span>محرر OCR</span>
+        </a>
       </nav>
 
       {/* Storage Info */}
