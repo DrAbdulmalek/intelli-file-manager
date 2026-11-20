@@ -91,15 +91,18 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 - Docs only — no code or file-operation changes, consistent with the protocol's
   own stage gate. P0 implementation lives on `feat/p0-safety-hardening`.
 
-### 2026-11-20 - Claude (independent review; sandbox patch, not pushed)
-- Reviewed LOGS/wd_backup_organization.log: contradictions (Android/ deleted with APK left,
-  Books/ deleted after 63GB moved, 2 folders missing from final tree, 5 vs 6 deleted dirs),
-  name-based classification, unverified 388GB tree moves via raw `mv`, undo planned after execution.
-- Added `tree_manifest` (snapshot/verify) and `docs/LOCAL_AGENT_FILE_OPERATIONS.md`.
-  Not a shell executor: it only reads. Respects the SafeMover-only deferral above.
-- Observation: commit a8e6dd6 message lists "collision-safe move script generator" but the diff
-  contains none (consistent with the deferral); the message overstates the change.
-- Validation: new tests pass locally (see PR); desktop/Qt tests not run; CI pending.
+### 2026-11-20 - Claude (independent engineering review; branch only)
+- Reviewed a sanitized operational report and identified inconsistent inventory claims,
+  filename-only classification, unverified bulk-move completion, and rollback planned
+  after execution. No operational log or user file inventory is included here.
+- Added read-only `tree_manifest` snapshot/verify tooling and
+  `docs/LOCAL_AGENT_FILE_OPERATIONS.md`; this tooling does not execute moves.
+- Kept directory movement deferred: a manifest is evidence, not a transaction or
+  a race-safe mover. The protocol now explicitly prohibits raw `os.rename` /
+  `shutil.move` directory operations until a dedicated no-replace implementation
+  passes adversarial review.
+- CI status is recorded against the exact branch head in the pull request; no
+  claim of local execution is made.
 
 ### 2026-11-20 - GPT-6 (independent implementation; branch only)
 - Created branch `fix/unified-path-policy-shell-plan-2026-11-20`; no changes to `main`.
