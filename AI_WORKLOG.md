@@ -489,3 +489,9 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+## 2026-11-20 — GPT-6 review follow-up (PR #54)
+- Hardened directory preflight summaries to skip hidden/system subtrees and prune nested mount points; mount-inspection failures fail closed and the explicitly selected root remains allowed.
+- Changed manifest publication from os.replace() to exclusive os.link() publication; existing destinations and symlinked parent paths are rejected, and unsupported no-clobber publication fails closed.
+- Added tests for manifest collision preservation, symlinked parent rejection, no os.replace fallback, nested mount pruning, and hidden system subtree exclusion.
+- CI/local test execution has not yet been observed for the updated head; no pass is claimed.
