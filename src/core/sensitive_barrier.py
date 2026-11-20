@@ -18,12 +18,18 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
 logger = logging.getLogger(__name__)
 
 PathLike = Union[str, Path]
+
+# دليمة DICOM عند الإزاحة 128 (البايتات 128-131) per معيار DICOM
+_DICOM_MAGIC = b"DICM"
+_DICOM_MAGIC_OFFSET = 128
+_DICOM_MAGIC_LEN = 4
 
 
 # ─── امتدادات الملفات الطبية الحساسة ────────────────────────────────────────
@@ -115,6 +121,8 @@ SENSITIVE_FILENAME_PARTS = frozenset(
         "dicom",
         "ct_scan",
         "ct_scan_",
+        "scan",
+        "scan_",
         "xray",
         "x_ray",
         "ultrasound",
@@ -168,6 +176,36 @@ def is_medical_imaging_extension(ext: str) -> bool:
     return ext.lower() in MEDICAL_IMAGING_EXTENSIONS
 
 
+def _has_dicom_header(file_path: Path) -> bool:
+    """يُعيد True لو كان الملف يبدأ بدليمة DICOM عند الإزاحة 128.
+
+    معيار DICOM: البايتات 128–131 devono أن تحتوي على "DICM" لو كان الملف
+    ملف DICOM صالح regardless من الامتداد. يُفتح الملف في وضع قراءة بايتات
+    فقط وتُقرأ 4 بايتات عند الإزاحة 128 دون تعديل任何 شيء.
+    """
+    try:
+        with file_path.open("rb") as f:
+            f.seek(_DICOM_MAGIC_OFFSET)
+            magic = f.read(_DICOM_MAGIC_LEN)
+        return magic == _DICOM_MAGIC
+    except OSError:
+        # لو تعذّر القراءة، نتعامل مع الملف على أنه غير مؤكد (ليس DICOM مؤكد)
+        return False
+
+
+def _name_parts_lower(name: str) -> set[str]:
+    """يُنفّذ word-boundary splitting على اسم الملف بدون الامتداد.
+
+    يفصل على "_" و "-" و "." ويجمع الأجزاء غير الفارغة بالإضافة إلى الجذر كاملاً.
+    """
+    stem = Path(name).stem
+    parts: set[str] = set()
+    for sep in ("_", "-", "."):
+        parts.update(part for part in stem.split(sep) if part)
+    parts.add(stem)
+    return {p.lower() for p in parts if p}
+
+
 def is_sensitive_path(
     file_path: Union[str, Path],
     *,
@@ -175,14 +213,21 @@ def is_sensitive_path(
 ) -> bool:
     """يُعيد True إذا كان الملف يُصنّف على أنه حساس ولا يُسمح بقراءة محتواه.
 
-    قواعد الكشف:
-      1. أي امتداد DICOM/تصوير طبي مؤكد → حساس.
-      2. أي جزء من المسار يتطابق مع SENSITIVE_PATH_PARTS → حساس.
-      3. أي جزء من اسم الملف يتطابق مع SENSITIVE_FILENAME_PARTS → حساس.
-      4. امتدادات التقارير الطبية (.pdf، .docx، .txt، إلخ) تُحسم بناءً على
+    قواعد الكشف (محدّثة per مراجعة F1):
+      1. امتداد DICOM/تصوير طبي مؤكد (.dcm، .dicom، إلخ) → حساس دائمًا.
+      2. دليمة DICOM (байтات 128–131 = "DICM") حتى لو امتداد الملف عام
+         (.jpg، .png، .pdf...) → حساس دائمًا (كشف المحتوى دون فتح مضمون).
+      3. أي جزء من المسار يتطابق مع SENSITIVE_PATH_PARTS (مطابقة كلمة كاملة)
+         → حساس.
+      4. أي جزء من اسم الملف يتطابق مع SENSITIVE_FILENAME_PARTS (مطابقة كلمة
+         كاملة عبر word-boundary، لا substring) → حساس.
+      5. امتدادات التقارير الطبية (.pdf، .docx، .txt، إلخ) تُحسم بناءً على
          وجود مؤشر مسار أو اسم ملف حساس في المسار.
-      5. امتدادات الصور العادية (.jpg، .png، إلخ) تُحسم بناءً على وجود
+      6. امتدادات الصور العادية (.jpg، .png، إلخ) تُحسم بناءً على وجود
          مؤشر مسار أو اسم ملف حساس في المسار.
+
+    تُستخدم مطابقة الكلمة الكاملة (word-boundary) لتجنب الإنذارات الكاذبة
+    مثل "Amrita" التي تحتوي على "mri" كسلسلة فرعية.
 
     Args:
         file_path: مسار الملف المراد فحصه.
@@ -204,7 +249,15 @@ def is_sensitive_path(
     ):
         return True
 
-    # 2. أي جزء من المسار يشير إلى مجلد طبي/نظام/حساس
+    # 2. دليمة DICOM عند الإزاحة 128 — حتى لو الامتداد عام
+    # (يُقرأ فقط 4 بايتات، لا يُفتح محتوى الملف)
+    try:
+        if _has_dicom_header(path):
+            return True
+    except OSError:
+        pass
+
+    # 3. أي جزء من المسار يشير إلى مجلد طبي/نظام/حساس
     sensitive_parts = set(parts) & SENSITIVE_PATH_PARTS
     if skip_dirs:
         skip_lower = {d.lower() for d in skip_dirs}
@@ -212,29 +265,22 @@ def is_sensitive_path(
     if sensitive_parts:
         return True
 
-    # 3. أي جزء من اسم الملف يشير إلى محتوى طبي/حساس
-    # ن분ّر اسم الملف إلى أجزاء تمتدّد على "_" و "-" ونقاط الامتداد
-    name_stem = Path(full_name_lower).stem
-    name_parts = set()
-    for sep in ("_", "-", "."):
-        name_parts.update(part for part in name_stem.split(sep) if part)
-    # الجزء الكامل من الاسم بدون الامتداد أيضًا
-    name_parts.add(name_stem)
+    # 4. أي جزء من اسم الملف يشير إلى محتوى طبي/حساس (word-boundary)
+    name_parts = _name_parts_lower(full_name_lower)
     sensitive_name_parts = name_parts & SENSITIVE_FILENAME_PARTS
     if sensitive_name_parts:
         return True
 
-    # 4. امتدادات التقارير الطبية — محظورة فقط إذا كان هناك مؤشر مسار/اسم حساس
+    # 5. امتدادات التقارير الطبية — محظورة فقط إذا كان هناك مؤشر مسار/اسم حساس
     if ext in MEDICAL_REPORT_EXTENSIONS:
-        # وجود أي جزء حساس في المسار (تم فحصه أعلاه) — إذا وصلنا сюда
-        # ولم يُعثر على جزء حساس، نعيد False للسماح بقراءة العادية
+        # إذا وصلنا到这里 ولم يُعثر على جزء حساس، نعيد False للسماح بقراءة العادية
         return False
 
-    # 5. امتدادات الصور العادية — محظورة فقط إذا كان هناك مؤشر حساس
+    # 6. امتدادات الصور العادية — محظورة فقط إذا كان هناك مؤشر حساس
     if ext in MEDICAL_IMAGE_EXTENSIONS:
         return False
 
-    # 6. امتدادات أخرى غير معروفة — لا تُحظر
+    # 7. امتدادات أخرى غير معروفة — لا تُحظر
     return False
 
 
@@ -279,17 +325,23 @@ def classify_sensitivity(file_path: Union[str, Path]) -> dict:
     path = Path(file_path)
     ext = path.suffix.lower()
     parts = _path_parts_lower(path)
+    full_name_lower = path.name.lower()
+    name_parts = _name_parts_lower(full_name_lower)
 
     reason = "غير حساس"
 
-    if is_medical_imaging_extension(ext):
+    if is_medical_imaging_extension(ext) or any(
+        s in MEDICAL_IMAGING_EXTENSIONS for s in path.suffixes
+    ):
         reason = f"امتداد تصوير طبي مؤكد: {ext}"
+    elif _has_dicom_header(path):
+        reason = "دليمة DICOM عند الإزاحة 128 (ملف طبي حتى لو امتداده عام)"
     elif set(parts) & SENSITIVE_PATH_PARTS:
         matched = set(parts) & SENSITIVE_PATH_PARTS
         reason = f"جزء مسار حساس: {', '.join(sorted(matched))}"
-    elif set(parts) & SENSITIVE_FILENAME_PARTS:
-        matched = set(parts) & SENSITIVE_FILENAME_PARTS
-        reason = f"جزء اسم ملف حساس: {', '.join(sorted(matched))}"
+    elif name_parts & SENSITIVE_FILENAME_PARTS:
+        matched = name_parts & SENSITIVE_FILENAME_PARTS
+        reason = f"جزء اسم ملف حساس (word-boundary): {', '.join(sorted(matched))}"
     elif ext in MEDICAL_REPORT_EXTENSIONS:
         reason = f"امتداد تقرير طبي (بدون مؤشر مسار): {ext}"
     elif ext in MEDICAL_IMAGE_EXTENSIONS:
@@ -360,3 +412,33 @@ def safe_ocr_image(
         )
         return None
     return ocr_func(filepath)
+
+
+# ─── external_send_allowed (سابقًا كود ميت — الآن مُنفَّذ) ────────────────────
+
+def external_send_allowed(
+    file_path: Union[str, Path],
+    *,
+    service_name: str = "external",
+) -> bool:
+    """يُعيد True إذا يُسمح بإرسال الملف إلى خدمة خارجية.
+
+    تُمنع إرسال أي ملف حساس (طبي، نظامي، اعتماد) إلى أي خدمة خارجية per
+    تعليمات المستخدم. هذه الدالة تُستدعى قبل أي عملية إرسال خارجي.
+
+    Args:
+        file_path: مسار الملف المراد التحقق منه.
+        service_name: اسم الخدمة الخارجية (لأغراض التسجيل فقط).
+
+    Returns:
+        True إذا يُسمح بالإرسال، False إذا كان الملف حساسًا ويُمنع إرساله.
+    """
+    if is_sensitive_path(file_path):
+        path = Path(file_path)
+        logger.warning(
+            f"محظور: إرسال ملف حساس إلى خدمة خارجية '{service_name}' — "
+            f"الملف: {path}. البيانات الطبية والأنظمة الحساسة محمية per "
+            f"تعليمات المستخدم: ممنوع إرسال أي بيانات طبية إلى خدمة خارجية."
+        )
+        return False
+    return True

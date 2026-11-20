@@ -20,6 +20,8 @@ PR-07 من development-roadmap-v1.0 (IFM Phase A)
 """
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
 import hashlib
 import logging
 import os
@@ -31,6 +33,30 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 logger = logging.getLogger(__name__)
+
+# renameat2(RENAME_NOREPLACE) عبر ctypes — للنقل الذرّي الذي يرفض الاستبدال
+_RENAME_NOREPLACE = 1  # RENAME_NOREPLACE per Linux renameat2(2)
+_libc = None
+_renameat2_available = False
+
+try:
+    _libc_path = ctypes.util.find_library("c")
+    if _libc_path:
+        _libc = ctypes.CDLL(_libc_path, use_errno=True)
+        # renameat2(int olddirfd, const char *oldpath, int newdirfd,
+        #           const char *newpath, unsigned int flags)
+        _libc.renameat2.restype = ctypes.c_long
+        _libc.renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        _renameat2_available = True
+except (OSError, AttributeError):
+    _libc = None
+    _renameat2_available = False
 
 
 # ─── ثوابت ─────────────────────────────────────────────────────────────────
@@ -181,47 +207,109 @@ def _resolve_collision(dst: Path, src: Path) -> tuple[Path, bool]:
 
 
 def _atomic_move(src: Path, dst: Path) -> None:
-    """نقل ذرّي: محاولة os.rename أولًا، fallback إلى copy+delete عبر الأجهزة
+    """نقل ذرّي يرفض الكتابة فوق أي موجود.
 
-    يعتمد على atomicity الخاص بـ rename على نفس نظام الملفات.
-    لو src و dst على أنظمة ملفات مختلفة، نستخدم tempfile + copy + delete.
+    يستخدم renameat2(RENAME_NOREPLACE) عبر ctypes عند التوفر (لينكس)،
+    وإلا يستخدم os.link + unlink fallback. لو الوجهة موجودة بالفعل،
+    يُرفع FileExistsError بدلاً من الاستبدال الصامت.
+
+    لا يتبع الروابط الرمزية، لا يعبر نقاط التركيب، لا يُعدّل صلاحيات.
     """
+    src_str = str(src)
+    dst_str = str(dst)
+
+    # رفض إذا كانت الوجهة مجلداً (P5)
     try:
-        os.rename(str(src), str(dst))
+        if dst.is_dir():
+            raise IsADirectoryError(
+                f"ممنوع النقل فوق مجلد موجود: {dst}"
+            )
+    except OSError:
+        pass
+
+    # renameat2(RENAME_NOREPLACE) — ذرّي ويرفض الاستبدال
+    # AT_FDCWD غير متوفر على جميع الأنظمة (مثلاً macOS) — نتحقق قبل الاستدعاء
+    _at_fdcwd = getattr(os, "AT_FDCWD", None)
+    if _renameat2_available and _libc is not None and _at_fdcwd is not None:
+        try:
+            ret = _libc.renameat2(
+                ctypes.c_int(_at_fdcwd),
+                src_str.encode("utf-8"),
+                ctypes.c_int(os.AT_FDCWD),
+                dst_str.encode("utf-8"),
+                ctypes.c_uint(_RENAME_NOREPLACE),
+            )
+            if ret == 0:
+                return
+            errno = ctypes.get_errno()
+            if errno == 17:  # EEXIST — الوجهة موجودة
+                raise FileExistsError(
+                    f"الوجهة موجودة بالفعل (RENAME_NOREPLACE): {dst}"
+                )
+            if errno == 18:  # EXDEV — أنظمة ملفات مختلفة
+                raise OSError(errno, "cross-device link not permitted", dst_str)
+            raise OSError(errno, os.strerror(errno), dst_str)
+        except (FileExistsError, OSError):
+            # Fallback إلى os.link + unlink للأنظمة التي لا تدعم renameat2
+            pass
+
+    # Fallback: hard link ثم حذف المصدر (ذرّي على نظام الملفات نفسه)
+    try:
+        os.link(str(src), str(dst))
+        src.unlink()
+        return
+    except FileExistsError:
+        raise FileExistsError(f"الوجهة موجودة بالفعل (fallback link): {dst}")
     except OSError as e:
-        # EXDEV: cross-device link not permitted
-        if getattr(e, "errno", None) == 18:  # errno.EXDEV
-            # نسخ عبر الأجهزة ثم حذف المصدر
-            with tempfile.NamedTemporaryFile(
-                prefix=".ifm_tmp_",
-                dir=str(dst.parent),
-                delete=False,
-            ) as tmp:
-                tmp_path = Path(tmp.name)
+        if getattr(e, "errno", None) == 18:  # EXDEV
+            # نسخ عبر الأجهزة إلى ملف مؤقت في مجلد الوجهة ثم rename
+            tmp_path: Optional[Path] = None
             try:
+                with tempfile.NamedTemporaryFile(
+                    prefix=".ifm_tmp_",
+                    dir=str(dst.parent),
+                    delete=False,
+                ) as tmp:
+                    tmp_path = Path(tmp.name)
                 shutil.copy2(str(src), str(tmp_path))
-                os.rename(str(tmp_path), str(dst))
+                os.replace(str(tmp_path), str(dst))  # dst مؤكد غير موجود
+                src.unlink()
+                return
             finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-            src.unlink()
-        else:
-            raise
+                if tmp_path is not None and tmp_path.exists():
+                    try:
+                        tmp_path.unlink()
+                    except OSError:
+                        pass
+        raise
 
 
 def _atomic_copy(src: Path, dst: Path) -> None:
-    """نسخ ذرّي: كتابة إلى ملف مؤقت في نفس مجلد الوجهة ثم rename"""
-    with tempfile.NamedTemporaryFile(
-        prefix=".ifm_tmp_",
-        dir=str(dst.parent),
-        delete=False,
-    ) as tmp:
-        tmp_path = Path(tmp.name)
+    """نسخ ذرّي: كتابة إلى ملف مؤقت في نفس مجلد الوجهة ثم rename.
+
+    يرفض الكتابة فوق أي موجود — لو الوجهة موجودة يُرفع FileExistsError.
+    """
+    # رفض إذا كانت الوجهة مجلداً
     try:
+        if dst.is_dir():
+            raise IsADirectoryError(
+                f"ممنوع النسخ فوق مجلد موجود: {dst}"
+            )
+    except OSError:
+        pass
+
+    tmp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=".ifm_tmp_",
+            dir=str(dst.parent),
+            delete=False,
+        ) as tmp:
+            tmp_path = Path(tmp.name)
         shutil.copy2(str(src), str(tmp_path))
-        os.rename(str(tmp_path), str(dst))
+        os.replace(str(tmp_path), str(dst))  # dst مؤكد غير موجود (تم التحقق عبر _resolve_collision)
     finally:
-        if tmp_path.exists() and tmp_path != dst:
+        if tmp_path is not None and tmp_path.exists() and tmp_path != dst:
             try:
                 tmp_path.unlink()
             except OSError:
@@ -371,10 +459,10 @@ class SafeMover:
         dst_sidecar = _sidecar_path(final_dst)
         sidecar_existed = src_sidecar.exists()
 
-        # النقل الذرّي للملف الرئيسي
+        # النقل الذرّي للملف الرئيسي (BaseException يغطي KeyboardInterrupt - P4)
         try:
             _atomic_move(src, final_dst)
-        except OSError as e:
+        except BaseException as e:
             result.success = False
             result.error = f"فشل النقل: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -384,12 +472,12 @@ class SafeMover:
         if verify:
             try:
                 result.checksum_after = compute_sha256(final_dst)
-            except OSError as e:
+            except BaseException as e:
                 # فشل التحقق — إعادة الملف إلى موضعه
                 logger.error(f"فشل حساب checksum بعد النقل: {e} — محاولة rollback")
                 try:
                     _atomic_move(final_dst, src)
-                except OSError:
+                except BaseException:
                     logger.error(f"فشل rollback من {final_dst} إلى {src}")
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النقل: {e}"
@@ -427,7 +515,7 @@ class SafeMover:
                 result.sidecar_moved = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
-            except OSError as e:
+            except BaseException as e:
                 # فشل نقل sidecar ليس فادحًا — السجل يحذّر فقط
                 logger.warning(f"فشل نقل sidecar من {src_sidecar} إلى {dst_sidecar}: {e}")
                 result.sidecar_moved = False
@@ -535,10 +623,10 @@ class SafeMover:
         dst_sidecar = _sidecar_path(final_dst)
         sidecar_existed = src_sidecar.exists()
 
-        # النسخ الذرّي
+        # النسخ الذرّي (BaseException يغطي KeyboardInterrupt - P4)
         try:
             _atomic_copy(src, final_dst)
-        except OSError as e:
+        except BaseException as e:
             result.success = False
             result.error = f"فشل النسخ: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -548,11 +636,11 @@ class SafeMover:
         if verify:
             try:
                 result.checksum_after = compute_sha256(final_dst)
-            except OSError as e:
+            except BaseException as e:
                 logger.error(f"فشل حساب checksum بعد النسخ: {e} — حذف النسخة")
                 try:
                     final_dst.unlink()
-                except OSError:
+                except BaseException:
                     pass
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النسخ: {e}"
@@ -566,7 +654,7 @@ class SafeMover:
                 )
                 try:
                     final_dst.unlink()
-                except OSError:
+                except BaseException:
                     pass
                 result.success = False
                 result.error = (
@@ -587,7 +675,7 @@ class SafeMover:
                 result.sidecar_copied = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
-            except OSError as e:
+            except BaseException as e:
                 logger.warning(f"فشل نسخ sidecar: {e}")
                 result.sidecar_copied = False
 

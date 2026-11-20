@@ -30,7 +30,7 @@ from typing import Iterable, Iterator, List, Optional
 
 from ..db.schemas import FileCategory, FileMetadata, FileRecord
 from .metadata_extractor import detect_content_type, extract_extended_metadata
-from .sensitive_barrier import block_if_sensitive, is_sensitive_path
+from .sensitive_barrier import block_if_sensitive, external_send_allowed, is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +264,9 @@ class FileInventory:
             if is_sensitive_path(file_path, skip_dirs=self.skip_dirs):
                 content_blocked = True
                 logger.debug(f"محظور استخراج المحتوى من ملف حساس: {file_path}")
+            elif not external_send_allowed(file_path, service_name="file_inventory"):
+                content_blocked = True
+                logger.debug(f"محظور استخراج المحتوى للإرسال الخارجي: {file_path}")
             else:
                 document_text = self._extract_content(file_path, ext)
                 if document_text:
