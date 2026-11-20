@@ -125,3 +125,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 - Hardened read-only organization preflight against hidden/system and nested mount traversal; manifest output now uses exclusive no-clobber publication and rejects symlinked parents.
+
+## Unreleased
+- Organization preflight now rejects symlinked source ancestors before walking directory trees.
