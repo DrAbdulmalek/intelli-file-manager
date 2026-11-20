@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - اختبارات: 23 وحدة + 8 تكامل جديدة (snippet_db, glossary, exporter,
   snippets API, rate limit, lightweight, file-serve sandbox).
 
+### أُضيف (أدوات الوكيل المحلي)
+- `src/core/tree_manifest.py` + `scripts/tree_manifest.py`: لقطة قبل نقل شجرة وتحقق بعدها
+  (يرى المخفي والمجلدات الفارغة، لا يتبع الروابط، يفشل عند الفقد أو عدم اكتمال القراءة).
+- `docs/LOCAL_AGENT_FILE_OPERATIONS.md`: بروتوكول وبرومبت للوكيل المحلي مبنيان على أخطاء لوغ WD.
+
 ### أُصلح
 - **سياسة اجتياز موحّدة** (`src/core/path_policy.py`): المخفي يُحدَّد نسبةً إلى
   جذر المسح، وتُقلَّم المجلدات المخفية والمستثناة قبل النزول فيها، ولا تُتبع
