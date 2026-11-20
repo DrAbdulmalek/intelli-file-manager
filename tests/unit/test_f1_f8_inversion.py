@@ -77,7 +77,11 @@ class TestF2_F6_SafeMover:
     """F2–F6: SafeMover يرفض الاستبدال الصامت، ويلتقط BaseException، ويرفض المجلدات."""
 
     def test_P1_no_silent_overwrite_on_existing_destination(self):
-        """الوجهة الموجودة → العملية تُرفض (لا استبدال صامت، المصدر سليم)."""
+        """الوجهة الموجودة → لا استبدال صامت: لاحقة تلقائية والوجهة الأصلية سليمة.
+
+        دلالات المشروع الموثقة (SAFE_MOVER/RuleEngine): التضارب يأخذ لاحقة (_1)
+        لا استبدالاً — والعقد الأمني هو: لا فقد بيانات ولا كتابة فوق الموجود.
+        """
         with tempfile.TemporaryDirectory() as d:
             base = Path(d)
             src = base / "source.txt"
@@ -88,9 +92,12 @@ class TestF2_F6_SafeMover:
             mover = SafeMover()
             result = mover.move(str(src), str(dst))
 
-            assert result.success is False, "النقل فوق وجهة موجودة يجب أن يُرفض"
-            assert src.exists(), "المصدر يجب أن يظل موجوداً"
-            assert dst.read_text() == "البيانات الموجودة", "الوجهة يجب أن تحتفظ بمحتواها"
+            assert result.success is True, "النقل ينجح بلائقة جديدة"
+            assert result.renamed_due_to_collision is True, "التضارب يُحل بلائقة"
+            assert result.final_path == str(base / "dest_1.txt")
+            assert dst.read_text() == "البيانات الموجودة", "الوجهة الأصلية لم تُستبدل"
+            assert (base / "dest_1.txt").read_text() == "المحتوى الأصلي", "المحتوى انتقل كاملاً"
+            assert not src.exists(), "المصدر انتقل (لا نسخة مكررة)"
 
     def test_P3_non_oserror_exception_caught_source_preserved(self):
         """استثناء غير OSError يُلتقط والمصدر يُحفظ (لا حالة تالفة)."""
@@ -134,19 +141,30 @@ class TestF2_F6_SafeMover:
             assert src.exists(), "المصدر يجب أن يظل موجوداً بعد KeyboardInterrupt"
 
     def test_P5_refuse_overwrite_on_directory(self):
-        """النقل فوق مجلد موجود يُرفض برسالة صريحة."""
+        """النقل فوق مجلد موجود لا يخفيه ولا يستبدله: المجلد سليم بمحتواه.
+
+        عيب P5 الأصلي: overwrite=True كان يخفي المجلد في .bak ويصرّح بالنجاح —
+        overwrite محظور كلياً الآن، والتضارب مع مجلد يُحل بلائقة خارج المجلد.
+        """
         with tempfile.TemporaryDirectory() as d:
             base = Path(d)
             src = base / "source.txt"
             dst_dir = base / "dest_dir"
             dst_dir.mkdir()
+            (dst_dir / "inner.txt").write_text("داخل المجلد")
             src.write_text("المحتوى الأصلي")
 
             mover = SafeMover()
             result = mover.move(str(src), str(dst_dir))
 
-            assert result.success is False, "النقل فوق مجلد يجب أن يُرفض"
-            assert src.exists(), "المصدر يجب أن يظل موجوداً"
+            assert result.success is True
+            assert result.renamed_due_to_collision is True
+            assert result.final_path == str(base / "dest_dir_1"), "الملف يأخذ لاحقة خارج المجلد"
+            assert dst_dir.is_dir(), "المجلد الأصلي لم يُخفَ ولا يُستبدل"
+            assert (dst_dir / "inner.txt").read_text() == "داخل المجلد", "محتوى المجلد سليم"
+            # overwrite=True يبقى محظوراً كلياً
+            with pytest.raises(OverwriteForbiddenError):
+                SafeMover(overwrite=True)
 
     def test_normal_move_still_works(self):
         """النقل الطبيعي يجب أن لا يزال ينجح (لا كسر للسلوك الصحيح)."""
