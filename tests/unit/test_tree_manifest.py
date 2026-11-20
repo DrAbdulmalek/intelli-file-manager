@@ -152,3 +152,20 @@ def test_cli_exit_codes_end_to_end(tree, tmp_path):
     r = run("verify", m, str(moved))
     assert r.returncode == 1 and "missing" in r.stderr
     assert run("verify", str(tmp_path / "none.jsonl"), str(moved)).returncode == 2
+
+
+
+def test_snapshot_never_overwrites_existing_manifest(tree, tmp_path):
+    m = tmp_path / "existing.jsonl"
+    original = '{"sentinel":"keep"}\n'
+    m.write_text(original, encoding="utf-8")
+    with pytest.raises(ManifestError, match="موجود مسبقاً"):
+        snapshot(tree, m)
+    assert m.read_text(encoding="utf-8") == original
+
+
+def test_snapshot_rejects_manifest_inside_scanned_root(tree):
+    m = tree / ".manifest.jsonl"
+    with pytest.raises(ManifestError, match="خارج جذر المسح"):
+        snapshot(tree, m)
+    assert not m.exists()
