@@ -131,3 +131,74 @@ def iter_files(
 
         if not recursive:
             break
+
+
+def iter_entries_reported(
+    root: PathLike,
+    *,
+    skip_hidden: bool = True,
+    skip_dirs: Iterable[str] | None = DEFAULT_SKIP_DIRS,
+    max_depth: int = 32,
+) -> Iterator[tuple[Path, os.stat_result | None, OSError | None, str | None]]:
+    """اجتياز محافظ يُبلغ عن العناصر المتخطاة وأخطاء القراءة.
+
+    يعيد (path, stat_result, error, reason). لا يتبع الروابط الرمزية،
+    ولا يعبر إلى نظام ملفات آخر، ويُظهر أسباب التخطي بدلاً من إسقاطها بصمت.
+    لا يقرأ محتوى الملفات ولا ينفذ أي تعديل.
+    """
+    base = Path(root)
+    if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
+        raise ValueError("max_depth must be a non-negative integer")
+    skipped = frozenset(skip_dirs or ())
+    try:
+        base.stat()
+    except OSError as exc:
+        yield base, None, exc, "root_unreadable"
+        return
+
+    stack: list[tuple[Path, tuple[str, ...], int]] = [(base, (), 0)]
+    while stack:
+        current, relative, depth = stack.pop()
+        try:
+            with os.scandir(current) as iterator:
+                entries = sorted(iterator, key=lambda entry: entry.name.casefold())
+        except OSError as exc:
+            yield current, None, exc, "unreadable_directory"
+            continue
+
+        child_directories: list[tuple[Path, tuple[str, ...], int]] = []
+        for entry in entries:
+            path = Path(entry.path)
+            parts = relative + (entry.name,)
+            if skip_hidden and entry.name.startswith("."):
+                yield path, None, None, "hidden"
+                continue
+            try:
+                if entry.is_symlink():
+                    info = entry.stat(follow_symlinks=False)
+                    yield path, info, None, "symlink"
+                    continue
+                info = entry.stat(follow_symlinks=False)
+                if stat.S_ISDIR(info.st_mode):
+                    # فحص حدّ التركيب للأدلة فقط — os.path.ismount يقارن st_dev
+                    # ويضلّ على overlayfs للملفات العادية (جهاز مختلف عن والدها)،
+                    # والملفات لا يُنتقل داخلها أصلاً فلا حدّ تركيب لها.
+                    if os.path.ismount(path):
+                        yield path, info, None, "mount_boundary"
+                        continue
+                    if entry.name in skipped:
+                        yield path, info, None, "excluded_directory"
+                        continue
+                    if depth < max_depth:
+                        yield path, info, None, None
+                        child_directories.append((path, parts, depth + 1))
+                    else:
+                        yield path, info, None, "depth_limit"
+                    continue
+                if stat.S_ISREG(info.st_mode):
+                    yield path, info, None, None
+                else:
+                    yield path, info, None, "unsupported_type"
+            except OSError as exc:
+                yield path, None, exc, "unreadable_entry"
+        stack.extend(reversed(child_directories))

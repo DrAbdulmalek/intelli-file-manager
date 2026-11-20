@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — AlphaCode local MCP bridge
+
+### أُضيف
+- جسر MCP محلي عبر stdio لربط AlphaCode بـ IntelliFile دون خادم شبكي أو اتصال خارجي.
+- أدوات محدودة للوكيل: حالة الاتصال، جرد بيانات وصفية فقط، والتحقق التجريبي من خطة التنظيم.
+- اجتياز موحد مُبلّغ للأخطاء ضمن Path Policy، مع عدم اتباع الروابط الرمزية أو عبور نقاط التركيب.
+- اختبارات اصطناعية لحدود الجذر المسموح، والمسارات الحساسة، والروابط الرمزية، وحدود النتائج، وبروتوكول MCP.
+- أداة `scripts/alphacode_mcp_probe.py` لاكتشاف تلميحات إعداد MCP محلياً بوضع قراءة فقط، دون تشغيل AlphaCode أو طباعة قيم الإعدادات والأسرار.
+
+### حدود السلامة
+- لا قراءة محتوى أو OCR/RAG، ولا نقل أو نسخ أو حذف أو إعادة تسمية أو Undo أو تنفيذ أوامر.
+- لا تُفعّل عمليات الكتابة قبل إغلاق عيوب SafeMover وحاجز الحساسية بمراجعة واختبارات مستقلة.
+- اتصال AlphaCode الفعلي غير مثبت بعد؛ يتطلب دعم MCP stdio في نسخة AlphaCode المحلية وتسجيل الخادم في إعداداتها.
+
+---
+
 ## [2.2.0-dev] — قصاصات التدريب + محرر OCR + المسارد الطبية
 
 ### أُضيف
@@ -33,6 +49,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ROADMAP.md خطة الإصدارات.
 - اختبارات: 23 وحدة + 8 تكامل جديدة (snippet_db, glossary, exporter,
   snippets API, rate limit, lightweight, file-serve sandbox).
+
+### أُضيف (أدوات الوكيل المحلي)
+- `src/core/tree_manifest.py` + `scripts/tree_manifest.py`: لقطة قبل نقل شجرة وتحقق بعدها
+  (يرى المخفي والمجلدات الفارغة، لا يتبع الروابط، يفشل عند الفقد أو عدم اكتمال القراءة).
+- `docs/LOCAL_AGENT_FILE_OPERATIONS.md`: بروتوكول وبرومبت للوكيل المحلي مبنيان على أخطاء لوغ WD.
+- `docs/ALPHACODE_PROTOCOL_v2.0.md`: البروتوكول الموحد للوكيل + التحسين المستمر — هدف مزدوج
+  (تنظيم آمن + تغذية هندسية راجعة)، سياسة خدمات خارجية بمستويات بيانات (الطبي الحساس والأسرار
+  لا تُرسل)، مراجعة قدرات إلزامية قبل التعديل، 10 أنواع لوغ، فصل OPERATIONAL/ENGINEERING،
+  ومهمة أولى READ_ONLY_DIAGNOSTICS بلا أي نقل.
+- `docs/OBSERVABILITY_ENGINE_DESIGN.md`: تصميم مقترح لمحرك التحسين المستمر — تحويل أخطاء
+  التشغيل إلى اختبارات regression، وخريطة فجوات صريحة على أساس `src/db/observability/` الموجود.
 
 ### أُصلح
 - **سياسة اجتياز موحّدة** (`src/core/path_policy.py`): المخفي يُحدَّد نسبةً إلى
