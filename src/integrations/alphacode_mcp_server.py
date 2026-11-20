@@ -131,12 +131,7 @@ def _inventory(root_arg: str, max_entries: int = 300) -> dict[str, Any]:
         "symlinks": 0, "mount_boundaries": 0, "unreadable": 0,
     }
     truncated = False
-    skip_dirs = SKIP_DIRS | frozenset({
-        ".git", ".ssh", ".gnupg", ".config", ".cache", ".local",
-        ".venv", "venv", "node_modules", "__pycache__", ".tox",
-        ".aws", ".azure", ".kube", "secrets", "credentials", "keyrings",
-        "medical", "patient", "clinical",
-    })
+    skip_dirs = SKIP_DIRS
     for path, info, error, reason in iter_entries_reported(
         root, skip_hidden=True, skip_dirs=skip_dirs, max_depth=32
     ):
@@ -180,7 +175,6 @@ def _inventory(root_arg: str, max_entries: int = 300) -> dict[str, Any]:
             truncated = True
     files.sort(key=lambda item: item["relative_path"].casefold())
     return {
-        "root": str(root),
         "mode": "READ_ONLY",
         "content_read": False,
         "files_returned": len(files),
@@ -286,6 +280,7 @@ TOOLS = [
         "name": "intellifile.status",
         "description": "Return local integration health and the enforced read-only capability boundary.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     },
     {
         "name": "intellifile.inventory",
@@ -299,6 +294,7 @@ TOOLS = [
             "required": ["root"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     },
     {
         "name": "intellifile.validate_plan",
@@ -326,6 +322,7 @@ TOOLS = [
             "required": ["root", "items"],
             "additionalProperties": False,
         },
+        "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     },
 ]
 
