@@ -6,6 +6,19 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ---
 
+## 2026-11-20 — AlphaCode local MCP bridge (feature branch)
+
+- Implemented `src/integrations/alphacode_mcp_server.py`: local stdio MCP server using the 2025-11-25 lifecycle; no TCP/HTTP listener and no network client.
+- Exposed only three tools: status, metadata-only inventory, and dry-run plan validation. No content reads, OCR/RAG, shell, file mutation, delete, overwrite, or undo tools.
+- Added `iter_entries_reported` to shared Path Policy to report hidden/excluded paths, symlinks, mount boundaries, depth limits, and read errors without following links or reading file contents.
+- Added synthetic tests for allowlist boundaries, hidden/sensitive exclusions, symlinks, truncation, plan validation, MCP lifecycle, and stdio framing.
+- Added `docs/ALPHACODE_MCP_INTEGRATION.md` with local MCP client configuration instructions.
+- Added `scripts/alphacode_mcp_probe.py`, a read-only device-side discovery tool that reports only launcher executable basenames and MCP configuration key names, never values or secrets.
+- **Not verified:** whether the installed AlphaCode build exposes an MCP stdio client or its exact configuration location. The device-side client registration and end-to-end connection remain blocked until tested on the device.
+- No user files were accessed; no operational logs or personal paths were committed. No changes to `main`; PR remains Draft pending CI and review.
+
+---
+
 ## 📋 Current Execution Status
 
 | Phase | Status | Agent | Start Date | Completion Date |
@@ -76,6 +89,35 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
+<<<<<<< HEAD
+### 2026-11-20 - Claude (protocol v2.0 merge; docs only)
+- Recreated (previous local-only commit was lost with a sandbox clone) the merged
+  AlphaCode + IntelliFile Continuous Improvement Protocol v2.0 in
+  `docs/ALPHACODE_PROTOCOL_v2.0.md`: dual goal (safe file ops + engineering
+  feedback), external-AI policy with 5 data levels (SENSITIVE_MEDICAL and
+  SECURITY_SECRETS never leave the machine), 20-question capability audit with
+  PROVEN/UNPROVEN/CONTRADICTED labels, 10 log types (A–J), OPERATIONAL vs
+  ENGINEERING log separation, READ_ONLY_DIAGNOSTICS first mission with stage gate.
+- Added `docs/OBSERVABILITY_ENGINE_DESIGN.md`: proposed engine structure with an
+  explicit existing-vs-proposed mapping onto `src/db/observability/` (nothing
+  new claimed as existing), findings→regression-tests table, GitHub content
+  separation policy.
+- Docs only — no code or file-operation changes, consistent with the protocol's
+  own stage gate. P0 implementation lives on `feat/p0-safety-hardening`.
+
+### 2026-11-20 - Claude (independent engineering review; branch only)
+- Reviewed a sanitized operational report and identified inconsistent inventory claims,
+  filename-only classification, unverified bulk-move completion, and rollback planned
+  after execution. No operational log or user file inventory is included here.
+- Added read-only `tree_manifest` snapshot/verify tooling and
+  `docs/LOCAL_AGENT_FILE_OPERATIONS.md`; this tooling does not execute moves.
+- Kept directory movement deferred: a manifest is evidence, not a transaction or
+  a race-safe mover. The protocol now explicitly prohibits raw `os.rename` /
+  `shutil.move` directory operations until a dedicated no-replace implementation
+  passes adversarial review.
+- CI status is recorded against the exact branch head in the pull request; no
+  claim of local execution is made.
+=======
 ### 2026-11-20 - GPT-6 (review of uploaded IntelliFile patch; regression-only follow-up)
 - Reviewed the uploaded `intellifile-path-policy.patch` against current `main`.
 - Confirmed the shared path policy, traversal migrations, emergent-category
@@ -93,6 +135,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
   reviewed SafeMover path; no shell execution was added.
 - Validation: changes are committed to a review branch only. No local pytest
   execution is claimed; GitHub Actions must validate the PR before merge.
+>>>>>>> origin/main
 
 ### 2026-11-20 - GPT-6 (independent implementation; branch only)
 - Created branch `fix/unified-path-policy-shell-plan-2026-11-20`; no changes to `main`.

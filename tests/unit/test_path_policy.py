@@ -4,7 +4,7 @@ import os
 import pytest
 from pathlib import Path
 
-from src.core.path_policy import iter_files, is_hidden_relative, relative_parts
+from src.core.path_policy import iter_entries_reported, iter_files, is_hidden_relative, relative_parts
 
 
 def touch(path: Path, content: str = "x") -> Path:
@@ -155,3 +155,61 @@ def test_symlinked_ancestor_of_scan_root_is_rejected(tmp_path):
 
     with pytest.raises(OSError, match="رابط رمزي"):
         list(iter_files(linked_parent / "selected"))
+
+
+def test_reported_traversal_reports_hidden_and_excluded_entries(tmp_path):
+    touch(tmp_path / "visible.txt")
+    touch(tmp_path / ".hidden.txt")
+    touch(tmp_path / ".git" / "ignored.txt")
+    touch(tmp_path / "node_modules" / "ignored.js")
+
+    entries = list(iter_entries_reported(tmp_path))
+    reasons = {path.name: reason for path, _info, _error, reason in entries}
+
+    assert reasons[".hidden.txt"] == "hidden"
+    assert reasons[".git"] == "hidden"
+    assert reasons["node_modules"] == "excluded_directory"
+    assert any(path.name == "visible.txt" and reason is None for path, _info, _error, reason in entries)
+
+
+def test_reported_traversal_never_follows_symlinks(tmp_path):
+    target = touch(tmp_path / "outside" / "secret.txt")
+    root = tmp_path / "root"
+    root.mkdir()
+    try:
+        (root / "linked").symlink_to(target)
+    except (OSError, NotImplementedError):
+        import pytest
+        pytest.skip("symlinks are not supported in this environment")
+
+    entries = list(iter_entries_reported(root))
+    assert any(path.name == "linked" and reason == "symlink" for path, _info, _error, reason in entries)
+    assert not any(path.name == "secret.txt" for path, _info, _error, reason in entries)
+
+
+def test_reported_traversal_marks_depth_limit_without_duplicate_directory(tmp_path):
+    touch(tmp_path / "one" / "two" / "three.txt")
+
+    entries = list(iter_entries_reported(tmp_path, max_depth=1))
+    two_entries = [entry for entry in entries if entry[0].name == "two"]
+
+    assert len(two_entries) == 1
+    assert two_entries[0][3] == "depth_limit"
+
+
+
+def test_reported_traversal_marks_mount_boundaries(tmp_path, monkeypatch):
+    touch(tmp_path / "mounted" / "inside.txt")
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        os.path,
+        "ismount",
+        lambda path: Path(path).name == "mounted" or real_ismount(path),
+    )
+
+    entries = list(iter_entries_reported(tmp_path))
+    mounted = [entry for entry in entries if entry[0].name == "mounted"]
+
+    assert len(mounted) == 1
+    assert mounted[0][3] == "mount_boundary"
+    assert not any(entry[0].name == "inside.txt" for entry in entries)
