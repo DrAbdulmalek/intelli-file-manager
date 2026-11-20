@@ -10,6 +10,9 @@
   - نقل ملف مع تعارض الوجهة
 """
 import os
+import sys
+import time
+import types
 from pathlib import Path
 
 import pytest
@@ -107,24 +110,42 @@ class TestRenameFile:
 class TestDeleteFile:
     """اختبار دالة حذف الملفات"""
 
-    def test_delete_file_permanent(self, tmp_path, sample_files):
-        """يتحقق من حذف ملف بشكل نهائي (بدون سلة المحذوفات)
+    def test_delete_file_to_trash(self, tmp_path, sample_files):
+        """يتحقق من نقل ملف إلى سلة المحذوفات (بدلاً من الحذف النهائي)
 
         يختبر:
           - نجاح العملية (success=True)
-          - عدم وجود الملف بعد الحذف
+          - عدم وجود الملف في الموقع الأصلي بعد النقل
+          - تسجيل العملية في السجل
         """
         config = Config(database_path=str(tmp_path / "intellifile"))
         handler = FileHandler(config)
 
-        # إنشاء ملف مؤقت للحذف (للتأكد من عدم حذف الملف الأصلي)
+        # إنشاء ملف مؤقت للنقل إلى سلة المحذوفات
         test_file = tmp_path / "to_delete.txt"
-        test_file.write_text("سيتم حذف هذا الملف")
+        test_file.write_text("سيتم نقله إلى سلة المحذوفات")
 
-        result = handler.delete_file(str(test_file), use_trash=False)
+        result = handler.delete_file(str(test_file), use_trash=True)
 
         assert result["success"] is True
         assert not test_file.exists()
+        assert len(handler.history) == 1
+        assert handler.history[0]["type"] == "delete"
+
+    def test_delete_file_permanent_is_forbidden(self, tmp_path):
+        """يتحقق من أن الحذف النهائي محظور وفق تعليمات المستخدم"""
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+
+        test_file = tmp_path / "to_delete.txt"
+        test_file.write_text("محاولة حذف نهائي")
+
+        result = handler.delete_file(str(test_file), use_trash=False)
+
+        assert result["success"] is False
+        assert "محظور" in result["error"]
+        # الملف يجب أن يبقى موجوداً
+        assert test_file.exists()
 
     def test_delete_nonexistent_file(self, tmp_path):
         """يتحقق من أن حذف ملف غير موجود يُرجع خطأ"""
@@ -144,10 +165,10 @@ class TestDeleteFile:
         test_file = tmp_path / "history_test.txt"
         test_file.write_text("test")
 
-        handler.delete_file(str(test_file), use_trash=False)
+        handler.delete_file(str(test_file), use_trash=True)
 
         assert len(handler.history) == 1
-        assert handler.history[0]["type"] in ("delete", "delete_permanent")
+        assert handler.history[0]["type"] == "delete"
 
 
 class TestCreateCategoryFolders:
@@ -376,3 +397,182 @@ class TestMoveFileWithConflict:
         dest = Path(result["dest"])
         assert dest.exists()
         assert dest.parent.name == "مستندات"
+
+
+class TestRenameFileSecurity:
+    """حاجز أمني: منع الهروب من المجلد عبر مسار في new_name (مراجعة كيمي — ثغرة حرجة)"""
+
+    def test_rename_rejects_parent_traversal(self, tmp_path, sample_files):
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+        target = Path(sample_files["txt_file"])
+
+        result = handler.rename_file(str(target), "../../evil.txt")
+
+        assert result["success"] is False
+        assert "صالح" in result["error"]
+        # لم يُنقل الملف ولم يُنشأ شيء خارج المجلد
+        assert target.exists()
+        assert not (tmp_path / "evil.txt").exists()
+
+    def test_rename_rejects_path_components(self, tmp_path, sample_files):
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+
+        for bad in ("sub/ok.txt", "a/b/c.txt", "./x.txt", "..\\evil.txt"):
+            result = handler.rename_file(sample_files["txt_file"], bad)
+            assert result["success"] is False, bad
+            assert "صالح" in result["error"]
+        assert Path(sample_files["txt_file"]).exists()
+
+    def test_rename_rejects_empty_name(self, tmp_path, sample_files):
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+
+        result = handler.rename_file(sample_files["txt_file"], "   ")
+
+        assert result["success"] is False
+        assert Path(sample_files["txt_file"]).exists()
+
+    def test_rename_rejects_existing_target(self, tmp_path, sample_files):
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+        existing = tmp_path / "taken.txt"
+        existing.write_text("مشغول")
+
+        result = handler.rename_file(sample_files["txt_file"], "taken.txt")
+
+        assert result["success"] is False
+        assert "بنفس الاسم" in result["error"]
+        assert Path(sample_files["txt_file"]).exists()
+
+    def test_rename_still_works_with_simple_name(self, tmp_path, sample_files):
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+
+        result = handler.rename_file(sample_files["txt_file"], "renamed.txt")
+
+        assert result["success"] is True
+        assert Path(result["new_path"]).name == "renamed.txt"
+
+
+class TestBackupPolicy:
+    """سياسة النسخ الاحتياطي: حد حجم + مدة احتفاظ (مراجعة كيمي — منع امتلاء القرص)"""
+
+    def test_backup_skips_oversized_files(self, tmp_path, monkeypatch):
+        from src.core import file_handler as fh_mod
+        monkeypatch.setattr(fh_mod, "BACKUP_MAX_SIZE", 10)  # حد مؤقت: 10 بايت
+
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+        big = tmp_path / "big.bin"
+        big.write_bytes(b"x" * 100)
+
+        # الواجهة الجديدة (#66): الحذف النهائي محظور — نختبر النسخ الاحتياطي مباشرة
+        backup = handler._backup_file(big)
+
+        assert backup is None
+        # لا نسخ احتياطي للملف الكبير — منع تضخم مجلد backups
+        assert list(handler._backup_dir.glob("*")) == []
+
+    def test_backup_keeps_small_files(self, tmp_path, monkeypatch):
+        from src.core import file_handler as fh_mod
+        monkeypatch.setattr(fh_mod, "BACKUP_MAX_SIZE", 1024)
+
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+        small = tmp_path / "small.txt"
+        small.write_text("بيانات", encoding="utf-8")
+
+        backup = handler._backup_file(small)
+
+        assert backup is not None
+        backups = list(handler._backup_dir.glob("small*"))
+        assert len(backups) == 1
+
+    def test_cleanup_old_backups_by_ttl(self, tmp_path):
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+        handler._backup_dir.mkdir(parents=True, exist_ok=True)
+
+        old = handler._backup_dir / "old.txt"
+        old.write_text("قديم")
+        old_ts = time.time() - 30 * 86400  # 30 يوماً
+        os.utime(old, (old_ts, old_ts))
+
+        fresh = handler._backup_dir / "fresh.txt"
+        fresh.write_text("حديث")
+
+        removed = handler._cleanup_old_backups(max_age_days=7)
+
+        assert removed == 1
+        assert not old.exists()
+        assert fresh.exists()
+
+
+class TestDeleteToTrash:
+    """الحذف إلى السلة عبر send2trash مع خطة بديلة XDG (مراجعة كيمي — توافق كل الأنظمة)"""
+
+    def _install_stub(self, monkeypatch):
+        calls = {}
+
+        def fake_send2trash(path):
+            calls["path"] = path
+            Path(path).unlink()  # send2trash يزيل الملف من مكانه فعلياً
+
+        stub = types.ModuleType("send2trash")
+        stub.send2trash = fake_send2trash
+        monkeypatch.setitem(sys.modules, "send2trash", stub)
+        return calls
+
+    def test_delete_uses_send2trash_when_available(self, tmp_path, monkeypatch):
+        calls = self._install_stub(monkeypatch)
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+        f = tmp_path / "with_lib.txt"
+        f.write_text("بيانات", encoding="utf-8")
+
+        result = handler.delete_file(str(f), use_trash=True)
+
+        assert result["success"] is True
+        assert calls["path"] == str(f)
+        assert not f.exists()
+
+    def test_delete_falls_back_without_send2trash(self, tmp_path, monkeypatch):
+        # None في sys.modules يجعل `from send2trash import ...` ترمي ImportError
+        monkeypatch.setitem(sys.modules, "send2trash", None)
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+        f = tmp_path / "no_lib.txt"
+        f.write_text("بيانات", encoding="utf-8")
+
+        result = handler.delete_file(str(f), use_trash=True)
+
+        assert result["success"] is True
+        assert not f.exists()
+        # الخطة البديلة: المسار القياسي XDG على لينكس
+        assert handler.history[0]["dest"].startswith(
+            str(Path.home() / ".local/share/Trash/files")
+        )
+
+def test_scan_directory_does_not_enter_hidden_subtrees(tmp_path):
+    """لا يدخل المسح شجرة مخفية حتى لو كانت أسماء الملفات داخلها ظاهرة."""
+    visible = tmp_path / "visible.txt"
+    visible.write_text("visible")
+    hidden = tmp_path / ".ssh" / "id_rsa.txt"
+    hidden.parent.mkdir()
+    hidden.write_text("must not be scanned")
+
+    found = {item["path"] for item in FileHandler().scan_directory(str(tmp_path))}
+    assert found == {str(visible)}
+
+
+def test_scan_directory_allows_explicit_hidden_root(tmp_path):
+    """اختيار المستخدم لجذر مخفي صراحةً لا يعني تجاهل محتوياته."""
+    root = tmp_path / ".alphacode" / "scratch"
+    root.mkdir(parents=True)
+    visible = root / "visible.txt"
+    visible.write_text("selected root")
+
+    found = {item["path"] for item in FileHandler().scan_directory(str(root))}
+    assert found == {str(visible)}

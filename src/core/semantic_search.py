@@ -2,7 +2,10 @@
 import json
 import logging
 from pathlib import Path
+from .sensitive_barrier import is_sensitive_path
 from typing import List, Tuple
+
+from .path_policy import iter_files
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +59,11 @@ class SemanticSearchEngine:
             return False
 
     def _extract_text(self, filepath: str) -> str:
-        """استخراج نص من الملف"""
+        """استخراج نص من الملف — محظور على الملفات الحساسة (حاجز الحساسية)"""
+        # حاجز الحساسية: لا يُقرأ محتوى الملفات الحساسة ولا يُفهرس (P0/F1)
+        if is_sensitive_path(filepath):
+            logger.warning(f"محظور: استخراج نص من ملف حساس: {filepath}")
+            return ""
         path = Path(filepath)
         ext = path.suffix.lower()
 
@@ -83,19 +90,18 @@ class SemanticSearchEngine:
 
         dir_path = Path(directory)
         count = 0
-        for item in dir_path.rglob("*"):
-            if item.is_file() and not item.name.startswith("."):
-                try:
-                    text = self._extract_text(str(item))
-                    # Enrich with glossary terms
-                    text = self._enrich_with_glossary(text)
-                    if text.strip():
-                        emb = self._model.encode(text)
-                        self._embeddings[str(item)] = emb.tolist()
-                        self._file_texts[str(item)] = text
-                        count += 1
-                except Exception:
-                    continue
+        for item in iter_files(dir_path):
+            try:
+                text = self._extract_text(str(item))
+                # Enrich with glossary terms
+                text = self._enrich_with_glossary(text)
+                if text.strip():
+                    emb = self._model.encode(text)
+                    self._embeddings[str(item)] = emb.tolist()
+                    self._file_texts[str(item)] = text
+                    count += 1
+            except Exception:
+                continue
 
         logger.info(f"تم فهرسة {count} ملف من {directory}")
         return count

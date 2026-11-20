@@ -2,7 +2,12 @@ from setuptools import setup, find_packages
 
 setup(
     name="intellifile",
-    version="2.2.0",
+    # Pre-release marker: work described in CHANGELOG [2.2.0] is complete on
+    # main but no v2.2.0 git tag has been cut yet. PEP 440 dev suffix keeps
+    # pip / installers honest about this state. Tag v2.2.0 and bump to
+    # "2.2.0" only when the release checklist (docs/RELEASE_CHECKLIST_v2.2.0.md)
+    # is fully ticked.
+    version="2.2.0.dev0",
     description="تطبيق إدارة الملفات الذكي المحلي — Hybrid Search + Smart Tags + File Copilot + NER",
     author="Dr. Abdulmalek",
     packages=find_packages(),
@@ -21,7 +26,7 @@ setup(
         "ollama>=0.1.0",
         "chromadb>=0.4.0",
         "langchain>=0.2.0",
-        "sentence-transformers>=2.2.0",
+        "sentence-transformers>=6.3.0",
         "numpy>=1.24.0",
         "scipy>=1.10.0",
         "rank-bm25>=0.2.2",
@@ -49,8 +54,27 @@ setup(
         "pydantic>=2.0.0",
         "rich>=13.0.0",
         "rapidfuzz>=3.0.0",
+
+        # سلة المحذوفات المتوافقة مع XDG/Windows/macOS (مراجعة كيمي)
+        "send2trash>=1.8.2",
     ],
     extras_require={
+        # الذكاء الاصطناعي: التضمينات والبحث الدلالي والرسوم
+        "ai": [
+            "ollama>=0.1.0",
+            "chromadb>=0.4.0",
+            "langchain>=0.2.0",
+            "sentence-transformers>=6.3.0",
+            "scipy>=1.10.0",
+            "rank-bm25>=0.2.2",
+            "plotly>=5.18.0",
+            "pandas>=2.0.0",
+        ],
+        # ⚠️ مربوط بمستودع git خارجي — اختياري فقط حتى لا يكسر أي حذف/إعادة
+        # تسمية للمستودع البعيد (مراجعة كيمي: لا يجعل التثبيت الأساسي هشاً).
+        "ocr-core": [
+            "marathon-ocr-core[tesseract] @ git+https://github.com/DrAbdulmalek/ocr-core.git@v0.5.0",
+        ],
         "voice": [
             "pyttsx3>=2.90",
             "SpeechRecognition>=3.10.0",

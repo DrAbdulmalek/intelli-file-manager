@@ -7,7 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.2.0] — 2026-07-25
+## [2.2.0-dev] — قصاصات التدريب + محرر OCR + المسارد الطبية
+
+### أُضيف
+- **نظام القصاصات التدريبية** (`src/db/snippet_db.py` + `/api/snippets/*`):
+  SQLite مع سير عمل كامل (إنشاء/تحرير مربع/اعتماد/رفض/حذف) لإنتاج بيانات
+  تدريب OCR بشرح بشري — تصحيح كلمة/سطر/فقرة.
+- **محرر OCR الويب** (`web/` → صفحة `/edit-ocr`): محرر مربعات canvas
+  (رسم/سحب/تحجيم بـ8 مقابض/حذف) + تلوين ثقة (أخضر/أصفر/أحمر/رمادي=غير
+  معروفة) + تحرير نص RTL + اقتراحات المسرد الطبي — الأدوات المرجعية
+  (labelme/dots-ocr-editor/ScribeArabic) دُرست بنيويًا فقط.
+- **خدمة المسارد الطبية** (`src/core/glossary_service.py` +
+  `/api/glossary/suggest`): 741 زوجًا طبيًا عربي-إنجليزي مدمجًا من مشروع
+  `arabic-medical-glossary` (تنظيف من مسرد شامل + مصطلحات عالية الثقة)
+  مع تطبيع عربي (تشكيل/همزات) وقابلية الاستبدال بمسرد 21k عبر
+  `INTELLIFILE_GLOSSARY_PATH`.
+- **تصدير HuggingFace** (`src/services/hf_exporter.py` +
+  `scripts/export_training_data.py`): JSONL للقصاصات المعتمدة + رفع
+  صريح يتطلب توكنًا صريحًا (لا اعتمادات ضمنية أبدًا).
+- **وضع خفيف بلا LLM** (`INTELLIFILE_LIGHTWEIGHT=1`): يعطل Ollama/
+  التضمينات الدلالية؛ بحث BM25 وتصنيف بالقواعد فقط.
+- **Rate limiting** على /api/* (نافذة منزلقة داخلية بلا تبعيات جديدة،
+  قابل للضبط عبر INTELLIFILE_RATE_LIMIT/WINDOW).
+- **نقطة `/api/file/serve`** لخدمة صور القصاصات داخل الـsandbox الحالي.
+- ROADMAP.md خطة الإصدارات.
+- اختبارات: 23 وحدة + 8 تكامل جديدة (snippet_db, glossary, exporter,
+  snippets API, rate limit, lightweight, file-serve sandbox).
+
+### أُصلح
+- **سياسة اجتياز موحّدة** (`src/core/path_policy.py`): المخفي يُحدَّد نسبةً إلى
+  جذر المسح، وتُقلَّم المجلدات المخفية والمستثناة قبل النزول فيها، ولا تُتبع
+  الروابط الرمزية للمجلدات أو الملفات. استُخدمت في المصنّف والوكيل ومدير الملفات
+  والوسوم والبحث الهجين والدلالي ومحرك التصنيف الناشئ.
+- **التصنيف الناشئ**: معالجة عدم تطابق مفتاح الإحصاء (`extensions` مقابل
+  `extension_distribution`) الذي كان يمنع توليد التصنيفات المقترحة.
+### ملاحظات
+- ثقة 0.0 تعني "غير معروفة" (سياسة ocr-core) — لا تُختلق درجات أبدًا.
+- الرفع إلى HuggingFace منفصل صريح عن التصدير المحلي.
+
+## [Unreleased] — 2.2.0-dev
+
+> The work below is merged to `main` but **not yet tagged `v2.2.0`**.
+> The latest released tag is `v2.1.0`. The `2.2.0.dev0` version in
+> `setup.py` reflects this pre-release state. Tag `v2.2.0` only after
+> completing `docs/RELEASE_CHECKLIST_v2.2.0.md`.
 
 ### Desktop UX (Phase C Complete)
 
@@ -95,3 +138,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 - Moved marathon-ocr-core from base requirements to an opt-in, commit-pinned OCR integration requirements file.
+- Hardened read-only organization preflight against hidden/system and nested mount traversal; manifest output now uses exclusive no-clobber publication and rejects symlinked parents.
+
+## Unreleased
+- Organization preflight now rejects symlinked source ancestors before walking directory trees.
+
+## Unreleased
+- Added a regression test for fail-closed manifest publication when atomic no-clobber linking is unavailable.
+- Removed raw LOGS references and identifying operational details from the safe-organization preflight proposal.
+- Redacted personal filesystem paths and detailed operational inventory data from the organization-lessons document.
+- Redacted private log filenames and credential-incident details from the independent review document.
+- SafeMover now fails closed when atomic no-clobber publication is unavailable and rejects symlink path components and non-regular sources; added regression tests for unsafe fallback and symlink cases.
+- Hardened FileHandler scans to use the shared path policy; permit explicitly selected mount roots while pruning nested mounts; fail closed on mount-inspection errors; exclude .gnupg; and add hidden-tree/symlink regression coverage.
+- Scan-root validation now rejects symlinked ancestor components, with regression coverage.

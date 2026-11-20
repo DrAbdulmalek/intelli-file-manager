@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Union
@@ -47,8 +46,20 @@ class UndoLog:
         """
         self.path = Path(path) if path else None
         self.entries: List[UndoEntry] = []
+        self._safe_mover = None  # SafeMover إلزامي للتراجع (لا shutil مباشر)
         if self.path and self.path.exists():
             self.load()
+
+    @property
+    def safe_mover(self):
+        """يُرجع SafeMover مشترك للتراجع (يُنشأ عند الطلب).
+
+        move_sidecar=False لأن UndoLog يدير الـsidecar صراحة في منطقه القائم.
+        """
+        if self._safe_mover is None:
+            from .safe_mover import SafeMover
+            self._safe_mover = SafeMover(verify_checksum=True, move_sidecar=False)
+        return self._safe_mover
 
     # ─── الواجهة الأساسية ───────────────────────────────────────────────
 
@@ -183,27 +194,52 @@ class UndoLog:
 
         dst.parent.mkdir(parents=True, exist_ok=True)
 
-        # نقل الملف + sidecar (إن وُجد في الوجهة)
+        # نقل الملف عبر SafeMover (بوابة واحدة — التضارب يأخذ لاحقة، لا استبدال صامت)
         from .rule_engine import _sidecar_path
         src_sidecar = _sidecar_path(str(src))
-        shutil.move(str(src), str(dst))
+        result = self.safe_mover.move(str(src), str(dst))
+        if not result.success:
+            raise RuntimeError(f"فشل التراجع عن النقل عبر SafeMover: {result.error}")
         if src_sidecar.exists():
             dst_sidecar = _sidecar_path(str(dst))
-            if dst_sidecar.exists():
-                # دمج (نادر)
-                dst_sidecar.unlink()
-            shutil.move(str(src_sidecar), str(dst_sidecar))
+            # لا حذف صامت لشاغل الـsidecar (جولة DeepSeek 11 — كان
+            # dst_sidecar.unlink() يمسح بيانات شاغل): عقد «اللاحقة لا
+            # الاستبدال» يُطبق هنا أيضاً — SafeMover يتضارب باللاحقة
+            result_sc = self.safe_mover.move(str(src_sidecar), str(dst_sidecar))
+            if not result_sc.success:
+                raise RuntimeError(f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error}")
 
     def _rollback_copy(self, entry: UndoEntry) -> None:
-        """عكس النسخ: حذف النسخة المنشأة (مع sidecar)"""
+        """عكس النسخ: حذف النسخة المنشأة (مع sidecar)
+
+        استثناء معتمد موثق (جولة DeepSeek 11): الحذف هنا مباشر (unlink)
+        لأن النسخة أُنشئت بواسطة العملية نفسها المراد التراجع عنها لحظة
+        قليلة مضت — لا بيانات سابقة على القرص تُمس بهذا الحذف. الحارس:
+        إن عُدّل الملف بعد نسخه (checksum يخالف المسجل في القيد) يُرفض
+        التراجع صراحةً حمايةً لتعديلات المستخدم اللاحقة.
+        """
         if not entry.file_path_after:
             raise ValueError("file_path_after مفقود لعملية copy")
         copied = Path(entry.file_path_after)
-        if copied.exists():
-            copied.unlink()
-        else:
+        if not copied.exists():
             logger.warning(f"النسخة المنسوخة غير موجودة: {copied}")
-        # حذف sidecar المنسوخ إن وُجد
+        else:
+            # حارس التعديل اللاحق: checksum_after يسجله _exec_copy عند النسخ
+            recorded = getattr(entry, "checksum_after", None)
+            if recorded and copied.is_file():
+                from .safe_mover import compute_sha256
+                try:
+                    current = compute_sha256(copied)
+                except OSError as e:
+                    raise RuntimeError(f"تعذر التحقق من النسخة قبل التراجع: {e}")
+                if current != recorded:
+                    raise RuntimeError(
+                        "رفض التراجع عن النسخ: عُدّل الملف بعد إنشائه — "
+                        f"حماية من فقد تعديلات المستخدم: {copied}"
+                    )
+            copied.unlink()
+        # حذف sidecar المنسوخ إن وُجد (جزء من النسخة المنشأة نفسها —
+        # يخضع لنفس الاستثناء المعتمد أعلاه)
         from .rule_engine import _sidecar_path
         copied_sidecar = _sidecar_path(str(copied))
         if copied_sidecar.exists():
