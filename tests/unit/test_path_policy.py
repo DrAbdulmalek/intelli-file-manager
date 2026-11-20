@@ -122,3 +122,18 @@ def test_file_agent_duplicate_scan_does_not_enter_hidden_trees(tmp_path):
     touch(tmp_path / "visible.txt", "same-content")
     touch(tmp_path / ".git" / "objects" / "hidden-copy.txt", "same-content")
     assert FileAgent().detect_duplicates(str(tmp_path)) == []
+
+
+
+def test_symlinked_ancestor_of_scan_root_is_rejected(tmp_path):
+    real_parent = tmp_path / "real-parent"
+    root = real_parent / "selected"
+    touch(root / "visible.txt")
+    linked_parent = tmp_path / "linked-parent"
+    try:
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    with pytest.raises(OSError, match="رابط رمزي"):
+        list(iter_files(linked_parent / "selected"))
