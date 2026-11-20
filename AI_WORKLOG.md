@@ -489,3 +489,10 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+## 2026-11-20 — GPT-6 security follow-up (PR #48)
+- Changed session handoff to local-only by default; Mem0 cloud upload now requires explicit --mem0.
+- Handoff output is created exclusively with mode 0600, rejects existing targets, symlinked path components, and output paths outside the selected project directory.
+- Remote Mem0 integration test now refuses to run unless --confirm-remote is explicitly supplied.
+- Updated AGENTS.md workflow guidance and added unit tests for no-clobber output, symlink rejection, project-root confinement, and remote-test opt-in.
+- No CI/local test result is claimed for the updated head.
