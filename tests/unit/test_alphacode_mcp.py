@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 import src.integrations.alphacode_mcp_server as bridge
+from scripts.alphacode_mcp_probe import inspect as inspect_alphacode
 from src.integrations.alphacode_mcp_server import (
     IntegrationError,
     _inventory,
@@ -273,3 +274,23 @@ def test_inventory_has_a_hard_scan_limit(tmp_path, monkeypatch):
     assert result["scan_complete"] is False
     assert result["truncated"] is True
     assert result["counts"]["files"] == 2
+
+
+
+def test_local_probe_reports_mcp_keys_without_configuration_values(tmp_path):
+    config_dir = tmp_path / ".alphacode"
+    config_dir.mkdir()
+    secret_value = "never-print-this-token"
+    (config_dir / "settings.json").write_text(
+        json.dumps({"mcpServers": {"intellifile": {"token": secret_value}}}),
+        encoding="utf-8",
+    )
+
+    report = inspect_alphacode(tmp_path)
+    rendered = json.dumps(report, ensure_ascii=False)
+
+    assert report["mode"] == "READ_ONLY_DISCOVERY"
+    assert report["mcp_configuration_hint_found"] is True
+    assert report["mcp_config_hints"][0]["mcp_key_names_only"] == ["mcpServers"]
+    assert secret_value not in rendered
+    assert str(tmp_path) not in rendered
