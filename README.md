@@ -200,6 +200,10 @@ source venv/bin/activate
 # 3. تثبيت متطلبات Python
 pip install -r requirements.txt
 
+# OCR Central Engine (اختياري فقط؛ يحتاج جلب الحزمة من GitHub)
+# للبيئات غير المتصلة: جهّز wheel محلياً ثم ثبّته من wheelhouse بدلاً من هذا الأمر.
+pip install -r requirements-ocr-core.txt
+
 # 4. تثبيت Ollama وتحميل النماذج (اختياري)
 curl -fsSL https://ollama.com/install.sh | sh
 ollama pull llama3.2
