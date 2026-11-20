@@ -1,5 +1,7 @@
 """مدير الملفات - نقل ونسخ وحذف وإعادة تسمية"""
+import os
 import shutil
+import time
 import logging
 from pathlib import Path
 from typing import Optional, List
@@ -8,6 +10,12 @@ from .config import Config
 from .path_policy import iter_files
 
 logger = logging.getLogger(__name__)
+
+# سياسة النسخ الاحتياطي (مراجعة كيمي — المرحلة 1):
+# ما فوق BACKUP_MAX_SIZE لا يُنسخ احتياطياً (نعتمد سلة المحذوفات)،
+# والنسخ الأقدم من BACKUP_MAX_AGE_DAYS يُحذف تلقائياً لمنع امتلاء القرص.
+BACKUP_MAX_SIZE = 100 * 1024 * 1024  # 100MB
+BACKUP_MAX_AGE_DAYS = 7
 
 
 class FileHandler:
@@ -67,11 +75,7 @@ class FileHandler:
 
         try:
             if use_trash:
-                trash_dir = Path.home() / ".local/share/Trash/files"
-                trash_dir.mkdir(parents=True, exist_ok=True)
-                trash_name = f"{file_path.name}_{datetime.now().timestamp()}"
-                trash_path = trash_dir / trash_name
-                shutil.move(str(file_path), str(trash_path))
+                trash_path = self._send_to_trash(file_path)
                 self._record_action("delete", str(file_path), str(trash_path), backup_path)
             else:
                 file_path.unlink()
@@ -88,7 +92,25 @@ class FileHandler:
         if not file_path.exists():
             return {"success": False, "error": "الملف غير موجود"}
 
+        # Security: الاسم يجب أن يكون اسماً بسيطاً — منع الهروب من المجلد
+        # عبر مسارات مثل "../../evil" (مراجعة كيمي — ثغرة حرجة).
+        # ملاحظة: نرفض "\\" حتى على لينكس لأنها فاصل مسارات على Windows،
+        # ولا مبرر لوجودها في اسم ملف أصلاً.
+        if not new_name or not new_name.strip():
+            return {"success": False, "error": "اسم غير صالح — الاسم فارغ"}
+        if (
+            Path(new_name).name != new_name
+            or os.sep in new_name
+            or "/" in new_name
+            or "\\" in new_name
+            or (os.altsep and os.altsep in new_name)
+        ):
+            return {"success": False, "error": "اسم غير صالح — لا يجوز أن يحوي مساراً"}
+
         new_path = file_path.parent / new_name
+        if new_path.exists():
+            return {"success": False, "error": "يوجد ملف بنفس الاسم"}
+
         backup_path = self._backup_file(file_path)
 
         try:
@@ -183,17 +205,57 @@ class FileHandler:
         return results
 
     def _backup_file(self, filepath: Path) -> Optional[str]:
-        """نسخ ملف احتياطي"""
+        """نسخ ملف احتياطي — مع حد حجم (ما فوق BACKUP_MAX_SIZE يُتخطى)"""
         try:
+            if filepath.stat().st_size > BACKUP_MAX_SIZE:
+                logger.info(
+                    f"تخطي النسخ الاحتياطي (الحجم يتجاوز {BACKUP_MAX_SIZE // (1024 * 1024)}MB): {filepath.name}"
+                )
+                return None
             self._backup_dir.mkdir(parents=True, exist_ok=True)
             backup = self._backup_dir / filepath.name
             if backup.exists():
                 backup = self._backup_dir / f"{filepath.stem}_{datetime.now().timestamp()}{filepath.suffix}"
             shutil.copy2(str(filepath), str(backup))
+            self._cleanup_old_backups()
             return str(backup)
         except Exception as e:
             logger.warning(f"لم يتم النسخ الاحتياطي: {e}")
             return None
+
+    def _cleanup_old_backups(self, max_age_days: int = BACKUP_MAX_AGE_DAYS) -> int:
+        """حذف النسخ الاحتياطية الأقدم من max_age_days — سياسة احتفاظ تمنع امتلاء القرص"""
+        cutoff = time.time() - max_age_days * 86400
+        removed = 0
+        try:
+            for f in self._backup_dir.glob("*"):
+                try:
+                    if f.is_file() and f.stat().st_mtime < cutoff:
+                        f.unlink(missing_ok=True)
+                        removed += 1
+                except OSError:
+                    continue
+        except Exception as e:
+            logger.debug(f"تنظيف النسخ الاحتياطية: {e}")
+        if removed:
+            logger.info(f"تم حذف {removed} نسخة احتياطية أقدم من {max_age_days} يوماً")
+        return removed
+
+    @staticmethod
+    def _send_to_trash(file_path: Path) -> str:
+        """نقل إلى سلة المحذوفات عبر send2trash (XDG/Windows/macOS)،
+        مع الاحتفاظ بمسار XDG اليدوي على لينكس كخطة بديلة إن لم تتوفر المكتبة."""
+        try:
+            from send2trash import send2trash
+            send2trash(str(file_path))
+            return f"trash://{file_path.name}"
+        except ImportError:
+            trash_dir = Path.home() / ".local/share/Trash/files"
+            trash_dir.mkdir(parents=True, exist_ok=True)
+            trash_name = f"{file_path.name}_{datetime.now().timestamp()}"
+            trash_path = trash_dir / trash_name
+            shutil.move(str(file_path), str(trash_path))
+            return str(trash_path)
 
     def _record_action(self, action_type: str, src: str, dest: str, backup: str):
         """تسجيل عملية للتراجع"""
