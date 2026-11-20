@@ -236,8 +236,6 @@ def _validate_plan(root_arg: str, items: Any) -> dict[str, Any]:
             resolved_parent = destination.parent.resolve(strict=False)
             if not _is_within(resolved_source, root) or not _is_within(resolved_parent, root):
                 raise IntegrationError("path_escape")
-            if not _is_within(resolved_source, root) or not _is_within(resolved_parent, root):
-                raise IntegrationError("path_escape")
             # Reject symlinks in every existing source/destination path component.
             current = source
             while current != root and _is_within(current, root):
@@ -347,6 +345,9 @@ def dispatch(message: dict[str, Any], state: dict[str, Any]) -> dict[str, Any] |
 
     if method == "initialize" and request_id is not None:
         requested = params.get("protocolVersion", PROTOCOL_VERSION)
+        if not isinstance(requested, str):
+            return {"jsonrpc": "2.0", "id": request_id,
+                    "error": {"code": -32602, "message": "Invalid protocolVersion"}}
         negotiated = requested if requested in SUPPORTED_LEGACY_VERSIONS else PROTOCOL_VERSION
         state["phase"] = "awaiting_initialized"
         state["protocol_version"] = negotiated
@@ -376,7 +377,7 @@ def dispatch(message: dict[str, Any], state: dict[str, Any]) -> dict[str, Any] |
         return {"jsonrpc": "2.0", "id": request_id, "result": {}}
     if method in {"tools/list", "tools/call"} and state.get("phase") != "ready":
         return {"jsonrpc": "2.0", "id": request_id,
-                "error": {"code": -32002, "message": "Server not initialized"}}
+                "error": {"code": -32000, "message": "Server not initialized"}}
     if method == "tools/list" and request_id is not None:
         return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": TOOLS}}
     if method == "tools/call" and request_id is not None:
