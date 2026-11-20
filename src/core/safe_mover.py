@@ -61,6 +61,10 @@ class MoveResult:
     renamed_due_to_collision: bool = False
     # المسار النهائي الفعلي (قد يختلف عن destination لو حدث تضارب)
     final_path: str = ""
+    # هل استُبدلت وجهة موجودة (overwrite=True)؟
+    replaced_existing: bool = False
+    # مسار النسخة الاحتياطية للوجهة المستبدلة إن كانت ما تزال قائمة
+    overwritten_backup: Optional[str] = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -85,6 +89,10 @@ class CopyResult:
     duration_ms: float = 0.0
     renamed_due_to_collision: bool = False
     final_path: str = ""
+    # هل استُبدلت وجهة موجودة (overwrite=True)؟
+    replaced_existing: bool = False
+    # مسار النسخة الاحتياطية للوجهة المستبدلة إن كانت ما تزال قائمة
+    overwritten_backup: Optional[str] = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -173,6 +181,26 @@ def _resolve_collision(dst: Path, src: Path) -> tuple[Path, bool]:
     )
 
 
+def _claim_destination(dst: Path) -> None:
+    """يحجز اسم الوجهة ذرّيًا (O_CREAT|O_EXCL) لمنع الاستبدال الصامت (TOCTOU).
+
+    os.rename على POSIX يستبدل الملف الموجود بصمت؛ الحجز الوحيد الذي يضمن
+    أن ملفًا ظهر بين فحص التضارب والتنفيذ لن يُستبدل. يُرفع FileExistsError
+    إن كان الاسم مشغولًا، والملف المحجوز فارغ (0 بايت) ويُستبدل بعد ذلك
+    بالنقل الذرّي أو يُنظّف عند الفشل.
+    """
+    fd = os.open(str(dst), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    os.close(fd)
+
+
+def _is_placeholder(path: Path) -> bool:
+    """هل هذا ملف حجز فارغ (0 بايت) نتج عن _claim_destination؟"""
+    try:
+        return path.exists() and path.stat().st_size == 0
+    except OSError:
+        return False
+
+
 def _atomic_move(src: Path, dst: Path) -> None:
     """نقل ذرّي: محاولة os.rename أولًا، fallback إلى copy+delete عبر الأجهزة
 
@@ -243,7 +271,9 @@ class SafeMover:
     Options:
       - verify_checksum: افتراضيًا True، يتحقّق بعد العملية
       - move_sidecar: افتراضيًا True، ينقل/ينسخ sidecar إن وُجد
-      - overwrite: افتراضيًا False، يُضيف لاحقة عند التضارب
+      - overwrite: افتراضيًا False، يُضيف لاحقة عند التضارب؛ عند True استبدال
+        آمن: النسخة القديمة تُنقل جانبًا (.ifm_overwrite_*.bak) وتُعاد عند أي
+        فشل، ولا تُحذف إلا بعد نجاح النقل/النسخ والتحقق (IFM-006)
     """
 
     def __init__(
@@ -320,18 +350,39 @@ class SafeMover:
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
-        # حل التضارب
+        # حل التضارب + حجز ذرّي للوجهة (منع الاستبدال الصامت TOCTOU — IFM-006)
+        backup: Optional[Path] = None
+        claimed = False
         try:
             if do_overwrite:
-                # لو overwrite=True، نحذف الوجهة إن وُجدت
+                # استبدال آمن: النسخة القديمة تُنقل جانبًا بدل حذفها مسبقًا،
+                # وتُعاد إلى مكانها عند أي فشل، ولا تُحذف إلا بعد نجاح النقل والتحقق
                 if dst.exists() and src.resolve() != dst.resolve():
-                    dst.unlink()
+                    backup = dst.parent / f".ifm_overwrite_{dst.name}.bak"
+                    os.rename(str(dst), str(backup))
+                    result.replaced_existing = True
                 final_dst, renamed = dst, False
             else:
                 final_dst, renamed = _resolve_collision(dst, src)
-        except SafeMoveError as e:
+            result.overwritten_backup = str(backup) if backup else None
+            # حجز الاسم بـ O_EXCL: إن ظهر ملف بين الفحص والتنفيذ نتوقف دون استبدال
+            if src.resolve() != final_dst.resolve():
+                _claim_destination(final_dst)
+                claimed = True
+        except (SafeMoveError, FileExistsError, OSError) as e:
+            if backup is not None:
+                try:
+                    os.rename(str(backup), str(dst))
+                    result.overwritten_backup = None
+                except OSError:
+                    logger.error(f"فشل إعادة النسخة الاحتياطية من {backup} إلى {dst}")
             result.success = False
-            result.error = str(e)
+            if isinstance(e, FileExistsError):
+                result.error = (
+                    f"ظهرت الوجهة أثناء التنفيذ — توقف دون استبدال (TOCTOU): {final_dst}"
+                )
+            else:
+                result.error = str(e)
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
@@ -347,6 +398,17 @@ class SafeMover:
         try:
             _atomic_move(src, final_dst)
         except OSError as e:
+            if claimed and _is_placeholder(final_dst):
+                try:
+                    final_dst.unlink()
+                except OSError:
+                    pass
+            if backup is not None:
+                try:
+                    os.rename(str(backup), str(dst))
+                    result.overwritten_backup = None
+                except OSError:
+                    logger.error(f"فشل إعادة النسخة الاحتياطية من {backup} إلى {dst}")
             result.success = False
             result.error = f"فشل النقل: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -363,6 +425,12 @@ class SafeMover:
                     _atomic_move(final_dst, src)
                 except OSError:
                     logger.error(f"فشل rollback من {final_dst} إلى {src}")
+                if backup is not None:
+                    try:
+                        os.rename(str(backup), str(dst))
+                        result.overwritten_backup = None
+                    except OSError:
+                        logger.error(f"فشل إعادة النسخة الاحتياطية من {backup} إلى {dst}")
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النقل: {e}"
                 result.duration_ms = (time.monotonic() - start) * 1000
@@ -378,6 +446,12 @@ class SafeMover:
                     _atomic_move(final_dst, src)
                 except OSError:
                     logger.error(f"فشل rollback من {final_dst} إلى {src}")
+                if backup is not None:
+                    try:
+                        os.rename(str(backup), str(dst))
+                        result.overwritten_backup = None
+                    except OSError:
+                        logger.error(f"فشل إعادة النسخة الاحتياطية من {backup} إلى {dst}")
                 result.success = False
                 result.error = (
                     f"عدم تطابق checksum بعد النقل "
@@ -386,6 +460,14 @@ class SafeMover:
                 )
                 result.duration_ms = (time.monotonic() - start) * 1000
                 return result
+
+        # نجاح — حذف النسخة الاحتياطية للوجهة المستبدلة (كانت جانبًا حتى الآن)
+        if backup is not None:
+            try:
+                backup.unlink()
+                result.overwritten_backup = None
+            except OSError as e:
+                logger.warning(f"بقيت النسخة الاحتياطية بعد الاستبدال: {backup}: {e}")
 
         # نقل sidecar
         if do_sidecar and sidecar_existed:
@@ -471,17 +553,37 @@ class SafeMover:
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
-        # حل التضارب
+        # حل التضارب + حجز ذرّي للوجهة (منع الاستبدال الصامت TOCTOU — IFM-006)
+        backup: Optional[Path] = None
+        claimed = False
         try:
             if do_overwrite:
+                # استبدال آمن: النسخة القديمة تُنقل جانبًا وتُعاد عند أي فشل
                 if dst.exists() and src.resolve() != dst.resolve():
-                    dst.unlink()
+                    backup = dst.parent / f".ifm_overwrite_{dst.name}.bak"
+                    os.rename(str(dst), str(backup))
+                    result.replaced_existing = True
                 final_dst, renamed = dst, False
             else:
                 final_dst, renamed = _resolve_collision(dst, src)
-        except SafeMoveError as e:
+            result.overwritten_backup = str(backup) if backup else None
+            if src.resolve() != final_dst.resolve():
+                _claim_destination(final_dst)
+                claimed = True
+        except (SafeMoveError, FileExistsError, OSError) as e:
+            if backup is not None:
+                try:
+                    os.rename(str(backup), str(dst))
+                    result.overwritten_backup = None
+                except OSError:
+                    logger.error(f"فشل إعادة النسخة الاحتياطية من {backup} إلى {dst}")
             result.success = False
-            result.error = str(e)
+            if isinstance(e, FileExistsError):
+                result.error = (
+                    f"ظهرت الوجهة أثناء التنفيذ — توقف دون استبدال (TOCTOU): {final_dst}"
+                )
+            else:
+                result.error = str(e)
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
@@ -497,6 +599,17 @@ class SafeMover:
         try:
             _atomic_copy(src, final_dst)
         except OSError as e:
+            if claimed and _is_placeholder(final_dst):
+                try:
+                    final_dst.unlink()
+                except OSError:
+                    pass
+            if backup is not None:
+                try:
+                    os.rename(str(backup), str(dst))
+                    result.overwritten_backup = None
+                except OSError:
+                    logger.error(f"فشل إعادة النسخة الاحتياطية من {backup} إلى {dst}")
             result.success = False
             result.error = f"فشل النسخ: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -512,6 +625,12 @@ class SafeMover:
                     final_dst.unlink()
                 except OSError:
                     pass
+                if backup is not None:
+                    try:
+                        os.rename(str(backup), str(dst))
+                        result.overwritten_backup = None
+                    except OSError:
+                        logger.error(f"فشل إعادة النسخة الاحتياطية من {backup} إلى {dst}")
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النسخ: {e}"
                 result.duration_ms = (time.monotonic() - start) * 1000
@@ -526,6 +645,12 @@ class SafeMover:
                     final_dst.unlink()
                 except OSError:
                     pass
+                if backup is not None:
+                    try:
+                        os.rename(str(backup), str(dst))
+                        result.overwritten_backup = None
+                    except OSError:
+                        logger.error(f"فشل إعادة النسخة الاحتياطية من {backup} إلى {dst}")
                 result.success = False
                 result.error = (
                     f"عدم تطابق checksum بعد النسخ "
@@ -534,6 +659,14 @@ class SafeMover:
                 )
                 result.duration_ms = (time.monotonic() - start) * 1000
                 return result
+
+        # نجاح — حذف النسخة الاحتياطية للوجهة المستبدلة (كانت جانبًا حتى الآن)
+        if backup is not None:
+            try:
+                backup.unlink()
+                result.overwritten_backup = None
+            except OSError as e:
+                logger.warning(f"بقيت النسخة الاحتياطية بعد الاستبدال: {backup}: {e}")
 
         # نسخ sidecar
         if do_sidecar and sidecar_existed:
