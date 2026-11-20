@@ -77,11 +77,18 @@ def _raise_walk_error(error: OSError) -> None:
     raise error
 
 
-def _tree_summary(root: Path) -> tuple[int, int, bool]:
-    """Return regular-file count, byte count, and whether any symlink exists."""
+def _tree_summary(root: Path) -> tuple[int, int, bool, bool]:
+    """Return file count/bytes and whether symlinks or nested mounts were found.
+
+    Hidden/system directories and nested mount points are never traversed.
+    The explicitly selected root itself may be a mount point.
+    """
     count = 0
     total_bytes = 0
     has_symlink = False
+    has_nested_mount = False
+    skipped = {".ssh", ".config", ".gnupg", ".git", ".venv", "venv",
+               "__pycache__", "node_modules"}
     for current, dirs, files in os.walk(
         root, topdown=True, followlinks=False, onerror=_raise_walk_error
     ):
@@ -91,10 +98,22 @@ def _tree_summary(root: Path) -> tuple[int, int, bool]:
             child = current_path / name
             if child.is_symlink():
                 has_symlink = True
-            else:
-                kept_dirs.append(name)
+                continue
+            if name.startswith(".") or name in skipped:
+                continue
+            try:
+                if child.is_mount():
+                    has_nested_mount = True
+                    continue
+            except OSError:
+                # تعذر فحص حدّ التركيب: لا نعبر هذا الفرع.
+                has_nested_mount = True
+                continue
+            kept_dirs.append(name)
         dirs[:] = kept_dirs
         for name in files:
+            if name.startswith(".") or name in skipped:
+                continue
             child = current_path / name
             try:
                 info = child.lstat()
@@ -105,7 +124,7 @@ def _tree_summary(root: Path) -> tuple[int, int, bool]:
             elif stat.S_ISREG(info.st_mode):
                 count += 1
                 total_bytes += info.st_size
-    return count, total_bytes, has_symlink
+    return count, total_bytes, has_symlink, has_nested_mount
 
 
 @dataclass
@@ -215,7 +234,7 @@ def preflight_item(
             item.file_count = 1
             item.total_bytes = source_info.st_size
         elif stat.S_ISDIR(source_info.st_mode):
-            count, size, has_symlink = _tree_summary(src)
+            count, size, has_symlink, has_nested_mount = _tree_summary(src)
             item.kind = "empty_directory" if count == 0 and not any(src.iterdir()) else "directory"
             item.file_count = count
             item.total_bytes = size
@@ -223,6 +242,11 @@ def preflight_item(
                 item.status = STATUS_BLOCKED_PREFLIGHT
                 item.reason = "Directory contains symbolic links; traversal is blocked."
                 item.error_category = "symlink_rejected"
+                return item
+            if has_nested_mount:
+                item.status = STATUS_BLOCKED_PREFLIGHT
+                item.reason = "Nested mount boundary detected; traversal was pruned."
+                item.error_category = "mount_boundary"
                 return item
             item.status = STATUS_BLOCKED_PREFLIGHT
             item.reason = "Directory moves are not supported by the current file-only SafeMover."
@@ -345,13 +369,18 @@ def write_plan_manifest(
     *,
     redact_absolute_paths: bool = True,
 ) -> Path:
-    """Explicitly persist a private manifest using atomic replacement.
+    """Persist a private manifest with exclusive no-clobber publication.
 
-    This function is separate from planning because writing a manifest is a
-    filesystem mutation. It creates the parent directory and a mode-0600 file.
+    This is an explicit filesystem mutation, separate from planning. Existing
+    targets and symlinked path components are rejected; no os.replace fallback
+    is permitted because it could overwrite a file created after preflight.
     """
     target = _absolute(destination)
+    if _has_symlink_component(target.parent) or target.is_symlink():
+        raise OSError(errno.ELOOP, "symlinked manifest path is not allowed", str(target))
     target.parent.mkdir(parents=True, exist_ok=True)
+    if _has_symlink_component(target.parent) or target.is_symlink():
+        raise OSError(errno.ELOOP, "symlinked manifest path changed during setup", str(target))
     payload = json.dumps(
         plan.to_dict(redact_absolute_paths=redact_absolute_paths),
         ensure_ascii=False,
@@ -366,8 +395,21 @@ def write_plan_manifest(
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    except Exception:
+        # os.link is an atomic create-if-absent operation. If unsupported,
+        # fail closed; never fall back to os.replace/os.rename.
+        os.link(temporary, target)
+        temporary.unlink()
+        try:
+            dir_fd = os.open(target.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            # The manifest is already published; directory fsync is a
+            # durability warning, not grounds to remove the committed file.
+            pass
+    except BaseException:
         try:
             os.close(fd)
         except OSError:
