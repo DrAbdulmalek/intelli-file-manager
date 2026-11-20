@@ -29,7 +29,7 @@ The bridge has no network client, no cloud fallback, and no API that reads file 
 | `intellifile.inventory` | Lists metadata for eligible files under an explicitly allowlisted root | Read-only metadata access |
 | `intellifile.validate_plan` | Checks relative source/destination paths, collisions, allowlist containment, and symlink components | Validates only; does not reserve or change paths |
 
-Inventory returns relative paths, sizes, modification timestamps, and extensions. It does not open file contents or compute hashes. It excludes hidden paths, credential-related directories/files, likely medical paths, symlinks, unsupported filesystem objects, and mount-point crossings. The inventory is not an atomic snapshot.
+Inventory returns relative paths, sizes, modification timestamps, and extensions. It does not open file contents or compute hashes. It excludes hidden paths, credential-related directories/files, likely medical paths, symlinks, unsupported filesystem objects, and mount-point crossings. The inventory is not an atomic snapshot. A hard cap of 10,000 traversed entries and a depth limit of 32 prevent an unbounded scan; the response marks incomplete scans and truncation explicitly.
 
 The plan validator is **not** an execution authorization. Destination validation can become stale immediately after the response; it does not reserve the destination. Every proposed operation still requires human review.
 
