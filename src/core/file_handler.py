@@ -6,6 +6,7 @@ from typing import Optional, List
 from datetime import datetime
 from .config import Config
 from .path_policy import iter_files
+from .safe_mover import SafeMover
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,14 @@ class FileHandler:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            shutil.move(str(src_path), str(dest_path))
-            self._record_action("move", str(src_path), str(dest_path), backup_path)
+            mover = SafeMover(verify_checksum=True, move_sidecar=True, overwrite=False)
+            result = mover.move(str(src_path), str(dest_path))
+            if not result.success:
+                logger.error(f"خطأ في نقل {src}: {result.error}")
+                return {"success": False, "error": result.error or "unknown error"}
+            self._record_action("move", str(src_path), str(result.final_path), backup_path)
             logger.info(f"تم نقل: {src_path.name} -> {dest_category}/")
-            return {"success": True, "dest": str(dest_path)}
+            return {"success": True, "dest": str(result.final_path)}
         except Exception as e:
             logger.error(f"خطأ في نقل {src}: {e}")
             return {"success": False, "error": str(e)}
@@ -101,20 +106,33 @@ class FileHandler:
             return {"success": False, "error": str(e)}
 
     def undo_last_action(self) -> dict:
-        """التراجع عن آخر عملية"""
+        """التراجع عن آخر عملية باستخدام SafeMover (لا استبدال صامت للملف الجديد)."""
         if not self._action_history:
             return {"success": False, "error": "لا توجد عمليات للتراجع عنها"}
 
         action = self._action_history[-1]
         try:
+            mover = SafeMover(verify_checksum=True, move_sidecar=True, overwrite=False)
             if action["type"] == "move":
-                shutil.move(action["dest"], action["src"])
+                src = action["dest"]
+                dst = action["src"]
+                result = mover.move(src, dst)
+                if not result.success:
+                    logger.error(f"فشل التراجع عن نقل: {result.error}")
+                    return {"success": False, "error": result.error or "unknown error"}
             elif action["type"] == "delete":
                 backup = action.get("backup")
                 if backup and Path(backup).exists():
-                    shutil.copy2(backup, action["src"])
+                    result = mover.move(backup, action["src"])
+                    if not result.success:
+                        logger.error(f"فشل التراجع عن حذف: {result.error}")
+                        return {"success": False, "error": result.error or "unknown error"}
             elif action["type"] == "rename":
-                Path(action["dest"]).rename(action["src"])
+                src = Path(action["dest"])
+                dst = Path(action["src"])
+                if dst.exists():
+                    dst = dst.parent / f"{dst.name}_restored_{dst.stem}"
+                src.rename(dst)
             elif action["type"] == "delete_permanent":
                 backup = action.get("backup")
                 if backup and Path(backup).exists():

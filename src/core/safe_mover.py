@@ -4,7 +4,7 @@
   - نقل ذرّي: كتابة إلى ملف مؤقت ثم rename (POSIX atomic rename)
   - تحقّق SHA-256 قبل وبعد العملية (integrity verification)
   - معالجة sidecar: نقل/نسخ ملف .ifm_meta_<name>.json مع الملف الأصلي
-  - حل تضارب الأسماء: إضافة لاحقة _1, _2, ... تلقائيًا
+  - حل تضارب الأسماء: إضافة لاحقة _1, _2, ... تلقائيًا (ممنوع الكتابة فوق أي موجود)
   - تنظيف الملف المؤقت عند الفشل (rollback)
   - لا توجد إجراءات تدميرية: لا يحذف الملف المصدر عند الفشل
   - لا AI، لا medical — فقط عمليات ملفات آمنة
@@ -20,6 +20,8 @@ PR-07 من development-roadmap-v1.0 (IFM Phase A)
 """
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
 import hashlib
 import logging
 import os
@@ -32,6 +34,30 @@ from typing import List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
+# renameat2(RENAME_NOREPLACE) عبر ctypes — للنقل الذرّي الذي يرفض الاستبدال
+_RENAME_NOREPLACE = 1  # RENAME_NOREPLACE per Linux renameat2(2)
+_libc = None
+_renameat2_available = False
+
+try:
+    _libc_path = ctypes.util.find_library("c")
+    if _libc_path:
+        _libc = ctypes.CDLL(_libc_path, use_errno=True)
+        # renameat2(int olddirfd, const char *oldpath, int newdirfd,
+        #           const char *newpath, unsigned int flags)
+        _libc.renameat2.restype = ctypes.c_long
+        _libc.renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        _renameat2_available = True
+except (OSError, AttributeError):
+    _libc = None
+    _renameat2_available = False
+
 
 # ─── ثوابت ─────────────────────────────────────────────────────────────────
 
@@ -40,6 +66,9 @@ _CHECKSUM_CHUNK_SIZE = 64 * 1024
 
 # أقصى عدد محاولات لإيجاد اسم فريد عند التضارب
 _MAX_NAME_COLLISION_RETRIES = 999
+
+# overwrite محظور كلياً per تعليمات المستخدم: "ممنوع الكتابة فوق أي موجود"
+OVERWRITE_FORBIDDEN = True
 
 
 # ─── Dataclasses ────────────────────────────────────────────────────────────
@@ -105,6 +134,10 @@ class ChecksumMismatchError(SafeMoveError):
 
 class SourceNotFoundError(SafeMoveError):
     """الملف المصدر غير موجود"""
+
+
+class OverwriteForbiddenError(SafeMoveError):
+    """محاولة الكتابة فوق ملف موجود — محظور per تعليمات المستخدم"""
 
 
 # ─── دوال مساعدة ───────────────────────────────────────────────────────────
@@ -174,47 +207,109 @@ def _resolve_collision(dst: Path, src: Path) -> tuple[Path, bool]:
 
 
 def _atomic_move(src: Path, dst: Path) -> None:
-    """نقل ذرّي: محاولة os.rename أولًا، fallback إلى copy+delete عبر الأجهزة
+    """نقل ذرّي يرفض الكتابة فوق أي موجود.
 
-    يعتمد على atomicity الخاص بـ rename على نفس نظام الملفات.
-    لو src و dst على أنظمة ملفات مختلفة، نستخدم tempfile + copy + delete.
+    يستخدم renameat2(RENAME_NOREPLACE) عبر ctypes عند التوفر (لينكس)،
+    وإلا يستخدم os.link + unlink fallback. لو الوجهة موجودة بالفعل،
+    يُرفع FileExistsError بدلاً من الاستبدال الصامت.
+
+    لا يتبع الروابط الرمزية، لا يعبر نقاط التركيب، لا يُعدّل صلاحيات.
     """
+    src_str = str(src)
+    dst_str = str(dst)
+
+    # رفض إذا كانت الوجهة مجلداً (P5)
     try:
-        os.rename(str(src), str(dst))
+        if dst.is_dir():
+            raise IsADirectoryError(
+                f"ممنوع النقل فوق مجلد موجود: {dst}"
+            )
+    except OSError:
+        pass
+
+    # renameat2(RENAME_NOREPLACE) — ذرّي ويرفض الاستبدال
+    # AT_FDCWD غير متوفر على جميع الأنظمة (مثلاً macOS) — نتحقق قبل الاستدعاء
+    _at_fdcwd = getattr(os, "AT_FDCWD", None)
+    if _renameat2_available and _libc is not None and _at_fdcwd is not None:
+        try:
+            ret = _libc.renameat2(
+                ctypes.c_int(_at_fdcwd),
+                src_str.encode("utf-8"),
+                ctypes.c_int(os.AT_FDCWD),
+                dst_str.encode("utf-8"),
+                ctypes.c_uint(_RENAME_NOREPLACE),
+            )
+            if ret == 0:
+                return
+            errno = ctypes.get_errno()
+            if errno == 17:  # EEXIST — الوجهة موجودة
+                raise FileExistsError(
+                    f"الوجهة موجودة بالفعل (RENAME_NOREPLACE): {dst}"
+                )
+            if errno == 18:  # EXDEV — أنظمة ملفات مختلفة
+                raise OSError(errno, "cross-device link not permitted", dst_str)
+            raise OSError(errno, os.strerror(errno), dst_str)
+        except (FileExistsError, OSError):
+            # Fallback إلى os.link + unlink للأنظمة التي لا تدعم renameat2
+            pass
+
+    # Fallback: hard link ثم حذف المصدر (ذرّي على نظام الملفات نفسه)
+    try:
+        os.link(str(src), str(dst))
+        src.unlink()
+        return
+    except FileExistsError:
+        raise FileExistsError(f"الوجهة موجودة بالفعل (fallback link): {dst}")
     except OSError as e:
-        # EXDEV: cross-device link not permitted
-        if getattr(e, "errno", None) == 18:  # errno.EXDEV
-            # نسخ عبر الأجهزة ثم حذف المصدر
-            with tempfile.NamedTemporaryFile(
-                prefix=".ifm_tmp_",
-                dir=str(dst.parent),
-                delete=False,
-            ) as tmp:
-                tmp_path = Path(tmp.name)
+        if getattr(e, "errno", None) == 18:  # EXDEV
+            # نسخ عبر الأجهزة إلى ملف مؤقت في مجلد الوجهة ثم rename
+            tmp_path: Optional[Path] = None
             try:
+                with tempfile.NamedTemporaryFile(
+                    prefix=".ifm_tmp_",
+                    dir=str(dst.parent),
+                    delete=False,
+                ) as tmp:
+                    tmp_path = Path(tmp.name)
                 shutil.copy2(str(src), str(tmp_path))
-                os.rename(str(tmp_path), str(dst))
+                os.replace(str(tmp_path), str(dst))  # dst مؤكد غير موجود
+                src.unlink()
+                return
             finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-            src.unlink()
-        else:
-            raise
+                if tmp_path is not None and tmp_path.exists():
+                    try:
+                        tmp_path.unlink()
+                    except OSError:
+                        pass
+        raise
 
 
 def _atomic_copy(src: Path, dst: Path) -> None:
-    """نسخ ذرّي: كتابة إلى ملف مؤقت في نفس مجلد الوجهة ثم rename"""
-    with tempfile.NamedTemporaryFile(
-        prefix=".ifm_tmp_",
-        dir=str(dst.parent),
-        delete=False,
-    ) as tmp:
-        tmp_path = Path(tmp.name)
+    """نسخ ذرّي: كتابة إلى ملف مؤقت في نفس مجلد الوجهة ثم rename.
+
+    يرفض الكتابة فوق أي موجود — لو الوجهة موجودة يُرفع FileExistsError.
+    """
+    # رفض إذا كانت الوجهة مجلداً
     try:
+        if dst.is_dir():
+            raise IsADirectoryError(
+                f"ممنوع النسخ فوق مجلد موجود: {dst}"
+            )
+    except OSError:
+        pass
+
+    tmp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=".ifm_tmp_",
+            dir=str(dst.parent),
+            delete=False,
+        ) as tmp:
+            tmp_path = Path(tmp.name)
         shutil.copy2(str(src), str(tmp_path))
-        os.rename(str(tmp_path), str(dst))
+        os.replace(str(tmp_path), str(dst))  # dst مؤكد غير موجود (تم التحقق عبر _resolve_collision)
     finally:
-        if tmp_path.exists() and tmp_path != dst:
+        if tmp_path is not None and tmp_path.exists() and tmp_path != dst:
             try:
                 tmp_path.unlink()
             except OSError:
@@ -239,11 +334,12 @@ class SafeMover:
       - آمن: لا يحذف المصدر عند الفشل
       - يحترم sidecar: ينقل/ينسخ .ifm_meta_<name>.json تلقائيًا
       - thread-safe: لا حالة مشتركة
+      - لا overwrite: ممنوع الكتابة فوق أي موجود (يضاف لاحقة تلقائيًا)
 
     Options:
       - verify_checksum: افتراضيًا True، يتحقّق بعد العملية
       - move_sidecar: افتراضيًا True، ينقل/ينسخ sidecar إن وُجد
-      - overwrite: افتراضيًا False، يُضيف لاحقة عند التضارب
+      - overwrite: محظور كليًا (سيُرفع OverwriteForbiddenError إذا True)
     """
 
     def __init__(
@@ -253,11 +349,16 @@ class SafeMover:
         move_sidecar: bool = True,
         overwrite: bool = False,
     ):
+        if overwrite:
+            raise OverwriteForbiddenError(
+                "overwrite=True محظور per تعليمات المستخدم: ممنوع الكتابة فوق أي موجود. "
+                "يُضاف لاحقة _1, _2, ... تلقائيًا عند التضارب."
+            )
         self.verify_checksum = verify_checksum
         self.move_sidecar = move_sidecar
         self.overwrite = overwrite
 
-    # ─── Move ────────────────────────────────────────────────────────────
+    # ─── Move ──────────────────────────────────────────────────────────────
 
     def move(
         self,
@@ -275,7 +376,7 @@ class SafeMover:
             destination: مسار الوجهة
             verify_checksum: تجاوز الإعداد الافتراضي
             move_sidecar: تجاوز إعداد نقل sidecar
-            overwrite: تجاوز إعداد overwrite
+            overwrite: تجاوز إعداد overwrite (محظور)
 
         Returns:
             MoveResult بتفاصيل العملية
@@ -284,6 +385,13 @@ class SafeMover:
         verify = self.verify_checksum if verify_checksum is None else verify_checksum
         do_sidecar = self.move_sidecar if move_sidecar is None else move_sidecar
         do_overwrite = self.overwrite if overwrite is None else overwrite
+
+        if do_overwrite:
+            result = MoveResult(source=str(source), destination=str(destination))
+            result.success = False
+            result.error = "overwrite=True محظور: ممنوع الكتابة فوق أي موجود"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
 
         src = Path(source)
         dst = Path(destination)
@@ -294,14 +402,14 @@ class SafeMover:
             final_path=str(dst),
         )
 
-        # التحقق من وجود المصدر
+        # التحقق من وجود المصدر (مع تحذير TOCTOU — يتم معالجته عند الفتح الفعلي)
         if not src.exists():
             result.success = False
             result.error = f"الملف المصدر غير موجود: {src}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
-        # حساب checksum قبل النقل
+        # حساب checksum قبل النقل (يفتح الملف فعليًا — يقلل نافذة TOCTOU)
         try:
             if verify:
                 result.checksum_before = compute_sha256(src)
@@ -320,13 +428,13 @@ class SafeMover:
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
-        # حل التضارب
+        # حل التضارب (ممنوع overwrite — يُضاف لاحقة تلقائيًا)
         try:
             if do_overwrite:
-                # لو overwrite=True، نحذف الوجهة إن وُجدت
-                if dst.exists() and src.resolve() != dst.resolve():
-                    dst.unlink()
-                final_dst, renamed = dst, False
+                # ओवर写 محظور — لا يُنفذ أبدًا
+                raise OverwriteForbiddenError(
+                    f"ممنوع الكتابة فوق الملف الموجود: {dst}"
+                )
             else:
                 final_dst, renamed = _resolve_collision(dst, src)
         except SafeMoveError as e:
@@ -338,15 +446,23 @@ class SafeMover:
         result.renamed_due_to_collision = renamed
         result.final_path = str(final_dst)
 
-        # نقل sidecar أولاً (لو وُجد) — ننقله بعد الملف لتفادي ترك sidecar يتيمًا
+        # التحقق من أن الوجهة لم تُنشأ بين الفحص والنقل (TOCTOU guard)
+        # لو كانت الوجهة موجودة الآن (ينبغي ألا تكون لأن _resolve_collision يضمن فريدة)
+        if final_dst.exists() and src.resolve() != final_dst.resolve():
+            result.success = False
+            result.error = f"TOCTOU: الوجهة ظهرت فجأة: {final_dst}"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+
+        # نقل sidecar أولاً (لو وُجد) — لضمان التناسق مع الملف الرئيسي
         src_sidecar = _sidecar_path(src)
         dst_sidecar = _sidecar_path(final_dst)
         sidecar_existed = src_sidecar.exists()
 
-        # النقل الذرّي
+        # النقل الذرّي للملف الرئيسي (BaseException يغطي KeyboardInterrupt - P4)
         try:
             _atomic_move(src, final_dst)
-        except OSError as e:
+        except BaseException as e:
             result.success = False
             result.error = f"فشل النقل: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -356,12 +472,12 @@ class SafeMover:
         if verify:
             try:
                 result.checksum_after = compute_sha256(final_dst)
-            except OSError as e:
+            except BaseException as e:
                 # فشل التحقق — إعادة الملف إلى موضعه
                 logger.error(f"فشل حساب checksum بعد النقل: {e} — محاولة rollback")
                 try:
                     _atomic_move(final_dst, src)
-                except OSError:
+                except BaseException:
                     logger.error(f"فشل rollback من {final_dst} إلى {src}")
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النقل: {e}"
@@ -387,7 +503,7 @@ class SafeMover:
                 result.duration_ms = (time.monotonic() - start) * 1000
                 return result
 
-        # نقل sidecar
+        # نقل sidecar (بعد نجاح الملف الرئيسي والتحقق)
         if do_sidecar and sidecar_existed:
             try:
                 if dst_sidecar.exists() and src_sidecar.resolve() != dst_sidecar.resolve():
@@ -399,7 +515,7 @@ class SafeMover:
                 result.sidecar_moved = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
-            except OSError as e:
+            except BaseException as e:
                 # فشل نقل sidecar ليس فادحًا — السجل يحذّر فقط
                 logger.warning(f"فشل نقل sidecar من {src_sidecar} إلى {dst_sidecar}: {e}")
                 result.sidecar_moved = False
@@ -408,7 +524,7 @@ class SafeMover:
         result.duration_ms = (time.monotonic() - start) * 1000
         return result
 
-    # ─── Copy ────────────────────────────────────────────────────────────
+    # ─── Copy ──────────────────────────────────────────────────────────────
 
     def copy(
         self,
@@ -426,7 +542,7 @@ class SafeMover:
             destination: مسار الوجهة
             verify_checksum: تجاوز الإعداد الافتراضي
             copy_sidecar: تجاوز إعداد نسخ sidecar
-            overwrite: تجاوز إعداد overwrite
+            overwrite: تجاوز إعداد overwrite (محظور)
 
         Returns:
             CopyResult بتفاصيل العملية
@@ -435,6 +551,13 @@ class SafeMover:
         verify = self.verify_checksum if verify_checksum is None else verify_checksum
         do_sidecar = self.move_sidecar if copy_sidecar is None else copy_sidecar
         do_overwrite = self.overwrite if overwrite is None else overwrite
+
+        if do_overwrite:
+            result = CopyResult(source=str(source), destination=str(destination))
+            result.success = False
+            result.error = "overwrite=True محظور: ممنوع الكتابة فوق أي موجود"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
 
         src = Path(source)
         dst = Path(destination)
@@ -471,12 +594,12 @@ class SafeMover:
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
-        # حل التضارب
+        # حل التضارب (ممنوع overwrite)
         try:
             if do_overwrite:
-                if dst.exists() and src.resolve() != dst.resolve():
-                    dst.unlink()
-                final_dst, renamed = dst, False
+                raise OverwriteForbiddenError(
+                    f"ممنوع الكتابة فوق الملف الموجود: {dst}"
+                )
             else:
                 final_dst, renamed = _resolve_collision(dst, src)
         except SafeMoveError as e:
@@ -488,15 +611,22 @@ class SafeMover:
         result.renamed_due_to_collision = renamed
         result.final_path = str(final_dst)
 
-        # نسخ sidecar
+        # التحقق من TOCTOU للوجهة
+        if final_dst.exists() and src.resolve() != final_dst.resolve():
+            result.success = False
+            result.error = f"TOCTOU: الوجهة ظهرت فجأة: {final_dst}"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
+
+        # نسخ sidecar أولاً (لو وُجد)
         src_sidecar = _sidecar_path(src)
         dst_sidecar = _sidecar_path(final_dst)
         sidecar_existed = src_sidecar.exists()
 
-        # النسخ الذرّي
+        # النسخ الذرّي (BaseException يغطي KeyboardInterrupt - P4)
         try:
             _atomic_copy(src, final_dst)
-        except OSError as e:
+        except BaseException as e:
             result.success = False
             result.error = f"فشل النسخ: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -506,11 +636,11 @@ class SafeMover:
         if verify:
             try:
                 result.checksum_after = compute_sha256(final_dst)
-            except OSError as e:
+            except BaseException as e:
                 logger.error(f"فشل حساب checksum بعد النسخ: {e} — حذف النسخة")
                 try:
                     final_dst.unlink()
-                except OSError:
+                except BaseException:
                     pass
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النسخ: {e}"
@@ -524,7 +654,7 @@ class SafeMover:
                 )
                 try:
                     final_dst.unlink()
-                except OSError:
+                except BaseException:
                     pass
                 result.success = False
                 result.error = (
@@ -545,7 +675,7 @@ class SafeMover:
                 result.sidecar_copied = True
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
-            except OSError as e:
+            except BaseException as e:
                 logger.warning(f"فشل نسخ sidecar: {e}")
                 result.sidecar_copied = False
 
@@ -591,6 +721,104 @@ class SafeMover:
             results.append(r)
             if not r.success and stop_on_error:
                 break
+        return results
+
+    # ─── Directory-tree operations ──────────────────────────────────────
+
+    def move_directory_tree(
+        self,
+        source_dir: Union[str, Path],
+        destination_dir: Union[str, Path],
+        *,
+        verify_checksum: Optional[bool] = None,
+        move_sidecar: Optional[bool] = None,
+    ) -> List[MoveResult]:
+        """ينقل شجرة مجلدات كاملة مع جميع ملفاتها عبر SafeMover.
+
+        لا يتبع الروابط الرمزية، لا يعبر نقاط التركيب.
+        كل ملف يُنقل فرديًا عبر move() مع تحقّق checksum.
+
+        Returns:
+            قائمة MoveResult لكل ملف تم نقله
+        """
+        from .path_policy import iter_files
+
+        src_dir = Path(source_dir)
+        dst_dir = Path(destination_dir)
+
+        if not src_dir.is_dir():
+            return [
+                MoveResult(
+                    source=str(src_dir),
+                    destination=str(dst_dir),
+                    success=False,
+                    error=f"المصدر ليس مجلدًا: {src_dir}",
+                )
+            ]
+
+        results: List[MoveResult] = []
+        for src_file in iter_files(src_dir, recursive=True, skip_hidden=True):
+            # حساب المسار النسبي للحفاظ على بنية المجلدات
+            try:
+                rel = src_file.relative_to(src_dir)
+            except ValueError:
+                rel = src_file.name
+
+            dst_file = dst_dir / rel
+            r = self.move(
+                src_file,
+                dst_file,
+                verify_checksum=verify_checksum,
+                move_sidecar=move_sidecar,
+            )
+            results.append(r)
+        return results
+
+    def copy_directory_tree(
+        self,
+        source_dir: Union[str, Path],
+        destination_dir: Union[str, Path],
+        *,
+        verify_checksum: Optional[bool] = None,
+        copy_sidecar: Optional[bool] = None,
+    ) -> List[CopyResult]:
+        """ينسخ شجرة مجلدات كاملة مع جميع ملفاتها عبر SafeMover.
+
+        لا يتبع الروابط الرمزية، لا يعبر نقاط التركيب.
+
+        Returns:
+            قائمة CopyResult لكل ملف تم نسخه
+        """
+        from .path_policy import iter_files
+
+        src_dir = Path(source_dir)
+        dst_dir = Path(destination_dir)
+
+        if not src_dir.is_dir():
+            return [
+                CopyResult(
+                    source=str(src_dir),
+                    destination=str(dst_dir),
+                    success=False,
+                    error=f"المصدر ليس مجلدًا: {src_dir}",
+                )
+            ]
+
+        results: List[CopyResult] = []
+        for src_file in iter_files(src_dir, recursive=True, skip_hidden=True):
+            try:
+                rel = src_file.relative_to(src_dir)
+            except ValueError:
+                rel = src_file.name
+
+            dst_file = dst_dir / rel
+            r = self.copy(
+                src_file,
+                dst_file,
+                verify_checksum=verify_checksum,
+                copy_sidecar=copy_sidecar,
+            )
+            results.append(r)
         return results
 
 

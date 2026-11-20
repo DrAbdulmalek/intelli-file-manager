@@ -107,24 +107,42 @@ class TestRenameFile:
 class TestDeleteFile:
     """اختبار دالة حذف الملفات"""
 
-    def test_delete_file_permanent(self, tmp_path, sample_files):
-        """يتحقق من حذف ملف بشكل نهائي (بدون سلة المحذوفات)
+    def test_delete_file_to_trash(self, tmp_path, sample_files):
+        """يتحقق من نقل ملف إلى سلة المحذوفات (بدلاً من الحذف النهائي)
 
         يختبر:
           - نجاح العملية (success=True)
-          - عدم وجود الملف بعد الحذف
+          - عدم وجود الملف في الموقع الأصلي بعد النقل
+          - تسجيل العملية في السجل
         """
         config = Config(database_path=str(tmp_path / "intellifile"))
         handler = FileHandler(config)
 
-        # إنشاء ملف مؤقت للحذف (للتأكد من عدم حذف الملف الأصلي)
+        # إنشاء ملف مؤقت للنقل إلى سلة المحذوفات
         test_file = tmp_path / "to_delete.txt"
-        test_file.write_text("سيتم حذف هذا الملف")
+        test_file.write_text("سيتم نقله إلى سلة المحذوفات")
 
-        result = handler.delete_file(str(test_file), use_trash=False)
+        result = handler.delete_file(str(test_file), use_trash=True)
 
         assert result["success"] is True
         assert not test_file.exists()
+        assert len(handler.history) == 1
+        assert handler.history[0]["type"] == "delete"
+
+    def test_delete_file_permanent_is_forbidden(self, tmp_path):
+        """يتحقق من أن الحذف النهائي محظور per تعليمات المستخدم"""
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+
+        test_file = tmp_path / "to_delete.txt"
+        test_file.write_text("محاولة حذف نهائي")
+
+        result = handler.delete_file(str(test_file), use_trash=False)
+
+        assert result["success"] is False
+        assert "محظور" in result["error"]
+        # الملف يجب أن يبقى موجوداً
+        assert test_file.exists()
 
     def test_delete_nonexistent_file(self, tmp_path):
         """يتحقق من أن حذف ملف غير موجود يُرجع خطأ"""
@@ -144,10 +162,10 @@ class TestDeleteFile:
         test_file = tmp_path / "history_test.txt"
         test_file.write_text("test")
 
-        handler.delete_file(str(test_file), use_trash=False)
+        handler.delete_file(str(test_file), use_trash=True)
 
         assert len(handler.history) == 1
-        assert handler.history[0]["type"] in ("delete", "delete_permanent")
+        assert handler.history[0]["type"] == "delete"
 
 
 class TestCreateCategoryFolders:
