@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -220,3 +224,34 @@ def test_symlinked_scan_root_is_rejected(tmp_path, monkeypatch):
 
     with pytest.raises(IntegrationError, match="Symlinked scan roots"):
         _inventory(str(alias), 10)
+
+
+
+def test_server_direct_script_launch_works_from_external_working_directory(tmp_path):
+    script = Path(__file__).resolve().parents[2] / "src" / "integrations" / "alphacode_mcp_server.py"
+    incoming = "\n".join([
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                    "params": {"protocolVersion": "2025-11-25", "capabilities": {},
+                               "clientInfo": {"name": "test", "version": "1"}}}),
+        json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+        "",
+    ])
+    env = os.environ.copy()
+    env.pop("INTELLIFILE_AGENT_ROOTS", None)
+
+    completed = subprocess.run(
+        [sys.executable, str(script)],
+        input=incoming,
+        text=True,
+        capture_output=True,
+        cwd=tmp_path,
+        env=env,
+        timeout=10,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    frames = [json.loads(line) for line in completed.stdout.splitlines()]
+    assert [frame["id"] for frame in frames] == [1, 2]
+    assert all(frame["jsonrpc"] == "2.0" for frame in frames)
