@@ -19,7 +19,7 @@ MAX_DEPTH = 3
 SKIP_DIRS = {".cache", "cache", "node_modules", "__pycache__", ".git"}
 CONFIG_NAME_RE = re.compile(r"(mcp|config|settings|server|alphacode)", re.IGNORECASE)
 MCP_KEY_RE = re.compile(
-    r"""^\s*["']?(mcpServers|mcp_servers|mcp|modelContextProtocol|model_context_protocol)["']?\s*[:=]""",
+    r"""(?:^\s*|[{,]\s*)["']?(mcpServers|mcp_servers|mcp|modelContextProtocol|model_context_protocol)["']?\s*[:=]""",
     re.IGNORECASE,
 )
 MCP_SECTION_RE = re.compile(r"^\s*\[([^\]]*mcp[^\]]*)\]\s*$", re.IGNORECASE)
