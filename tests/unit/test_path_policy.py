@@ -72,12 +72,14 @@ def test_reported_traversal_reports_hidden_and_excluded_entries(tmp_path):
     touch(tmp_path / "visible.txt")
     touch(tmp_path / ".hidden.txt")
     touch(tmp_path / ".git" / "ignored.txt")
+    touch(tmp_path / "node_modules" / "ignored.js")
 
     entries = list(iter_entries_reported(tmp_path))
     reasons = {path.name: reason for path, _info, _error, reason in entries}
 
     assert reasons[".hidden.txt"] == "hidden"
     assert reasons[".git"] == "hidden"
+    assert reasons["node_modules"] == "excluded_directory"
     assert any(path.name == "visible.txt" and reason is None for path, _info, _error, reason in entries)
 
 
