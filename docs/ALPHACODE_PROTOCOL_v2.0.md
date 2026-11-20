@@ -195,15 +195,15 @@ SHA-256 للتحقق الحقيقي عند الحاجة. تشابه الاسم �
 ## 24. تكامل AlphaCode المحلي عبر MCP
 
 التنفيذ الحالي موجود في:
-- \`src/integrations/alphacode_mcp_server.py\`
-- \`docs/ALPHACODE_MCP_INTEGRATION.md\`
+- `src/integrations/alphacode_mcp_server.py`
+- `docs/ALPHACODE_MCP_INTEGRATION.md`
 
 يعمل IntelliFile كخادم MCP محلي يطلقه عميل AlphaCode عبر stdio. يستخدم رسائل JSON-RPC مفصولة بأسطر، ولا يفتح منفذ TCP/HTTP ولا يتصل بخدمة خارجية.
 
 ### الأدوات المتاحة حالياً
-1. \`intellifile.status\` — حالة الجسر وحدود قدراته.
-2. \`intellifile.inventory\` — جرد بيانات وصفية فقط تحت جذور صرّح بها المستخدم في \`INTELLIFILE_AGENT_ROOTS\`.
-3. \`intellifile.validate_plan\` — فحص خطة مقترحة دون تنفيذ أو حجز الوجهات.
+1. `intellifile.status` — حالة الجسر وحدود قدراته.
+2. `intellifile.inventory` — جرد بيانات وصفية فقط تحت جذور صرّح بها المستخدم في `INTELLIFILE_AGENT_ROOTS`.
+3. `intellifile.validate_plan` — فحص خطة مقترحة دون تنفيذ أو حجز الوجهات.
 
 ### القيود الإلزامية
 - لا قراءة محتوى، ولا OCR/RAG، ولا إرسال ملفات أو محتوى.
@@ -214,5 +214,5 @@ SHA-256 للتحقق الحقيقي عند الحاجة. تشابه الاسم �
 - التنفيذ معطّل حتى إغلاق مراجعة SafeMover وحاجز الحساسية.
 
 ### حالة التوافق
-الجسر يطبق دورة MCP القديمة \`2025-11-25\` عبر stdio. يجب اختبار عميل AlphaCode المثبت فعلياً؛ لا نفترض دعمه MCP أو موقع ملف إعداداته قبل التحقق على الجهاز. لا يُعلن التكامل End-to-End VERIFIED إلا بعد اتصال محلي ناجح واختبار الأدوات على مجلد اصطناعي.
+الجسر يطبق دورة MCP القديمة `2025-11-25` عبر stdio. يجب اختبار عميل AlphaCode المثبت فعلياً؛ لا نفترض دعمه MCP أو موقع ملف إعداداته قبل التحقق على الجهاز. لا يُعلن التكامل End-to-End VERIFIED إلا بعد اتصال محلي ناجح واختبار الأدوات على مجلد اصطناعي.
 
