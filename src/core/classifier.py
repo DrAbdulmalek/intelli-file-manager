@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from .config import Config
+from .sensitive_barrier import block_if_sensitive, is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,25 @@ class SmartFileClassifier:
         return {"category": "unknown", "confidence": 0.0, "source": "keyword_fallback"}
 
     def classify_file_medical(self, filepath: str) -> dict:
-        """تصنيف ملف — يجمع بين تصنيف الملف وتصنيف المحتوى الطبي"""
+        """تصنيف ملف — يجمع بين تصنيف الملف وتصنيف المحتوى الطبي
+
+        يُحظر استخراج النص من الملفات الحساسة وفق تعليمات المستخدم:
+        لا يُفتح محتوى الملفات الطبية ولا يُرسل لأي خدمة.
+        """
+        # حظر القراءة على الملفات الحساسة قبل أي استخراج نص
+        if is_sensitive_path(filepath):
+            logger.warning(f"محظور: تصنيف ملف طبي — ملف حساس: {filepath}")
+            return {
+                "name": Path(filepath).name,
+                "path": str(filepath),
+                "extension": Path(filepath).suffix.lower(),
+                "category": "prohibited_sensitive",
+                "confidence": 0.0,
+                "content_type": "sensitive_blocked",
+                "size": 0,
+                "modified": 0,
+                "error": "الملف حساس — ممنوع استخراج محتوى طبي",
+            }
         file_info = self.classify_file(filepath)
         if "error" in file_info:
             return file_info
@@ -59,7 +78,12 @@ class SmartFileClassifier:
         return {**file_info, **medical_info}
 
     def _extract_text_for_medical(self, filepath: str) -> str:
-        """استخراج نص من ملف للتصنيف"""
+        """استخراج نص من ملف للتصنيف — يُحظر على الملفات الحساسة"""
+        # حظر شامل على استخراج النص من الملفات الحساسة
+        if is_sensitive_path(filepath):
+            logger.debug(f"محظور استخراج نص طبي من ملف حساس: {filepath}")
+            return ""
+
         path = Path(filepath)
         ext = path.suffix.lower()
 

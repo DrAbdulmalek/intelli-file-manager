@@ -3,6 +3,7 @@ import logging
 import re
 from typing import List
 from pathlib import Path
+from .sensitive_barrier import is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -272,7 +273,11 @@ class RAGEngine:
             return []
 
     def _extract_text(self, filepath: str) -> str:
-        """استخراج نص من ملف"""
+        """استخراج نص من ملف — محظور على الملفات الحساسة (حاجز الحساسية)"""
+        # حاجز الحساسية: لا يُقرأ محتوى الملفات الحساسة ولا يُفهرس (P0/F1)
+        if is_sensitive_path(filepath):
+            logger.warning(f"محظور: استخراج نص من ملف حساس: {filepath}")
+            return ""
         path = Path(filepath)
         ext = path.suffix.lower()
         try:

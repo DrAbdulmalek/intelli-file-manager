@@ -76,6 +76,43 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
+### 2026-11-20 - GPT-6 (review of uploaded IntelliFile patch; regression-only follow-up)
+- Reviewed the uploaded `intellifile-path-policy.patch` against current `main`.
+- Confirmed the shared path policy, traversal migrations, emergent-category
+  statistics-key fix, and baseline regression tests are already present in
+  `main`; did not reapply or overwrite those implementations.
+- Added focused regression coverage for the local AlphaCode/file-agent use
+  cases: duplicate detection must not enter hidden trees; FileHandler must
+  ignore hidden subtrees while still scanning a selected root beneath a
+  hidden ancestor; excluded directories remain excluded when hidden files are
+  explicitly included.
+- Deliberately did **not** add the proposed `shell_plan.py`: a generated
+  `mv -nT` script is still a separate filesystem executor, bypasses SafeMover's
+  checksum/transaction boundary, and has unresolved symlink/path-race and
+  command-semantics concerns. Keep all actual file operations behind the
+  reviewed SafeMover path; no shell execution was added.
+- Validation: changes are committed to a review branch only. No local pytest
+  execution is claimed; GitHub Actions must validate the PR before merge.
+
+### 2026-11-20 - GPT-6 (independent implementation; branch only)
+- Created branch `fix/unified-path-policy-shell-plan-2026-11-20`; no changes to `main`.
+- Added shared `src/core/path_policy.py` and migrated classifier, file agent,
+  file handler, hybrid/semantic search, smart tagger, and emergent category
+  traversal to it. The policy prunes hidden/excluded directories and rejects
+  symlinked files and directories.
+- Fixed emergent-category statistics lookup (`extensions` vs
+  `extension_distribution`) so categories can be generated from collected data.
+- Added focused unit tests for path traversal, symlink exclusion, and
+  emergent-category generation.
+- **Deferred shell-script generation**: the repository's active SafeMover /
+  read-only preflight design (PRs #54 and #56) must remain the sole route for
+  file operations. A standalone `mv` script could bypass checksum verification,
+  transaction safeguards, and the file-only execution boundary. Revisit only
+  as a reviewed SafeMover integration; no shell executor is included here.
+- Validation status: tests have **not** been executed in this environment;
+  GitHub Actions results are pending after PR creation. No claim of passing
+  tests or CI is made. Manual code review remains required before merge.
+
 ### 2026-07-22 - Mistral (Vibe)
 
 | Time (UTC) | Action | Repository | Status |
@@ -493,3 +530,25 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 ## 2026-11-20 — privacy redaction follow-up (PR #53)
 - Removed the tracked/unredacted LOGS path reference and identifying source details from the preflight proposal.
 - Reframed evidence as privately reviewed local observations; raw logs and file inventories remain outside the repository.
+## 2026-11-20 — privacy redaction follow-up (PR #59)
+- Removed the absolute home path, username, exact inventory counts, personal directory names, and references to the uncommitted raw report from the published lessons document.
+- Reframed the document as reusable engineering lessons; raw local reports and LOGS remain outside the repository.
+## 2026-11-20 — privacy redaction follow-up (PR #64)
+- Removed the credential-exposure incident narrative, private backup-log filenames, and direct undo-log filename from the independent review document.
+- Replaced them with generic security guidance and a statement that local raw logs remain outside the repository.
+## 2026-11-20 — GPT-6 review follow-up (PR #66)
+- Removed os.replace() fallbacks from cross-device SafeMover publication and atomic copy: if a no-clobber primitive is unavailable, operations now fail closed rather than risk replacing a destination created after preflight.
+- Added negative tests proving os.replace() is never called, sources remain intact, and temporary files are cleaned when hard-link publication is unavailable.
+- Added lstat-based rejection of symlink path components and non-regular sources in SafeMover entry points and atomic helpers.
+- Added regression tests for symlink sources, symlinked destination parents/leaves, and directory sources.
+- GitHub Actions runs were not returned for the current stacked PR head; no local or CI test pass is claimed.
+
+## 2026-11-20 — GPT-6 review follow-up (PR #65)
+- Replaced the Path.glob("**/*") scan in FileHandler.scan_directory() with the shared iter_files() traversal policy to prevent entering hidden/excluded trees and symlinks.
+- Allowed an explicitly selected mount root while pruning nested mount points; mount-inspection errors now fail closed.
+- Added .gnupg to default excluded directories and reject a symlink as the selected scan root.
+- Added regression tests for hidden subtrees, explicit hidden roots, .gnupg, nested mount boundaries, and symlink roots; ported hidden-tree coverage for FileAgent and skip_hidden=False behavior.
+- CI was not observed for the resulting head SHA; no test pass is claimed.
+
+## 2026-11-20 — symlinked scan-root follow-up (PR #65)
+- Extended root validation to reject symlinked ancestor components, not only a symlink at the selected leaf; added a regression test for a selected directory reached through a symlinked parent.
