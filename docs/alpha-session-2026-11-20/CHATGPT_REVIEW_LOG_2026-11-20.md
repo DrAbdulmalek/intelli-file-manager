@@ -33,6 +33,8 @@
 | PR #63 (`feat/p0-safety-hardening`) | يُغلق بعد دمج #65/#66 — محتواه قُسم وأُعيد بناؤه فيهما |
 | PR #62 و#64 | بلا تغيير (وثائق مراجعة) |
 
+**وثائق إضافية في هذا المجلد:** `ALPHACODE_HANDOFF_PROMPT_2026-11-20.md` (برومبت التسليم الأصلي الذي نُفّذ على AlphaCode) و`intellifile_repo_state_2026-11-20.md` (ملخص حالة المستودع بعد الرفع). سكربت إعادة إنتاج عيوب P0 الأصلية (إثباتات المراجعة المستقلة على شجرة PR #63) متاح في `scripts/verify_claude_findings.py` — وثيقة تاريخية تعمل ضد الشجرة القبل-الإصلاح فقط؛ التحقق على الشجرة الحالية بأوامر pytest أعلاه.
+
 ## 4) التعديلات الخمسة فوق عمل AlphaCode (التزام `9884a7b`) — **هذا هو محور المراجعة**
 
 1. **فجوة في F1 — حاجز الحساسية:** `rag_engine.py` و`semantic_search.py` كانا يقرآن المحتوى دون حاجز رغم أن المراجعة المستقلة سمّتهما بالاسم. أُضيف `is_sensitive_path` كحارس أول في `_extract_text` لكليهما بنفس نمط AlphaCode في `ocr_service.py`.
@@ -58,6 +60,10 @@ git diff fix/p0-path-policy-bypass-only..fix/p0-safe-mover-and-barrier   # PR #6
 grep -n "no-op" src/core/safe_mover.py         # حارس idempotent
 grep -n "OverwriteForbiddenError" src/core/safe_mover.py   # حظر overwrite الكلي
 grep -n "BaseException\|finally" src/core/safe_mover.py    # تنظيف الاستثناءات
+
+# بطارية إعادة إنتاج عيوب P0 الأصلية — وثيقة تاريخية تعمل ضد شجرة PR #63
+# قبل الإصلاح فقط؛ على الشجرة الحالية تخرج برسالة توجيه لأن العيوب مُصلَحة
+python scripts/verify_claude_findings.py
 ```
 
 **خط الأساس المرجعي (لا تُحسب إخفاقاته على هذه السلسلة):** 5 في `test_glossary_and_export.py` و2 في `test_safe_move_actionlog.py` (watcher) — موجودة على `origin/main` نفسه.
