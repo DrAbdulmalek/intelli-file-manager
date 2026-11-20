@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import stat
+from pathlib import Path
 from datetime import UTC, datetime
 
 __all__ = ["ManifestError", "snapshot", "verify"]
@@ -63,11 +64,19 @@ def _walk(root: str):
 def snapshot(root: str | os.PathLike[str], out_path: str | os.PathLike[str], *,
              hash_files: bool = False) -> dict:
     """يكتب لقطة JSONL لـ ``root`` ويُرجع ملخصاً (files/dirs/symlinks/bytes/errors)."""
-    root_s = os.fspath(root)
-    if not os.path.isdir(root_s):
-        raise ManifestError(f"الجذر ليس مجلداً: {root_s}")
+    root_path = Path(root).resolve(strict=True)
+    if not root_path.is_dir():
+        raise ManifestError(f"الجذر ليس مجلداً: {root_path}")
+    root_s = os.fspath(root_path)
+    out_resolved = Path(out_path).resolve(strict=False)
+    if out_resolved == root_path or root_path in out_resolved.parents:
+        raise ManifestError("يجب أن يكون ملف اللقطة خارج جذر المسح")
     summary = {"files": 0, "dirs": 0, "symlinks": 0, "bytes": 0, "errors": 0}
-    with open(out_path, "w", encoding="utf-8") as out:
+    try:
+        out = open(out_resolved, "x", encoding="utf-8")
+    except FileExistsError as exc:
+        raise ManifestError(f"ملف اللقطة موجود مسبقاً ولن يُستبدل: {out_resolved}") from exc
+    with out:
         header = {"type": "header", "version": _VERSION, "root": root_s,
                   "created": datetime.now(UTC).isoformat(), "hash": hash_files}
         out.write(json.dumps(header, ensure_ascii=False) + "\n")
