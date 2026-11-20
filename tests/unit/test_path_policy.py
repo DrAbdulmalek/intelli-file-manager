@@ -103,3 +103,22 @@ def test_symlink_scan_root_is_rejected(tmp_path):
 
     with pytest.raises(OSError, match="رابط رمزي"):
         list(iter_files(link))
+
+
+
+def test_excluded_directories_remain_excluded_when_hidden_files_are_enabled(tmp_path):
+    touch(tmp_path / ".git" / "HEAD")
+    touch(tmp_path / ".custom-hidden" / "visible-if-not-pruned.txt")
+    found = {
+        p.relative_to(tmp_path).as_posix()
+        for p in iter_files(tmp_path, skip_hidden=False)
+    }
+    assert found == {".custom-hidden/visible-if-not-pruned.txt"}
+
+
+def test_file_agent_duplicate_scan_does_not_enter_hidden_trees(tmp_path):
+    from src.core.file_agent import FileAgent
+
+    touch(tmp_path / "visible.txt", "same-content")
+    touch(tmp_path / ".git" / "objects" / "hidden-copy.txt", "same-content")
+    assert FileAgent().detect_duplicates(str(tmp_path)) == []
