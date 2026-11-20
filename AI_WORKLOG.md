@@ -496,3 +496,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 - Remote Mem0 integration test now refuses to run unless --confirm-remote is explicitly supplied.
 - Updated AGENTS.md workflow guidance and added unit tests for no-clobber output, symlink rejection, project-root confinement, and remote-test opt-in.
 - No CI/local test result is claimed for the updated head.
+
+## 2026-11-20 — verification secret-output follow-up (PR #48)
+- Changed verify.sh secret scanning to report only matched file paths, never matching line contents that could include secret values.
+- Added a regression guard for path-only secret reporting and removed secret inventory details from memory/context.md.
