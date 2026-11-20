@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 from .config import Config
+from .safe_mover import SafeMover
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ class FileHandler:
             return {"success": False, "error": str(e)}
 
     def undo_last_action(self) -> dict:
-        """التراجع عن آخر عملية عبر SafeMover"""
+        """التراجع عن آخر عملية باستخدام SafeMover (لا استبدال صامت للملف الجديد)."""
         if not self._action_history:
             return {"success": False, "error": "لا توجد عمليات للتراجع عنها"}
 
@@ -135,6 +136,13 @@ class FileHandler:
                 if not result.success:
                     logger.error(f"فشل التراجع عن إعادة تسمية: {result.error}")
                     return {"success": False, "error": result.error}
+            elif action["type"] == "delete_permanent":
+                backup = action.get("backup")
+                if backup and Path(backup).exists():
+                    result = self.safe_mover.move(backup, action["src"])
+                    if not result.success:
+                        logger.error(f"فشل التراجع عن حذف نهائي: {result.error}")
+                        return {"success": False, "error": result.error}
 
             self._action_history.pop()
             logger.info(f"تم التراجع عن: {action['type']}")

@@ -20,7 +20,7 @@ import logging
 import tempfile
 from typing import Optional
 
-from .sensitive_barrier import block_if_sensitive, is_sensitive_path
+from .sensitive_barrier import block_if_sensitive, external_send_allowed, is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,16 @@ def ocr_image(filepath: str, postprocess: bool = False,
             "ocr_engine": "blocked_sensitive",
             "ocr_success": False,
             "ocr_error": "الصورة حساسة — ممنوع تنفيذ OCR",
+        }
+
+    # حظر الإرسال إلى خدمة خارجية إذا كان الملف حساسًا
+    if not external_send_allowed(filepath, service_name="ocr_service"):
+        logger.warning(f"محظور إرسال صورة إلى خدمة OCR خارجية: {filepath}")
+        return {
+            "extracted_text": "",
+            "ocr_engine": "blocked_external_send",
+            "ocr_success": False,
+            "ocr_error": "ممنوع إرسال الملف الحساس إلى خدمة خارجية",
         }
 
     result: dict = {}
