@@ -175,15 +175,25 @@ class FileInventory:
     # ─── البناء الداخلي ──────────────────────────────────────────────────
 
     def _iter_files(self, dir_path: Path, *, recursive: bool) -> Iterator[Path]:
-        """مولّد للمسارات فقط، مع تطبيق skip_hidden و skip_dirs"""
+        """مولّد للمسارات فقط، مع تطبيق skip_hidden و skip_dirs
+
+        ملاحظة: الفحص يتم على المسار **النسبي** داخل dir_path، وليس المطلق.
+        وإلا فإن أي مجلد جذري يقع تحت أب مخفي (مثل ~/.cache أو ~/.config)
+        سيؤدي إلى تخطي كل الملفات رغم أن المجلد المستهدف نفسه غير مخفي.
+        """
         pattern = "**/*" if recursive else "*"
         for item in dir_path.glob(pattern):
             if not item.is_file():
                 continue
-            if self.skip_hidden and any(part.startswith(".") for part in item.parts):
+            # المسار النسبي فقط — أجزاء المسار الأب لا تُحتسب
+            try:
+                relative_parts = item.relative_to(dir_path).parts
+            except ValueError:
+                relative_parts = item.parts
+            if self.skip_hidden and any(part.startswith(".") for part in relative_parts):
                 continue
             # تخطي الملفات داخل مجلدات مستثناة
-            if any(part in self.skip_dirs for part in item.parts):
+            if any(part in self.skip_dirs for part in relative_parts):
                 continue
             yield item
 
