@@ -406,6 +406,41 @@ class TestConfiguration:
         assert inv.last_stats.content_extraction_failed >= 1
 
 
+class TestHiddenAncestorRegression:
+    """انحدار: فحص الإخفاء يجب أن يكون نسبيًا للمجلد الجذري
+
+    الخلل السابق: كان الفحص يستخدم المسار المطلق، فأي مجلد يقع تحت أب مخفي
+    (مثل /home/user/.cache/data أو TMPDIR داخل ~/.something) كان يُرجع صفر
+    ملفات رغم أن المجلد المستهدف نفسه غير مخفي.
+    """
+
+    def test_scans_dir_under_hidden_ancestor(self, tmp_path):
+        """مجلد غير مخفي تحت أب مخفي يجب أن يُمسح بالكامل"""
+        hidden_parent = tmp_path / ".hidden_root"
+        target = hidden_parent / "data"
+        target.mkdir(parents=True)
+        (target / "photo.jpg").write_bytes(b"x" * 100)
+        (target / "note.txt").write_text("hi", encoding="utf-8")
+
+        records = FileInventory(include_content=False).scan_directory(str(target))
+        names = {r.metadata.file_name for r in records}
+        assert names == {"photo.jpg", "note.txt"}, (
+            f"expected both files, got {names}"
+        )
+
+    def test_still_skips_hidden_entries_inside_target(self, tmp_path):
+        """الملفات المخفية والأدلة المخفية داخل الهدف تُتخطى كما يجب"""
+        (tmp_path / "visible.jpg").write_bytes(b"x" * 100)
+        (tmp_path / ".hidden.jpg").write_bytes(b"x" * 100)
+        hidden_dir = tmp_path / ".hidden_dir"
+        hidden_dir.mkdir()
+        (hidden_dir / "deep.jpg").write_bytes(b"x" * 100)
+
+        records = FileInventory(include_content=False).scan_directory(str(tmp_path))
+        names = {r.metadata.file_name for r in records}
+        assert names == {"visible.jpg"}, f"hidden entries leaked: {names}"
+
+
 # ─── اختبارات الأنواع المدعومة ────────────────────────────────────────────
 
 class TestSupportedExtensions:
