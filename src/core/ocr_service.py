@@ -20,6 +20,8 @@ import logging
 import tempfile
 from typing import Optional
 
+from .sensitive_barrier import block_if_sensitive, is_sensitive_path
+
 logger = logging.getLogger(__name__)
 
 _engines_cache: Optional[list] = None
@@ -112,7 +114,21 @@ def _postprocess_text(text: str) -> tuple:
 
 def ocr_image(filepath: str, postprocess: bool = False,
               max_chars: Optional[int] = None) -> dict:
-    """OCR لصورة واحدة عبر المحركات المركزية؛ يحفظ عقد المفاتيح القديم."""
+    """OCR لصورة واحدة عبر المحركات المركزية؛ يحفظ عقد المفاتيح القديم.
+
+    يُحظر تنفيذ OCR على الملفات الحساسة per تعليمات المستخدم:
+    لا يُفتح محتوى الصور الطبية ولا يُرسل لأي خدمة.
+    """
+    # حظر OCR على الملفات الحساسة قبل أي معالجة
+    if is_sensitive_path(filepath):
+        logger.warning(f"محظور OCR على صورة حساسة: {filepath}")
+        return {
+            "extracted_text": "",
+            "ocr_engine": "blocked_sensitive",
+            "ocr_success": False,
+            "ocr_error": "الصورة حساسة — ممنوع تنفيذ OCR",
+        }
+
     result: dict = {}
     engines = _get_engines()
 
