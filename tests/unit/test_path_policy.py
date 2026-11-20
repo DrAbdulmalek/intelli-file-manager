@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from src.core.path_policy import iter_files, is_hidden_relative, relative_parts
+from src.core.path_policy import iter_entries_reported, iter_files, is_hidden_relative, relative_parts
 
 
 def touch(path: Path, content: str = "x") -> Path:
@@ -65,3 +65,42 @@ def test_relative_parts_ignores_hidden_ancestor_of_root(tmp_path):
     root = tmp_path / ".hidden-parent" / "root"
     assert relative_parts(root, root / "a" / "b.txt") == ("a", "b.txt")
     assert is_hidden_relative(root, root / ".private" / "b.txt")
+
+
+
+def test_reported_traversal_reports_hidden_and_excluded_entries(tmp_path):
+    touch(tmp_path / "visible.txt")
+    touch(tmp_path / ".hidden.txt")
+    touch(tmp_path / ".git" / "ignored.txt")
+
+    entries = list(iter_entries_reported(tmp_path))
+    reasons = {path.name: reason for path, _info, _error, reason in entries}
+
+    assert reasons[".hidden.txt"] == "hidden"
+    assert reasons[".git"] == "hidden"
+    assert any(path.name == "visible.txt" and reason is None for path, _info, _error, reason in entries)
+
+
+def test_reported_traversal_never_follows_symlinks(tmp_path):
+    target = touch(tmp_path / "outside" / "secret.txt")
+    root = tmp_path / "root"
+    root.mkdir()
+    try:
+        (root / "linked").symlink_to(target)
+    except (OSError, NotImplementedError):
+        import pytest
+        pytest.skip("symlinks are not supported in this environment")
+
+    entries = list(iter_entries_reported(root))
+    assert any(path.name == "linked" and reason == "symlink" for path, _info, _error, reason in entries)
+    assert not any(path.name == "secret.txt" for path, _info, _error, reason in entries)
+
+
+def test_reported_traversal_marks_depth_limit_without_duplicate_directory(tmp_path):
+    touch(tmp_path / "one" / "two" / "three.txt")
+
+    entries = list(iter_entries_reported(tmp_path, max_depth=1))
+    two_entries = [entry for entry in entries if entry[0].name == "two"]
+
+    assert len(two_entries) == 1
+    assert two_entries[0][3] == "depth_limit"
