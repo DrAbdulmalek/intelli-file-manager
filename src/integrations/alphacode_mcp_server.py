@@ -26,6 +26,7 @@ SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = "2025-11-25"
 MAX_MESSAGE_BYTES = 1024 * 1024
 MAX_INVENTORY_ENTRIES = 1000
+MAX_SCAN_ENTRIES = 10000
 MAX_PLAN_ITEMS = 100
 SKIP_DIRS = frozenset({
     ".git", ".ssh", ".gnupg", ".config", ".cache", ".local",
@@ -132,13 +133,19 @@ def _inventory(root_arg: str, max_entries: int = 300) -> dict[str, Any]:
     totals: dict[str, int] = {}
     counts = {
         "files": 0, "directories": 0, "excluded": 0,
-        "symlinks": 0, "mount_boundaries": 0, "unreadable": 0,
+        "symlinks": 0, "mount_boundaries": 0, "unreadable": 0, "depth_limited": 0,
     }
     truncated = False
+    scan_limit_reached = False
+    entries_seen = 0
     skip_dirs = SKIP_DIRS
     for path, info, error, reason in iter_entries_reported(
         root, skip_hidden=True, skip_dirs=skip_dirs, max_depth=32
     ):
+        entries_seen += 1
+        if entries_seen > MAX_SCAN_ENTRIES:
+            scan_limit_reached = True
+            break
         relative = path.relative_to(root)
         parts = relative.parts
         if error is not None:
@@ -149,6 +156,9 @@ def _inventory(root_arg: str, max_entries: int = 300) -> dict[str, Any]:
             continue
         if reason == "mount_boundary":
             counts["mount_boundaries"] += 1
+            continue
+        if reason == "depth_limit":
+            counts["depth_limited"] += 1
             continue
         if reason is not None:
             counts["excluded"] += 1
@@ -182,7 +192,9 @@ def _inventory(root_arg: str, max_entries: int = 300) -> dict[str, Any]:
         "mode": "READ_ONLY",
         "content_read": False,
         "files_returned": len(files),
-        "truncated": truncated,
+        "entries_scanned": min(entries_seen, MAX_SCAN_ENTRIES),
+        "scan_complete": not scan_limit_reached and counts["unreadable"] == 0 and counts["depth_limited"] == 0,
+        "truncated": truncated or scan_limit_reached or counts["depth_limited"] > 0,
         "counts": counts,
         "extensions": dict(sorted(totals.items())),
         "files": files,
