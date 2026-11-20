@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Union
@@ -50,6 +51,23 @@ def _is_mount_point(path: Path) -> bool:
         return True
 
 
+def _has_symlink_component(path: Path) -> bool:
+    """يفحص جميع المكونات الموجودة دون اتباع الروابط الرمزية."""
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        if stat.S_ISLNK(info.st_mode):
+            return True
+    return False
+
+
 def iter_files(
     root: PathLike,
     *,
@@ -66,8 +84,8 @@ def iter_files(
       - لا يدخل المجلدات المحددة في skip_dirs.
     """
     base = Path(root)
-    if base.is_symlink():
-        raise OSError(f"جذر المسح رابط رمزي محظور: {base}")
+    if _has_symlink_component(base):
+        raise OSError(f"جذر المسح يحتوي مكوّناً رابطاً رمزياً محظوراً: {base}")
     if not base.is_dir():
         return
 
