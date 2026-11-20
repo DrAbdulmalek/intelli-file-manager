@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pytest
 from pathlib import Path
 
 from src.core.path_policy import iter_files, is_hidden_relative, relative_parts
@@ -65,3 +66,92 @@ def test_relative_parts_ignores_hidden_ancestor_of_root(tmp_path):
     root = tmp_path / ".hidden-parent" / "root"
     assert relative_parts(root, root / "a" / "b.txt") == ("a", "b.txt")
     assert is_hidden_relative(root, root / ".private" / "b.txt")
+
+
+
+def test_default_skip_dirs_include_gnupg(tmp_path):
+    touch(tmp_path / ".gnupg" / "private-keys-v1.d" / "secret.key")
+    found = list(iter_files(tmp_path))
+    assert found == []
+
+
+def test_explicit_mount_root_is_allowed_but_nested_mount_is_pruned(tmp_path, monkeypatch):
+    import src.core.path_policy as policy
+
+    root_file = tmp_path / "root.txt"
+    root_file.write_text("root")
+    nested_mount = tmp_path / "external"
+    touch(nested_mount / "nested.txt")
+
+    monkeypatch.setattr(
+        policy,
+        "_is_mount_point",
+        lambda path: Path(path) in {tmp_path, nested_mount},
+    )
+    found = list(policy.iter_files(tmp_path))
+    assert found == [root_file]
+
+
+def test_symlink_scan_root_is_rejected(tmp_path):
+    target = tmp_path / "target"
+    target.mkdir()
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    with pytest.raises(OSError, match="رابط رمزي"):
+        list(iter_files(link))
+
+
+
+def test_excluded_directories_remain_excluded_when_hidden_files_are_enabled(tmp_path):
+    touch(tmp_path / ".git" / "HEAD")
+    touch(tmp_path / ".custom-hidden" / "visible-if-not-pruned.txt")
+    found = {
+        p.relative_to(tmp_path).as_posix()
+        for p in iter_files(tmp_path, skip_hidden=False)
+    }
+    assert found == {".custom-hidden/visible-if-not-pruned.txt"}
+
+
+def test_file_agent_duplicate_scan_does_not_enter_hidden_trees(tmp_path):
+    from src.core.file_agent import FileAgent
+
+    touch(tmp_path / "visible.txt", "same-content")
+    touch(tmp_path / ".git" / "objects" / "hidden-copy.txt", "same-content")
+    assert FileAgent().detect_duplicates(str(tmp_path)) == []
+
+
+def test_file_handler_scan_does_not_enter_hidden_trees(tmp_path):
+    from src.core.file_handler import FileHandler
+
+    touch(tmp_path / "visible.txt")
+    touch(tmp_path / ".ssh" / "id_rsa.txt")
+    touch(tmp_path / "nested" / "nested-visible.txt")
+    found = {item["name"] for item in FileHandler().scan_directory(str(tmp_path))}
+    assert found == {"visible.txt", "nested-visible.txt"}
+
+
+def test_file_handler_can_scan_root_under_hidden_ancestor(tmp_path):
+    from src.core.file_handler import FileHandler
+
+    root = tmp_path / ".alphacode" / "scratch"
+    touch(root / "visible.txt")
+    found = {item["name"] for item in FileHandler().scan_directory(str(root))}
+    assert found == {"visible.txt"}
+
+
+def test_symlinked_ancestor_of_scan_root_is_rejected(tmp_path):
+    real_parent = tmp_path / "real-parent"
+    root = real_parent / "selected"
+    touch(root / "visible.txt")
+    linked_parent = tmp_path / "linked-parent"
+    try:
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    with pytest.raises(OSError, match="رابط رمزي"):
+        list(iter_files(linked_parent / "selected"))

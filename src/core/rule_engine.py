@@ -10,6 +10,7 @@
 التصميم:
   - لا إجراءات تدميرية: delete_flag فقط يضع وسم "to_delete"
   - كل نقل/نسخ يُسجَّل في undo_log للتراجع
+  - كل نقل/نسخ يجب أن يمر عبر SafeMover (إجباري، لا مسار تخطي)
   - عمليات tag/untag/set_category تُطبَّق على FileMetadata.tags/category
     (الـ metadata تُعاد إلى الحالة الأصلية عند التراجع)
   - النقل/النسخ الفعلي للملف يحدث على القرص + يُحدَّث file_path في metadata
@@ -21,7 +22,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, List, Optional, Union
@@ -63,7 +63,6 @@ class RuleEngine:
         self.ruleset = ruleset
 
     # ─── Dry-Run ────────────────────────────────────────────────────────
-
     def dry_run(
         self,
         records: Iterable[FileRecord],
@@ -119,7 +118,6 @@ class RuleEngine:
         return plan
 
     # ─── Execute ────────────────────────────────────────────────────────
-
     def execute(
         self,
         plan: DryRunPlan,
@@ -127,34 +125,30 @@ class RuleEngine:
         undo_log_path: Optional[Union[str, Path]] = None,
         confirm_destructive: bool = False,
         action_log: Optional["ActionLog"] = None,
-        use_safe_mover: bool = True,
     ) -> List[UndoEntry]:
         """ينفّذ خطة محاكاة مع تسجيل كل إجراء للتراجع
 
+        SafeMover إلزامي لجميع عمليات النقل والنسخ (لا مسار تخطي).
+
         Args:
             plan: خطة من dry_run()
-            undo_log_path: مسار ملف سجل التراجع (JSON). إن لم يُمرّر،
+            undo_log_path: مسار ملف سجل التراجع (JSON). إن لم يُمرّر,
                           لا تُكتب السجلات على القرص (تُرجع فقط).
             confirm_destructive: تأكيد صريح للإجراءات التدميرية (delete_flag).
                                 افتراضيًا False — لا تُنفَّذ الإجراءات التدميرية.
             action_log: ActionLog اختياري لتسجيل كل إجراء للعرض المرئي (PR-07).
                         لو None، لا يُسجّل في السجل المرئي.
-            use_safe_mover: لو True (افتراضيًا)، تُمرَّر عمليات move/copy عبر
-                           SafeMover مع تحقّق SHA-256 ومعالجة sidecar (PR-07).
-                           لو False، يُستخدم السلوك القديم (shutil مباشرة).
 
         Returns:
             List[UndoEntry]: سجل التراجع لكل إجراء نُفّذ
         """
         from .undo_log import UndoLog
+        from .safe_mover import SafeMover
 
         entries: List[UndoEntry] = []
         undo_log = UndoLog(undo_log_path) if undo_log_path else UndoLog(None)
-        # SafeMover مشترك لكل العمليات (لو مُفعّل)
-        safe_mover = None
-        if use_safe_mover:
-            from .safe_mover import SafeMover
-            safe_mover = SafeMover(verify_checksum=True, move_sidecar=True)
+        # SafeMover إلزامي لكل العمليات (لا مسار تخطي)
+        safe_mover = SafeMover(verify_checksum=True, move_sidecar=True)
 
         # تتبّع المسار الحالي لكل ملف بعد النقل/النسخ (لو نُقل ملف ثم وُسم بعد ذلك)
         # الخريطة: original_path → current_path
@@ -170,7 +164,7 @@ class RuleEngine:
                 )
                 continue
 
-            # إنشاء نسخة من planned بمسار محدَّث لو كان الملف نُقل سابقًا
+            # إنشاء نسخة من planned بمسار محدّث لو كان الملف نُقل سابقًا
             effective_planned = planned
             current_path = path_remap.get(planned.file_path, planned.file_path)
             if current_path != planned.file_path:
@@ -222,7 +216,6 @@ class RuleEngine:
         return entries
 
     # ─── Helpers ────────────────────────────────────────────────────────
-
     @staticmethod
     def _record_to_eval_dict(record: FileRecord) -> dict:
         """يحوّل FileRecord إلى قاموس مسطّح للتقييم"""
@@ -288,13 +281,13 @@ class RuleEngine:
         action_log: Optional["ActionLog"] = None,
         safe_mover: Optional["SafeMover"] = None,
     ) -> UndoEntry:
-        """ينفّذ إجراءًا واحدًا ويسجّله في undo_log
+        """ينفّذ إجراءً واحدًا ويسجّله في undo_log
 
         Args:
             planned: الإجراء المخطّط
             undo_log: سجل التراجع
             action_log: ActionLog اختياري (PR-07) لتسجيل الإجراء للعرض المرئي
-            safe_mover: SafeMover اختياري (PR-07) لعمليات move/copy الآمنة
+            safe_mover: SafeMover إلزامي لعمليات move/copy الآمنة
         """
         action_type = planned.action.type
         timestamp = datetime.now().isoformat()
@@ -325,15 +318,13 @@ class RuleEngine:
         return entry
 
     # ─── منفّذو الإجراءات ────────────────────────────────────────────────
-
     def _exec_move(
         self, planned: PlannedAction, undo_log: "UndoLog", timestamp: str,
         *, safe_mover: Optional["SafeMover"] = None,
     ) -> UndoEntry:
         """ينفّذ نقل ملف على القرص (مع نقل ملف sidecar إن وُجد)
 
-        لو safe_mover مُمرّر، يُستخدم SafeMover (PR-07) مع تحقّق SHA-256 ومعالجة
-        ذرّية. لو None، يُستخدم السلوك القديم (shutil.move مباشرة).
+        SafeMover إلزامي لجميع عمليات النقل (لا مسار تخطي إلى shutil.move).
         """
         if not planned.target_path:
             raise ValueError("target_path مفقود لعملية move")
@@ -343,63 +334,28 @@ class RuleEngine:
         if not src.exists():
             raise FileNotFoundError(f"الملف المصدر غير موجود: {src}")
 
-        # ─── المسار الآمن (PR-07): SafeMover ───
-        if safe_mover is not None:
-            result = safe_mover.move(src, dst)
-            if not result.success:
-                # فشل النقل الآمن — نسجّل الفشل ولا نُكمل
-                entry = UndoEntry(
-                    action_type=ActionType.MOVE.value,
-                    file_path=str(src),
-                    file_path_after=result.final_path or str(dst),
-                    rule_name=planned.rule_name,
-                    timestamp=timestamp,
-                    success=False,
-                    error_message=result.error or "safe_move failed",
-                )
-                undo_log.append(entry)
-                return entry
-            # نجح النقل — final_path قد يختلف لو حدث تضارب
+        # ─── المسار الآمن (PR-07): SafeMover إلزامي ───
+        if safe_mover is None:
+            safe_mover = SafeMover(verify_checksum=True, move_sidecar=True)
+        result = safe_mover.move(src, dst)
+        if not result.success:
+            # فشل النقل الآمن — نسجّل الفشل ولا نُكمل
             entry = UndoEntry(
                 action_type=ActionType.MOVE.value,
                 file_path=str(src),
-                file_path_after=result.final_path,
+                file_path_after=result.final_path or str(dst),
                 rule_name=planned.rule_name,
                 timestamp=timestamp,
-                success=True,
+                success=False,
+                error_message=result.error or "safe_move failed",
             )
             undo_log.append(entry)
             return entry
-
-        # ─── المسار القديم (legacy): shutil.move ───
-        # إنشاء المجلد الوجهة إن لم يكن موجودًا
-        dst.parent.mkdir(parents=True, exist_ok=True)
-
-        # لو الوجهة موجودة، نضيف لاحقة للاسم
-        if dst.exists() and src.resolve() != dst.resolve():
-            stem = dst.stem
-            suffix = dst.suffix
-            counter = 1
-            while dst.exists():
-                dst = dst.with_name(f"{stem}_{counter}{suffix}")
-                counter += 1
-
-        # نقل الملف + sidecar (إن وُجد)
-        src_sidecar = _sidecar_path(str(src))
-        shutil.move(str(src), str(dst))
-        if src_sidecar.exists():
-            dst_sidecar = _sidecar_path(str(dst))
-            # لو الوجهة موجودة (نادر)، ندمج
-            if dst_sidecar.exists():
-                _merge_sidecar(str(dst), src_sidecar)
-                src_sidecar.unlink()
-            else:
-                shutil.move(str(src_sidecar), str(dst_sidecar))
-
+        # نجح النقل — final_path قد يختلف لو حدث تضارب
         entry = UndoEntry(
             action_type=ActionType.MOVE.value,
             file_path=str(src),
-            file_path_after=str(dst),
+            file_path_after=result.final_path,
             rule_name=planned.rule_name,
             timestamp=timestamp,
             success=True,
@@ -413,8 +369,7 @@ class RuleEngine:
     ) -> UndoEntry:
         """ينفّذ نسخ ملف على القرص (مع نسخ sidecar إن وُجد)
 
-        لو safe_mover مُمرّر، يُستخدم SafeMover (PR-07). لو None، يُستخدم
-        السلوك القديم (shutil.copy2).
+        SafeMover إلزامي لجميع عمليات النسخ (لا مسار تخطي إلى shutil.copy2).
         """
         if not planned.target_path:
             raise ValueError("target_path مفقود لعملية copy")
@@ -424,61 +379,30 @@ class RuleEngine:
         if not src.exists():
             raise FileNotFoundError(f"الملف المصدر غير موجود: {src}")
 
-        # ─── المسار الآمن (PR-07): SafeMover ───
-        if safe_mover is not None:
-            result = safe_mover.copy(src, dst)
-            if not result.success:
-                entry = UndoEntry(
-                    action_type=ActionType.COPY.value,
-                    file_path=str(src),
-                    file_path_after=result.final_path or str(dst),
-                    rule_name=planned.rule_name,
-                    timestamp=timestamp,
-                    success=False,
-                    error_message=result.error or "safe_copy failed",
-                )
-                undo_log.append(entry)
-                return entry
+        # ─── المسار الآمن (PR-07): SafeMover إلزامي ───
+        if safe_mover is None:
+            safe_mover = SafeMover(verify_checksum=True, move_sidecar=True)
+        result = safe_mover.copy(src, dst)
+        if not result.success:
             entry = UndoEntry(
                 action_type=ActionType.COPY.value,
                 file_path=str(src),
-                file_path_after=result.final_path,
+                file_path_after=result.final_path or str(dst),
                 rule_name=planned.rule_name,
                 timestamp=timestamp,
-                success=True,
+                success=False,
+                error_message=result.error or "safe_copy failed",
             )
             undo_log.append(entry)
             return entry
-
-        # ─── المسار القديم (legacy): shutil.copy2 ───
-        dst.parent.mkdir(parents=True, exist_ok=True)
-
-        if dst.exists() and src.resolve() != dst.resolve():
-            stem = dst.stem
-            suffix = dst.suffix
-            counter = 1
-            while dst.exists():
-                dst = dst.with_name(f"{stem}_{counter}{suffix}")
-                counter += 1
-
-        shutil.copy2(str(src), str(dst))
-
-        # نسخ sidecar إن وُجد (الوسوم الحالية للملف المنسوخ)
-        src_sidecar = _sidecar_path(str(src))
-        if src_sidecar.exists():
-            dst_sidecar = _sidecar_path(str(dst))
-            if dst_sidecar.exists():
-                _merge_sidecar(str(dst), src_sidecar)
-            else:
-                shutil.copy2(str(src_sidecar), str(dst_sidecar))
-
         entry = UndoEntry(
             action_type=ActionType.COPY.value,
             file_path=str(src),
-            file_path_after=str(dst),
+            file_path_after=result.final_path,
             rule_name=planned.rule_name,
             timestamp=timestamp,
             success=True,
+            checksum_after=result.checksum_after,  # حارس التراجع (DeepSeek 11)
         )
         undo_log.append(entry)
         return entry
