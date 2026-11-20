@@ -5,13 +5,13 @@ session-handoff.py — توليد ملخص الجلسة وحفظه في الذا
 يُشغَّل في نهاية كل جلسة عمل (دورة الحياة: Resume → Advance → Handoff). يقوم بـ:
   1. جمع حالة Git (فرع، commits حديثة، تغييرات غير ملتزمة، آخر وسم)
   2. تشغيل بوابات التحقق الخاصة بالمشروع (اختياري — افتراضياً تعمل)
-  3. كتابة session-handoff.md (يُستبدل — اللقطة الحالية تحل محل السابقة)
-  4. حفظ الملخص في Mem0 (اختياري — إذا MEM0_API_KEY متاح)
+  3. إنشاء ملف session-handoff.md حصرياً (يرفض استبدال أي ملف موجود)
+  4. حفظ الملخص في Mem0 فقط عند تمرير --mem0 صراحةً (معطّل افتراضياً)
 
 الاستخدام:
   python3 scripts/session-handoff.py
   python3 scripts/session-handoff.py --no-tests      # تخطي بوابات التحقق
-  python3 scripts/session-handoff.py --no-mem0       # تخطي الحفظ في Mem0
+  python3 scripts/session-handoff.py --mem0           # رفع صريح إلى Mem0 (معطّل افتراضياً)
   python3 scripts/session-handoff.py --note "أنهيت X" --next "ابدأ بـ Y"
 
 قواعد الحفظ (AGENTS.md §11.5): لا أسرار أبداً؛ فضّل التحديث على الإضافة؛
@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import subprocess
+import stat
 import sys
 import urllib.error
 import urllib.request
@@ -275,6 +276,49 @@ def build_summary(project: str, git_state: dict, verification: dict,
 
 
 # ============ Main ============
+def _has_symlink_component(path: Path) -> bool:
+    """Reject symlinks in every existing path component."""
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        if stat.S_ISLNK(info.st_mode):
+            return True
+    return False
+
+
+def write_new_output(project_dir: Path, output: Path, content: str) -> Path:
+    """Create a private handoff file exclusively; never overwrite or follow symlinks."""
+    root = project_dir.resolve()
+    target = output if output.is_absolute() else root / output
+    target = Path(os.path.abspath(os.fspath(target)))
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("output path must remain inside the selected project directory") from exc
+
+    if _has_symlink_component(target.parent):
+        raise OSError("symlinked output parent is not allowed")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if _has_symlink_component(target.parent) or target.is_symlink():
+        raise OSError("symlinked output path is not allowed")
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(target, flags, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
+    return target
+
+
 def main():
     parser = argparse.ArgumentParser(description="توليد session-handoff.md وحفظه في Mem0")
     parser.add_argument("--project-dir", type=Path, default=Path.cwd())
@@ -282,7 +326,8 @@ def main():
     parser.add_argument("--next", dest="next_step", default="",
                         help="ما يجب أن يفعله الوكيل التالي")
     parser.add_argument("--no-tests", action="store_true", help="تخطي بوابات التحقق")
-    parser.add_argument("--no-mem0", action="store_true", help="تخطي الحفظ في Mem0")
+    parser.add_argument("--mem0", action="store_true", help="رفع صريح للملخص إلى Mem0 السحابي")
+    parser.add_argument("--no-mem0", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--output", type=Path, default=Path("session-handoff.md"))
     args = parser.parse_args()
 
@@ -314,14 +359,20 @@ def main():
 
     summary = build_summary(project, git_state, verification, args.note, args.next_step)
 
-    output_path = project_dir / args.output
-    output_path.write_text(summary, encoding="utf-8")
-    log(f"تم الكتابة: {output_path}", "ok")
+    if args.mem0 and args.no_mem0:
+        parser.error("--mem0 and --no-mem0 cannot be used together")
 
-    if args.no_mem0:
-        log("تخطي Mem0 (--no-mem0)", "info")
-    else:
+    try:
+        output_path = write_new_output(project_dir, args.output, summary)
+    except (OSError, ValueError) as exc:
+        log(f"رفض إنشاء ملف التسليم دون استبدال: {exc}", "err")
+        return 1
+    log(f"تم إنشاء ملف جديد: {output_path}", "ok")
+
+    if args.mem0:
         save_to_mem0(summary, project, args.note)
+    else:
+        log("Mem0 معطّل افتراضياً؛ لم تُرسل بيانات خارج الجهاز. استخدم --mem0 فقط بموافقة صريحة.", "info")
 
     print()
     print(f"{C.BOLD}═══ انتهى ═══{C.END}")
