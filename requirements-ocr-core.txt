@@ -1,0 +1,6 @@
+# Optional integration with DrAbdulmalek/ocr-core.
+# This file is intentionally separate from the base requirements to keep
+# ordinary IntelliFile installation independent of a GitHub fetch.
+# For offline deployments, prebuild/cache this pinned wheel and install it
+# from a local wheelhouse instead of resolving this VCS URL at runtime.
+marathon-ocr-core[tesseract] @ git+https://github.com/DrAbdulmalek/ocr-core.git@5613a1c05f7b657678a810b96c6ba5cab3b92e53
