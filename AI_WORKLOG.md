@@ -508,3 +508,13 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+## 2026-11-20 — GPT-6 review follow-up (PR #65)
+- Replaced the Path.glob("**/*") scan in FileHandler.scan_directory() with the shared iter_files() traversal policy to prevent entering hidden/excluded trees and symlinks.
+- Allowed an explicitly selected mount root while pruning nested mount points; mount-inspection errors now fail closed.
+- Added .gnupg to default excluded directories and reject a symlink as the selected scan root.
+- Added regression tests for hidden subtrees, explicit hidden roots, .gnupg, nested mount boundaries, and symlink roots; ported hidden-tree coverage for FileAgent and skip_hidden=False behavior.
+- CI was not observed for the resulting head SHA; no test pass is claimed.
+
+## 2026-11-20 — symlinked scan-root follow-up (PR #65)
+- Extended root validation to reject symlinked ancestor components, not only a symlink at the selected leaf; added a regression test for a selected directory reached through a symlinked parent.

@@ -129,3 +129,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Established local-first desktop file manager scope
 - Created PRODUCT_IDENTITY.md, REPO_POLICY.md, SECURITY_NOTES.md
 - Removed all medical/DICOM/SyncManager scope creep
+
+## Unreleased
+- Hardened FileHandler scans to use the shared path policy; permit explicitly selected mount roots while pruning nested mounts; fail closed on mount-inspection errors; exclude .gnupg; and add hidden-tree/symlink regression coverage.
+
+## Unreleased
+- Scan-root validation now rejects symlinked ancestor components, with regression coverage.
