@@ -4,7 +4,7 @@ import os
 import pytest
 from pathlib import Path
 
-from src.core.path_policy import iter_files, is_hidden_relative, relative_parts
+from src.core.path_policy import iter_entries_reported, iter_files, is_hidden_relative, relative_parts
 
 
 def touch(path: Path, content: str = "x") -> Path:

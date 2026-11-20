@@ -151,7 +151,7 @@ def iter_entries_reported(
         raise ValueError("max_depth must be a non-negative integer")
     skipped = frozenset(skip_dirs or ())
     try:
-        root_device = base.stat().st_dev
+        base.stat()
     except OSError as exc:
         yield base, None, exc, "root_unreadable"
         return
@@ -179,16 +179,15 @@ def iter_entries_reported(
                     yield path, info, None, "symlink"
                     continue
                 info = entry.stat(follow_symlinks=False)
-                # st_dev alone misses bind mounts on the same filesystem.
-                if os.path.ismount(path):
-                    yield path, info, None, "mount_boundary"
-                    continue
                 if stat.S_ISDIR(info.st_mode):
+                    # فحص حدّ التركيب للأدلة فقط — os.path.ismount يقارن st_dev
+                    # ويضلّ على overlayfs للملفات العادية (جهاز مختلف عن والدها)،
+                    # والملفات لا يُنتقل داخلها أصلاً فلا حدّ تركيب لها.
+                    if os.path.ismount(path):
+                        yield path, info, None, "mount_boundary"
+                        continue
                     if entry.name in skipped:
                         yield path, info, None, "excluded_directory"
-                        continue
-                    if info.st_dev != root_device:
-                        yield path, info, None, "mount_boundary"
                         continue
                     if depth < max_depth:
                         yield path, info, None, None
@@ -196,9 +195,7 @@ def iter_entries_reported(
                     else:
                         yield path, info, None, "depth_limit"
                     continue
-                if info.st_dev != root_device:
-                    yield path, info, None, "mount_boundary"
-                elif stat.S_ISREG(info.st_mode):
+                if stat.S_ISREG(info.st_mode):
                     yield path, info, None, None
                 else:
                     yield path, info, None, "unsupported_type"
