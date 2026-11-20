@@ -15,6 +15,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Support module and direct-script launch from an MCP client's working directory.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from src.core.path_policy import iter_entries_reported
 
 SERVER_NAME = "intellifile-alphacode"
