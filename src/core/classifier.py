@@ -51,16 +51,38 @@ class SmartFileClassifier:
         return {"category": "unknown", "confidence": 0.0, "source": "keyword_fallback"}
 
     def classify_file_medical(self, filepath: str) -> dict:
-        """تصنيف ملف — يجمع بين تصنيف الملف وتصنيف المحتوى الطبي"""
+        """تصنيف ملف — يجمع بين تصنيف الملف وتصنيف المحتوى الطبي
+
+        حاجز الحساسية (P0): الملفات SENSITIVE_MEDICAL/SECURITY_SECRETS
+        لا تُقرأ محتوياتها للتصنيف — تُعلَّم review_required بدل ذلك.
+        """
         file_info = self.classify_file(filepath)
         if "error" in file_info:
             return file_info
+        from .sensitive_guard import classify_sensitivity, content_read_allowed
+        sensitivity = classify_sensitivity(filepath)
+        if not content_read_allowed(sensitivity):
+            logger.info(
+                f"حاجز الحساسية: منع قراءة محتوى {Path(filepath).name} "
+                f"(المستوى {sensitivity}) — للمراجعة اليدوية"
+            )
+            return {
+                **file_info,
+                "category": "sensitive_review_required",
+                "confidence": 0.0,
+                "source": "sensitive_guard",
+                "sensitivity": sensitivity,
+                "review_required": True,
+            }
         text = self._extract_text_for_medical(filepath)
         medical_info = self.classify_medical(text)
-        return {**file_info, **medical_info}
+        return {**file_info, **medical_info, "sensitivity": sensitivity}
 
     def _extract_text_for_medical(self, filepath: str) -> str:
-        """استخراج نص من ملف للتصنيف"""
+        """استخراج نص من ملف للتصنيف — خلف حاجز الحساسية (طبقة دفاع ثانية)"""
+        from .sensitive_guard import classify_sensitivity, content_read_allowed
+        if not content_read_allowed(classify_sensitivity(filepath)):
+            return ""
         path = Path(filepath)
         ext = path.suffix.lower()
 
