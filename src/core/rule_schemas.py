@@ -396,6 +396,10 @@ class UndoEntry:
     timestamp: str = ""
     success: bool = True
     error_message: str = ""
+    # checksum للنسخة المنشأة في عمليات copy (يحمي التراجع: إن عُدّل
+    # الملف بعد النسخ يُرفض حذفه — جولة DeepSeek 11). متوافق خلفياً:
+    # from_dict يفلتر المفاتيح، والقيم القديمة تُترك None
+    checksum_after: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
