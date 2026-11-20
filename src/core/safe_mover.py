@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import errno
 import hashlib
 import logging
 import os
@@ -279,14 +280,14 @@ def _atomic_move(src: Path, dst: Path) -> None:
             )
             if ret == 0:
                 return
-            errno = ctypes.get_errno()
-            if errno == 17:  # EEXIST — الوجهة موجودة
+            link_errno = ctypes.get_errno()
+            if link_errno == 17:  # EEXIST — الوجهة موجودة
                 raise FileExistsError(
                     f"الوجهة موجودة بالفعل (RENAME_NOREPLACE): {dst}"
                 )
-            if errno == 18:  # EXDEV — أنظمة ملفات مختلفة
-                raise OSError(errno, "cross-device link not permitted", dst_str)
-            raise OSError(errno, os.strerror(errno), dst_str)
+            if link_errno == 18:  # EXDEV — أنظمة ملفات مختلفة
+                raise OSError(link_errno, "cross-device link not permitted", dst_str)
+            raise OSError(link_errno, os.strerror(link_errno), dst_str)
         except (FileExistsError, OSError):
             # Fallback إلى os.link + unlink للأنظمة التي لا تدعم renameat2
             pass
@@ -504,35 +505,36 @@ class SafeMover:
         )
 
         try:
+            # التحقق من وجود المصدر (مع تحذير TOCTOU — يتم معالجته عند الفتح الفعلي)
+            if not src.exists():
+                result.success = False
+                result.error = f"الملف المصدر غير موجود: {src}"
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
+
+            # no-op: النقل إلى نفس الموضع الفعلي — العقد الموثق في الاختبارات:
+            # ينجح دون فعل (idempotent)، لا تضارب مع نفسه ولا لاحقة.
+            # يعمل قبل رفض symlink (وجهة symlink تحلّ للمصدر نفسه = no-op)
+            try:
+                if src.resolve() == dst.resolve():
+                    if verify:
+                        result.checksum_before = compute_sha256(src)
+                        result.checksum_after = result.checksum_before
+                    result.success = True
+                    result.final_path = str(dst)
+                    result.duration_ms = (time.monotonic() - start) * 1000
+                    logger.info(f"نقل إلى نفس الموضع — no-op: {src}")
+                    return result
+            except OSError as e:
+                result.success = False
+                result.error = f"فشل فحص تطابق المسارين: {e}"
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
+
             _validate_safe_file_paths(src, dst)
         except SafeMoveError as e:
             result.success = False
             result.error = str(e)
-            result.duration_ms = (time.monotonic() - start) * 1000
-            return result
-
-        # التحقق من وجود المصدر (مع تحذير TOCTOU — يتم معالجته عند الفتح الفعلي)
-        if not src.exists():
-            result.success = False
-            result.error = f"الملف المصدر غير موجود: {src}"
-            result.duration_ms = (time.monotonic() - start) * 1000
-            return result
-
-        # no-op: النقل إلى نفس الموضع الفعلي — العقد الموثق في الاختبارات:
-        # ينجح دون فعل (idempotent)، لا تضارب مع نفسه ولا لاحقة
-        try:
-            if src.resolve() == dst.resolve():
-                if verify:
-                    result.checksum_before = compute_sha256(src)
-                    result.checksum_after = result.checksum_before
-                result.success = True
-                result.final_path = str(dst)
-                result.duration_ms = (time.monotonic() - start) * 1000
-                logger.info(f"نقل إلى نفس الموضع — no-op: {src}")
-                return result
-        except OSError as e:
-            result.success = False
-            result.error = f"فشل فحص تطابق المسارين: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
