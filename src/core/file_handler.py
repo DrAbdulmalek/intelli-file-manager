@@ -1,4 +1,6 @@
 """مدير الملفات - نقل ونسخ وحذف وإعادة تسمية"""
+import os
+import time
 import logging
 from pathlib import Path
 from typing import Optional, List
@@ -8,6 +10,12 @@ from .safe_mover import SafeMover
 from .path_policy import iter_files
 
 logger = logging.getLogger(__name__)
+
+# سياسة النسخ الاحتياطي (مراجعة كيمي — المرحلة 1):
+# ما فوق BACKUP_MAX_SIZE لا يُنسخ احتياطياً (نعتمد سلة المحذوفات)،
+# والنسخ الأقدم من BACKUP_MAX_AGE_DAYS يُحذف تلقائياً لمنع امتلاء القرص.
+BACKUP_MAX_SIZE = 100 * 1024 * 1024  # 100MB
+BACKUP_MAX_AGE_DAYS = 7
 
 
 class FileHandler:
@@ -72,13 +80,14 @@ class FileHandler:
 
         try:
             if use_trash:
-                trash_dir = Path.home() / ".local/share/Trash/files"
-                trash_dir.mkdir(parents=True, exist_ok=True)
-                trash_name = f"{file_path.name}_{datetime.now().timestamp()}"
-                trash_path = trash_dir / trash_name
-                result = self.safe_mover.move(str(file_path), str(trash_path))
-                if not result.success:
-                    return {"success": False, "error": result.error or "safe_move to trash failed"}
+                # send2trash أولاً (متوافقة XDG/Windows/macOS مع بيانات وصفية
+                # سليمة)؛ الخطة البديلة: نقل آمن عبر SafeMover إلى مسار XDG
+                # القياسي على لينكس (مراجعة كيمي — توافق كل الأنظمة).
+                try:
+                    trash_path = self._send_to_trash(file_path)
+                except Exception as trash_err:
+                    logger.error(f"خطأ في نقل {filepath} إلى السلة: {trash_err}")
+                    return {"success": False, "error": str(trash_err)}
                 self._record_action("delete", str(file_path), str(trash_path), None)
                 logger.info(f"تم نقل إلى سلة المحذوفات: {filepath}")
                 return {"success": True}
@@ -99,7 +108,23 @@ class FileHandler:
         if not file_path.exists():
             return {"success": False, "error": "الملف غير موجود"}
 
+        # Security: الاسم يجب أن يكون اسماً بسيطاً — منع الهروب من المجلد
+        # عبر مسارات مثل "../../evil" (مراجعة كيمي — ثغرة حرجة).
+        # ملاحظة: نرفض "\\" حتى على لينكس لأنها فاصل مسارات على Windows.
+        if not new_name or not new_name.strip():
+            return {"success": False, "error": "اسم غير صالح — الاسم فارغ"}
+        if (
+            Path(new_name).name != new_name
+            or os.sep in new_name
+            or "/" in new_name
+            or "\\" in new_name
+            or (os.altsep and os.altsep in new_name)
+        ):
+            return {"success": False, "error": "اسم غير صالح — لا يجوز أن يحوي مساراً"}
+
         new_path = file_path.parent / new_name
+        if new_path.exists():
+            return {"success": False, "error": "يوجد ملف بنفس الاسم"}
 
         try:
             result = self.safe_mover.move(str(file_path), str(new_path))
@@ -210,8 +235,13 @@ class FileHandler:
         return results
 
     def _backup_file(self, filepath: Path) -> Optional[str]:
-        """نسخ ملف احتياطي عبر SafeMover"""
+        """نسخ ملف احتياطي عبر SafeMover — مع حد حجم وسياسة احتفاظ"""
         try:
+            if filepath.stat().st_size > BACKUP_MAX_SIZE:
+                logger.info(
+                    f"تخطي النسخ الاحتياطي (الحجم يتجاوز {BACKUP_MAX_SIZE // (1024 * 1024)}MB): {filepath.name}"
+                )
+                return None
             self._backup_dir.mkdir(parents=True, exist_ok=True)
             backup = self._backup_dir / filepath.name
             if backup.exists():
@@ -220,10 +250,51 @@ class FileHandler:
             if not result.success:
                 logger.warning(f"لم يتم النسخ الاحتياطي: {result.error}")
                 return None
+            self._cleanup_old_backups()
             return str(result.final_path)
         except Exception as e:
             logger.warning(f"لم يتم النسخ الاحتياطي: {e}")
             return None
+
+    def _cleanup_old_backups(self, max_age_days: int = BACKUP_MAX_AGE_DAYS) -> int:
+        """حذف النسخ الاحتياطية الأقدم من max_age_days — سياسة احتفاظ تمنع امتلاء القرص"""
+        cutoff = time.time() - max_age_days * 86400
+        removed = 0
+        try:
+            for f in self._backup_dir.glob("*"):
+                try:
+                    if f.is_file() and f.stat().st_mtime < cutoff:
+                        f.unlink(missing_ok=True)
+                        removed += 1
+                except OSError:
+                    continue
+        except Exception as e:
+            logger.debug(f"تنظيف النسخ الاحتياطية: {e}")
+        if removed:
+            logger.info(f"تم حذف {removed} نسخة احتياطية أقدم من {max_age_days} يوماً")
+        return removed
+
+    def _send_to_trash(self, file_path: Path) -> str:
+        """نقل إلى سلة المحذوفات عبر send2trash إن توفرت وتعمل (XDG/Windows/macOS)،
+        مع نقل آمن عبر SafeMover إلى مسار XDG القياسي كخطة بديلة."""
+        try:
+            from send2trash import send2trash
+            send2trash(str(file_path))
+            return f"trash://{file_path.name}"
+        except ImportError:
+            pass  # المكتبة غير مثبتة — الخطة البديلة أدناه
+        except OSError as trash_err:
+            # قد تفشل send2trash عبر الأجهزة (ملف على جهاز مختلف عن $HOME)
+            # أو عند غياب سلة XDG مهيأة — نتحول للنقل الآمن عبر SafeMover
+            logger.debug(f"send2trash فشل ({trash_err}) — نستخدم مسار XDG عبر SafeMover")
+        trash_dir = Path.home() / ".local/share/Trash/files"
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        trash_name = f"{file_path.name}_{datetime.now().timestamp()}"
+        trash_path = trash_dir / trash_name
+        result = self.safe_mover.move(str(file_path), str(trash_path))
+        if not result.success:
+            raise RuntimeError(result.error or "safe_move to trash failed")
+        return str(result.final_path or trash_path)
 
     def _record_action(self, action_type: str, src: str, dest: str, backup: str):
         """تسجيل عملية للتراجع"""
