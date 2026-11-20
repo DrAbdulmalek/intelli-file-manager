@@ -89,3 +89,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 - Session handoff is local-only by default, writes a private no-clobber file, and requires explicit flags for remote Mem0 upload/testing.
+
+## Unreleased
+- Verification secret scanning now reports file paths only and never prints matched secret values.
