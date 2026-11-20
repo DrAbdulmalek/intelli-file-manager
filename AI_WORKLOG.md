@@ -527,6 +527,9 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
 
+## 2026-11-20 — privacy redaction follow-up (PR #64)
+- Removed the credential-exposure incident narrative, private backup-log filenames, and direct undo-log filename from the independent review document.
+- Replaced them with generic security guidance and a statement that local raw logs remain outside the repository.
 ## 2026-11-20 — GPT-6 review follow-up (PR #66)
 - Removed os.replace() fallbacks from cross-device SafeMover publication and atomic copy: if a no-clobber primitive is unavailable, operations now fail closed rather than risk replacing a destination created after preflight.
 - Added negative tests proving os.replace() is never called, sources remain intact, and temporary files are cleaned when hard-link publication is unavailable.
