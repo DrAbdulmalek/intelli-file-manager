@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 from .config import Config
+from .path_policy import iter_files
 
 logger = logging.getLogger(__name__)
 
@@ -187,17 +188,15 @@ class FileHandler:
             return []
 
         results = []
-        pattern = "**/*" if recursive else "*"
-
-        for item in dir_path.glob(pattern):
-            if not item.is_file() or item.name.startswith("."):
-                continue
+        # اجتياز موحد: لا يدخل المجلدات المخفية/المستثناة ولا يتبع
+        # symlinks أو يعبر نقاط تركيب فرعية. الجذر المختار صراحةً مسموح.
+        for item in iter_files(dir_path, recursive=recursive):
             try:
                 info = self.get_file_info(str(item))
                 info["type"] = item.suffix.lstrip(".").lower() or "بدون_امتداد"
                 results.append(info)
-            except Exception as e:
-                logger.debug(f"خطأ في مسح {item}: {e}")
+            except OSError as e:
+                logger.debug(f"تعذر فحص {item}: {e}")
 
         logger.info(f"تم مسح {len(results)} ملف في {directory}")
         return results
