@@ -174,3 +174,31 @@ def test_directory_preflight_skips_hidden_system_trees(tmp_path):
     item = preflight_item(root, destination / "source")
 
     assert item.file_count == 1
+
+
+
+def test_symlinked_source_ancestor_is_rejected_before_tree_walk(tmp_path, monkeypatch):
+    from pathlib import Path
+    import pytest
+    import src.core.organization as organization
+
+    real_parent = tmp_path / "real-parent"
+    source = real_parent / "source"
+    source.mkdir(parents=True)
+    (source / "child.txt").write_text("data")
+    linked_parent = tmp_path / "linked-parent"
+    try:
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+    destination_parent = tmp_path / "out"
+    destination_parent.mkdir()
+
+    def forbidden_walk(*args, **kwargs):
+        raise AssertionError("preflight must reject symlink ancestors before walking")
+
+    monkeypatch.setattr(organization, "_tree_summary", forbidden_walk)
+    item = preflight_item(linked_parent / "source", destination_parent / "source")
+
+    assert item.error_category == "symlink_rejected"
+    assert item.status == STATUS_BLOCKED_PREFLIGHT
