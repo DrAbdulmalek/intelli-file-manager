@@ -508,3 +508,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+## 2026-11-20 — privacy redaction follow-up (PR #64)
+- Removed the credential-exposure incident narrative, private backup-log filenames, and direct undo-log filename from the independent review document.
+- Replaced them with generic security guidance and a statement that local raw logs remain outside the repository.
