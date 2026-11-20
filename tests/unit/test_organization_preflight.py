@@ -201,3 +201,22 @@ def test_symlinked_source_ancestor_is_rejected_before_tree_walk(tmp_path, monkey
 
     assert item.error_category == "symlink_rejected"
     assert item.status == STATUS_BLOCKED_PREFLIGHT
+
+
+
+def test_manifest_fails_closed_when_atomic_link_is_unavailable(tmp_path, monkeypatch):
+    import errno
+    import pytest
+
+    plan = build_organization_plan([], base_dir=tmp_path)
+
+    def unsupported_link(*args, **kwargs):
+        raise OSError(errno.EOPNOTSUPP, "hard links unsupported")
+
+    monkeypatch.setattr(os, "link", unsupported_link)
+    target = tmp_path / "plan.json"
+    with pytest.raises(OSError, match="hard links unsupported"):
+        write_plan_manifest(plan, target)
+
+    assert not target.exists()
+    assert not list(tmp_path.glob(".ifm-plan-*"))
