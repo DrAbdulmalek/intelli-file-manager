@@ -124,6 +124,24 @@ def test_file_agent_duplicate_scan_does_not_enter_hidden_trees(tmp_path):
     assert FileAgent().detect_duplicates(str(tmp_path)) == []
 
 
+def test_file_handler_scan_does_not_enter_hidden_trees(tmp_path):
+    from src.core.file_handler import FileHandler
+
+    touch(tmp_path / "visible.txt")
+    touch(tmp_path / ".ssh" / "id_rsa.txt")
+    touch(tmp_path / "nested" / "nested-visible.txt")
+    found = {item["name"] for item in FileHandler().scan_directory(str(tmp_path))}
+    assert found == {"visible.txt", "nested-visible.txt"}
+
+
+def test_file_handler_can_scan_root_under_hidden_ancestor(tmp_path):
+    from src.core.file_handler import FileHandler
+
+    root = tmp_path / ".alphacode" / "scratch"
+    touch(root / "visible.txt")
+    found = {item["name"] for item in FileHandler().scan_directory(str(root))}
+    assert found == {"visible.txt"}
+
 
 def test_symlinked_ancestor_of_scan_root_is_rejected(tmp_path):
     real_parent = tmp_path / "real-parent"
