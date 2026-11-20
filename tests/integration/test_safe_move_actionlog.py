@@ -30,6 +30,7 @@ from src.core.safe_mover import (
     safe_copy_for_rule_engine,
     _sidecar_path,
     _resolve_collision,
+    OverwriteForbiddenError,
 )
 from src.core.action_log import (
     ActionLog,
@@ -330,35 +331,46 @@ class TestSafeMoverCollision:
         # المصدر لا يزال موجودًا
         assert src.exists()
 
-    def test_move_overwrite_true_replaces_destination(
-        self, tmp_workspace: Path
-    ):
-        """نقل مع overwrite=True يستبدل الوجهة"""
-        mover = SafeMover(overwrite=True)
+    def test_move_overwrite_true_is_forbidden(self, tmp_workspace: Path):
+        """نقل مع overwrite=True يُرفض وفق تعليمات المستخدم"""
+        # يجب أن يُرفع استثناء عند إنشاء SafeMover بـ overwrite=True
+        import pytest
+        with pytest.raises(OverwriteForbiddenError):
+            SafeMover(overwrite=True)
+
+        # حتى مع تجاوز المعامل في move، يُرفض التشغيل
+        mover = SafeMover()
         src = tmp_workspace / "src" / "file1.txt"
         dst = tmp_workspace / "dst" / "file1.txt"
         dst.write_text("old content", encoding="utf-8")
 
-        result = mover.move(src, dst)
+        result = mover.move(src, dst, overwrite=True)
 
-        assert result.success
-        assert not result.renamed_due_to_collision
-        assert dst.read_text(encoding="utf-8") == "محتوى ملف 1"
+        assert not result.success
+        assert "محظور" in result.error
+        # الوجهة يجب أن تبقى كما هي (لم تُكتب فوقها)
+        assert dst.read_text(encoding="utf-8") == "old content"
+        # المصدر يجب أن يبقى موجوداً
+        assert src.exists()
 
-    def test_copy_overwrite_true_replaces_destination(
-        self, tmp_workspace: Path
-    ):
-        """نسخ مع overwrite=True يستبدل الوجهة"""
-        mover = SafeMover(overwrite=True)
+    def test_copy_overwrite_true_is_forbidden(self, tmp_workspace: Path):
+        """نسخ مع overwrite=True يُرفض وفق تعليمات المستخدم"""
+        import pytest
+        with pytest.raises(OverwriteForbiddenError):
+            SafeMover(overwrite=True)
+
+        mover = SafeMover()
         src = tmp_workspace / "src" / "file1.txt"
         dst = tmp_workspace / "dst" / "file1.txt"
         dst.write_text("old content", encoding="utf-8")
 
-        result = mover.copy(src, dst)
+        result = mover.copy(src, dst, overwrite=True)
 
-        assert result.success
-        assert dst.read_text(encoding="utf-8") == "محتوى ملف 1"
-        # المصدر لا يزال موجودًا
+        assert not result.success
+        assert "محظور" in result.error
+        # الوجهة يجب أن تبقى كما هي
+        assert dst.read_text(encoding="utf-8") == "old content"
+        # المصدر يجب أن يبقى موجوداً
         assert src.exists()
 
     def test_resolve_collision_no_conflict(self, tmp_workspace: Path):
@@ -1048,8 +1060,8 @@ class TestRuleEngineSafeMoverIntegration:
         data = json.loads(log_path.read_text(encoding="utf-8"))
         assert len(data["entries"]) >= 2
 
-    def test_execute_use_safe_mover_false_uses_legacy(self, tmp_workspace: Path):
-        """execute مع use_safe_mover=False يستخدم shutil مباشرة"""
+    def test_execute_uses_safe_mover_mandatory(self, tmp_workspace: Path):
+        """execute يستخدم SafeMover إجبارياً (لا مسار تخطي إلى shutil)"""
         ruleset = self._build_ruleset()
         engine = RuleEngine(ruleset)
         inventory = FileInventory()
@@ -1059,7 +1071,6 @@ class TestRuleEngineSafeMoverIntegration:
         entries = engine.execute(
             plan,
             undo_log_path=str(tmp_workspace / "undo.json"),
-            use_safe_mover=False,
         )
 
         assert all(e.success for e in entries)

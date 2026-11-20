@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 from .config import Config
+from .safe_mover import SafeMover
 from .path_policy import iter_files
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ class FileHandler:
     def delete_file(self, filepath: str, use_trash: bool = True) -> dict:
         """حذف ملف (نقل إلى سلة المحذوفات فقط؛ الحذف النهائي محظور)
 
-        per تعليمات المستخدم: ممنوع rm -r/-rf، الاستثناء rmdir للمجلد الفارغ فقط.
+        وفق تعليمات المستخدم: ممنوع rm -r/-rf، الاستثناء rmdir للمجلد الفارغ فقط.
         """
         file_path = Path(filepath)
         if not file_path.exists():
@@ -82,7 +83,7 @@ class FileHandler:
                 logger.info(f"تم نقل إلى سلة المحذوفات: {filepath}")
                 return {"success": True}
             else:
-                # الحذف النهائي محظور per تعليمات المستخدم
+                # الحذف النهائي محظور وفق تعليمات المستخدم
                 logger.warning(f"محاولة حذف نهائي محظورة: {filepath}")
                 return {
                     "success": False,
@@ -113,7 +114,7 @@ class FileHandler:
             return {"success": False, "error": str(e)}
 
     def undo_last_action(self) -> dict:
-        """التراجع عن آخر عملية عبر SafeMover"""
+        """التراجع عن آخر عملية باستخدام SafeMover (لا استبدال صامت للملف الجديد)."""
         if not self._action_history:
             return {"success": False, "error": "لا توجد عمليات للتراجع عنها"}
 
@@ -136,6 +137,13 @@ class FileHandler:
                 if not result.success:
                     logger.error(f"فشل التراجع عن إعادة تسمية: {result.error}")
                     return {"success": False, "error": result.error}
+            elif action["type"] == "delete_permanent":
+                backup = action.get("backup")
+                if backup and Path(backup).exists():
+                    result = self.safe_mover.move(backup, action["src"])
+                    if not result.success:
+                        logger.error(f"فشل التراجع عن حذف نهائي: {result.error}")
+                        return {"success": False, "error": result.error}
 
             self._action_history.pop()
             logger.info(f"تم التراجع عن: {action['type']}")
