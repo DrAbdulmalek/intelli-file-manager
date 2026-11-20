@@ -131,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed all medical/DICOM/SyncManager scope creep
 
 ## Unreleased
+- Removed raw LOGS references and identifying operational details from the safe-organization preflight proposal.
 - Redacted personal filesystem paths and detailed operational inventory data from the organization-lessons document.
 - Redacted private log filenames and credential-incident details from the independent review document.
 - SafeMover now fails closed when atomic no-clobber publication is unavailable and rejects symlink path components and non-regular sources; added regression tests for unsafe fallback and symlink cases.
