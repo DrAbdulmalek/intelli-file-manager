@@ -498,3 +498,6 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 2026-11-20 — symlink traversal ordering follow-up (PR #54)
 - Moved symlink-component validation ahead of source directory metadata traversal; added a test that fails if `_tree_summary()` is called for a source reached through a symlinked ancestor.
+
+## 2026-11-20 — manifest publication fallback test (PR #54)
+- Added a negative test proving manifest publication fails closed and cleans its temporary file when hard-link no-clobber publication is unavailable.
