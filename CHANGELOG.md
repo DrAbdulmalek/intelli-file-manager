@@ -47,6 +47,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — 2.2.0-dev
 
+### أُضيف (تحصين السلامة P0 — فرع feat/p0-safety-hardening)
+- `src/core/sensitive_guard.py`: حاجز حساسية بخمسة مستويات (بروتوكول v2.0) —
+  ملفات MRI/DICOM/أسماء المرضى والأسرار (.env/مفاتيح) لا يُقرأ محتواها للتصنيف،
+  تُعلَّم `sensitive_review_required`، مع بوابة `external_send_allowed` لأي
+  استدعاء AI خارجي مستقبلاً.
+- `iter_files_reported()` في `path_policy`: مسح بأخطاء مُعلَنة — لا اجتياز صامت.
+- `docs/ALPHACODE_SESSION_REVIEW_2026-11-20.md`: جدول أدلة مراجعة الجلسة ضد كود
+  main + تناقضات سجلات WD + القرارات الثلاثة لقرص WD.
+
+### أُصلح (تحصين السلامة P0)
+- `path_policy`: `.ssh/.config/.gnupg` مستثناة دائماً (حتى مع `skip_hidden=False`)،
+  لا عبور mount points افتراضياً (`follow_mount_points=False`).
+- `safe_mover`: حجز ذرّي للوجهة (`O_CREAT|O_EXCL`) يمنع الاستبدال الصامت TOCTOU؛
+  `overwrite=True` صار استبدالاً آمناً — النسخة القديمة جانباً وتُعاد عند أي فشل،
+  ولا تُحذف إلا بعد نجاح النقل والتحقق (كانت تُحذف قبل النقل).
+- `file_handler`: النقل/النسخ/إعادة التسمية كلها عبر SafeMover (كانت shutil خام)،
+  والحذف النهائي محظور افتراضياً حتى `confirm_permanent_delete=True`.
+- `rule_engine`: `use_safe_mover=False` يرفع ValueError — لا مسار قديم بـ shutil.
+
 > The work below is merged to `main` but **not yet tagged `v2.2.0`**.
 > The latest released tag is `v2.1.0`. The `2.2.0.dev0` version in
 > `setup.py` reflects this pre-release state. Tag `v2.2.0` only after

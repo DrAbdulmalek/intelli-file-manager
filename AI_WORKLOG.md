@@ -76,6 +76,21 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
+### 2026-11-20 - Claude (P0 safety hardening; branch feat/p0-safety-hardening)
+- Cross-checked the AlphaCode session logs (LOGS/session_20261120/, local) and DrMalek's
+  independent review against main's actual code. All 8 findings verified with line
+  evidence; IFM-001 "path_policy missing" was WRONG (file exists, needs completion).
+- Implemented P0 in 4 commits: path_policy completion (secret dirs/mounts/error
+  reporting), SafeMover race-safe claim + non-destructive overwrite (TOCTOU fixed),
+  SafeMover bypass closure (FileHandler gated, permanent delete needs explicit
+  confirm, use_safe_mover=False raises), sensitive-file barrier (sensitive_guard:
+  MRI/patient/secret content never read for classification).
+- Tests: +21 new; full suite 612 passed vs 591 on main, identical 28 pre-existing
+  failures (2 of which this branch fixes). Zero new failures.
+- WD decisions adopted: no further moves until verification; no duplicate deletion
+  (1 confirmed 11.28GB group + 4 pending); undo commands NOT to be run as-is.
+- See docs/ALPHACODE_SESSION_REVIEW_2026-11-20.md for the sanitized evidence table.
+
 ### 2026-11-20 - GPT-6 (independent implementation; branch only)
 - Created branch `fix/unified-path-policy-shell-plan-2026-11-20`; no changes to `main`.
 - Added shared `src/core/path_policy.py` and migrated classifier, file agent,
