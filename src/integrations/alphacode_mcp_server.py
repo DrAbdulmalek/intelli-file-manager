@@ -54,7 +54,7 @@ def _is_sensitive_parts(parts: tuple[str, ...]) -> bool:
         lowered = part.casefold()
         if lowered in SKIP_DIRS or lowered in SENSITIVE_TOKENS:
             return True
-        if lowered.endswith(SENSITIVE_SUFFIXES):
+        if any(lowered.endswith(suffix) for suffix in SENSITIVE_SUFFIXES):
             return True
         tokens = {token for token in re.split(r"[^a-z0-9]+", lowered) if token}
         if tokens & SENSITIVE_TOKENS:
