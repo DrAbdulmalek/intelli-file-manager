@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -27,10 +28,14 @@ _ARABIC_NORMALIZE_MAP = str.maketrans(
     "ااايه",
 )
 
+# التشكيل (الحركات) والتطويل — تُحذف عند التطبيع (مراجعة كيمي — تحسينات صغيرة)
+_ARABIC_DIACRITICS_RE = re.compile(r"[\u064B-\u0652\u0640]")
+
 
 def _normalize_arabic(text: str) -> str:
-    """Normalize Arabic text for search: unify alef/yaa/taa marbuta."""
-    return text.translate(_ARABIC_NORMALIZE_MAP)
+    """Normalize Arabic text for search: unify alef/yaa/taa marbuta and
+    strip diacritics (harakat) and tatweel."""
+    return _ARABIC_DIACRITICS_RE.sub("", text.translate(_ARABIC_NORMALIZE_MAP))
 
 
 def _tokenize(text: str) -> list[str]:
@@ -208,13 +213,24 @@ class HybridSearchEngine:
         self.semantic_weight = semantic_weight
         self._doc_ids: list[str] = []
         self._doc_texts: dict[str, str] = {}
+        # الأقفال: المحرك مشترك بين طلبات FastAPI المتوازية (مراجعة كيمي — المرحلة 1)
+        self._lock = threading.RLock()
 
-    def index_files(self, directory: str, extensions: tuple[str, ...] | None = None) -> int:
+    def index_files(
+        self,
+        directory: str,
+        extensions: tuple[str, ...] | None = None,
+        reset: bool = True,
+    ) -> int:
         """Index files from a directory into both BM25 and semantic engines.
 
         Args:
             directory: Path to scan for files
             extensions: Optional tuple of extensions to include (e.g., (".pdf", ".txt"))
+            reset: If True (default), clear previous indexing first so re-indexing
+                the same directory is idempotent (no duplicated documents that
+                desync `_doc_ids` from the BM25 index). If False, append to the
+                existing index.
 
         Returns:
             Number of files successfully indexed
@@ -224,30 +240,37 @@ class HybridSearchEngine:
             logger.error(f"المجلد غير موجود: {directory}")
             return 0
 
-        documents: dict[str, str] = {}
-        texts_for_bm25: list[str] = []
-        doc_ids_for_bm25: list[str] = []
+        with self._lock:
+            if reset:
+                self.bm25 = BM25Engine(k1=self.bm25.k1, b=self.bm25.b)
+                self.semantic = SemanticSearchEngineV2(model_name=self.semantic.model_name)
+                self._doc_ids = []
+                self._doc_texts = {}
 
-        for item in iter_files(dir_path):
-            if extensions and item.suffix.lower() not in extensions:
-                continue
-            try:
-                text = self._extract_text(str(item))
-                if text.strip():
-                    doc_id = str(item)
-                    documents[doc_id] = text
-                    texts_for_bm25.append(text)
-                    doc_ids_for_bm25.append(doc_id)
-                    self._doc_texts[doc_id] = text
-            except Exception as exc:
-                logger.debug(f"خطأ في قراءة {item}: {exc}")
+            documents: dict[str, str] = {}
+            texts_for_bm25: list[str] = []
+            doc_ids_for_bm25: list[str] = []
 
-        # Index into BM25
-        self.bm25.add_documents(texts_for_bm25)
-        self._doc_ids.extend(doc_ids_for_bm25)
+            for item in iter_files(dir_path):
+                if extensions and item.suffix.lower() not in extensions:
+                    continue
+                try:
+                    text = self._extract_text(str(item))
+                    if text.strip():
+                        doc_id = str(item)
+                        documents[doc_id] = text
+                        texts_for_bm25.append(text)
+                        doc_ids_for_bm25.append(doc_id)
+                        self._doc_texts[doc_id] = text
+                except Exception as exc:
+                    logger.debug(f"خطأ في قراءة {item}: {exc}")
 
-        # Index into semantic engine
-        semantic_count = self.semantic.index_documents(documents)
+            # Index into BM25
+            self.bm25.add_documents(texts_for_bm25)
+            self._doc_ids.extend(doc_ids_for_bm25)
+
+            # Index into semantic engine
+            semantic_count = self.semantic.index_documents(documents)
 
         total = len(documents)
         logger.info(
@@ -266,12 +289,13 @@ class HybridSearchEngine:
             List of result dicts with keys: id, text, bm25_rank, semantic_rank, rrf_score
         """
         # BM25 results
-        bm25_results = self.bm25.search(query, top_k=top_k * 3)
-        bm25_ranks: dict[str, int] = {}
-        for rank, (idx, _score) in enumerate(bm25_results, start=1):
-            if idx < len(self._doc_ids):
-                doc_id = self._doc_ids[idx]
-                bm25_ranks[doc_id] = rank
+        with self._lock:
+            bm25_results = self.bm25.search(query, top_k=top_k * 3)
+            bm25_ranks: dict[str, int] = {}
+            for rank, (idx, _score) in enumerate(bm25_results, start=1):
+                if idx < len(self._doc_ids):
+                    doc_id = self._doc_ids[idx]
+                    bm25_ranks[doc_id] = rank
 
         # Semantic results
         semantic_results = self.semantic.search(query, top_k=top_k * 3)
