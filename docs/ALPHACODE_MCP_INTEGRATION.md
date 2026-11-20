@@ -76,6 +76,16 @@ The bridge implements the MCP stdio lifecycle for protocol version `2025-11-25`.
 
 If the installed AlphaCode application does not support MCP stdio servers, this server alone cannot make the application connect. In that case, AlphaCode needs a local adapter that speaks this MCP client protocol; do not substitute a network listener or cloud relay.
 
+## Verify the installed AlphaCode client (read-only)
+
+After checking out this branch on the device, run:
+
+```bash
+python scripts/alphacode_mcp_probe.py
+```
+
+The probe inspects only known AlphaCode launcher/configuration locations. It does not launch AlphaCode or execute any command. It reports launcher executable basenames and MCP-related configuration key names only; it never prints configuration values, tokens, prompts, or the absolute home path. A detected key is only a configuration hint, not proof that the installed client can launch MCP stdio servers.
+
 ## Local tests
 
 From the IntelliFile repository root:
