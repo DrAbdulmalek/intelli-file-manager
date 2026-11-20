@@ -108,10 +108,10 @@ class TestDeleteFile:
     """اختبار دالة حذف الملفات"""
 
     def test_delete_file_permanent(self, tmp_path, sample_files):
-        """يتحقق من حذف ملف بشكل نهائي (بدون سلة المحذوفات)
+        """يتحقق من حذف ملف بشكل نهائي مع تأكيد صريح (IFM-007)
 
         يختبر:
-          - نجاح العملية (success=True)
+          - نجاح العملية مع confirm_permanent_delete=True
           - عدم وجود الملف بعد الحذف
         """
         config = Config(database_path=str(tmp_path / "intellifile"))
@@ -121,10 +121,26 @@ class TestDeleteFile:
         test_file = tmp_path / "to_delete.txt"
         test_file.write_text("سيتم حذف هذا الملف")
 
-        result = handler.delete_file(str(test_file), use_trash=False)
+        result = handler.delete_file(
+            str(test_file), use_trash=False, confirm_permanent_delete=True
+        )
 
         assert result["success"] is True
         assert not test_file.exists()
+
+    def test_delete_permanent_refused_by_default(self, tmp_path, sample_files):
+        """IFM-007: الحذف النهائي معطل افتراضيًا — يُرفض دون تأكيد صريح"""
+        config = Config(database_path=str(tmp_path / "intellifile"))
+        handler = FileHandler(config)
+
+        test_file = tmp_path / "protected.txt"
+        test_file.write_text("محتوى مهم")
+
+        result = handler.delete_file(str(test_file), use_trash=False)
+
+        assert result["success"] is False
+        assert "confirm_permanent_delete" in result["error"]
+        assert test_file.exists(), "الملف يجب أن يبقى دون تأكيد صريح"
 
     def test_delete_nonexistent_file(self, tmp_path):
         """يتحقق من أن حذف ملف غير موجود يُرجع خطأ"""
@@ -144,7 +160,9 @@ class TestDeleteFile:
         test_file = tmp_path / "history_test.txt"
         test_file.write_text("test")
 
-        handler.delete_file(str(test_file), use_trash=False)
+        handler.delete_file(
+            str(test_file), use_trash=False, confirm_permanent_delete=True
+        )
 
         assert len(handler.history) == 1
         assert handler.history[0]["type"] in ("delete", "delete_permanent")

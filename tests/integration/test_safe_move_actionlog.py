@@ -1048,22 +1048,24 @@ class TestRuleEngineSafeMoverIntegration:
         data = json.loads(log_path.read_text(encoding="utf-8"))
         assert len(data["entries"]) >= 2
 
-    def test_execute_use_safe_mover_false_uses_legacy(self, tmp_workspace: Path):
-        """execute مع use_safe_mover=False يستخدم shutil مباشرة"""
+    def test_execute_use_safe_mover_false_is_refused(self, tmp_workspace: Path):
+        """IFM-002/IFM-008: use_safe_mover=False محظور — لا مسار legacy بـ shutil"""
+        import pytest as _pytest
+
         ruleset = self._build_ruleset()
         engine = RuleEngine(ruleset)
         inventory = FileInventory()
         records = list(inventory.scan_directory(str(tmp_workspace / "src")))
         plan = engine.dry_run(records, base_dir=str(tmp_workspace))
 
-        entries = engine.execute(
-            plan,
-            undo_log_path=str(tmp_workspace / "undo.json"),
-            use_safe_mover=False,
-        )
-
-        assert all(e.success for e in entries)
-        assert (tmp_workspace / "Documents" / "file1.txt").exists()
+        with _pytest.raises(ValueError, match="use_safe_mover=False محظور"):
+            engine.execute(
+                plan,
+                undo_log_path=str(tmp_workspace / "undo.json"),
+                use_safe_mover=False,
+            )
+        # لا شيء نُقل
+        assert not (tmp_workspace / "Documents" / "file1.txt").exists()
 
     def test_execute_move_failure_logged_in_action_log(self, tmp_workspace: Path):
         """execute مع فشل نقل يُسجّل في action_log"""

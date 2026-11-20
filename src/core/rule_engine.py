@@ -139,22 +139,27 @@ class RuleEngine:
                                 افتراضيًا False — لا تُنفَّذ الإجراءات التدميرية.
             action_log: ActionLog اختياري لتسجيل كل إجراء للعرض المرئي (PR-07).
                         لو None، لا يُسجّل في السجل المرئي.
-            use_safe_mover: لو True (افتراضيًا)، تُمرَّر عمليات move/copy عبر
-                           SafeMover مع تحقّق SHA-256 ومعالجة sidecar (PR-07).
-                           لو False، يُستخدم السلوك القديم (shutil مباشرة).
+            use_safe_mover: واجهة توافق فقط — القيمة الوحيدة المقبولة True.
+                           SafeMover هو بوابة التنفيذ الوحيدة لعمليات move/copy
+                           في مسارات التنظيم (IFM-002/IFM-008)؛ تمرير False يرفع
+                           ValueError ولا يوجد مسار قديم بـ shutil منذ هذا الإصدار.
 
         Returns:
             List[UndoEntry]: سجل التراجع لكل إجراء نُفّذ
         """
         from .undo_log import UndoLog
 
+        if not use_safe_mover:
+            # IFM-002/IFM-008: إغلاق باب العودة إلى مسار shutil القديم
+            raise ValueError(
+                "use_safe_mover=False محظور — SafeMover هو بوابة التنفيذ الوحيدة "
+                "لعمليات النقل/النسخ في مسارات التنظيم (IFM-002/IFM-008)"
+            )
         entries: List[UndoEntry] = []
         undo_log = UndoLog(undo_log_path) if undo_log_path else UndoLog(None)
-        # SafeMover مشترك لكل العمليات (لو مُفعّل)
-        safe_mover = None
-        if use_safe_mover:
-            from .safe_mover import SafeMover
-            safe_mover = SafeMover(verify_checksum=True, move_sidecar=True)
+        # SafeMover مشترك لكل العمليات (إلزامي)
+        from .safe_mover import SafeMover
+        safe_mover = SafeMover(verify_checksum=True, move_sidecar=True)
 
         # تتبّع المسار الحالي لكل ملف بعد النقل/النسخ (لو نُقل ملف ثم وُسم بعد ذلك)
         # الخريطة: original_path → current_path

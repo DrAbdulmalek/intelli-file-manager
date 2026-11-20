@@ -1,4 +1,9 @@
-"""مدير الملفات - نقل ونسخ وحذف وإعادة تسمية"""
+"""مدير الملفات - نقل ونسخ وحذف وإعادة تسمية
+
+IFM-002/IFM-007: كل عمليات النقل والنسخ وإعادة التسمية تمر عبر SafeMover
+(بوابة التنفيذ الوحيدة) مع تحقق SHA-256 وحل تضارب آمن. الحذف النهائي معطل
+افتراضيًا ويحتاج confirm_permanent_delete=True صراحةً.
+"""
 import shutil
 import logging
 from pathlib import Path
@@ -6,6 +11,7 @@ from typing import Optional, List
 from datetime import datetime
 from .config import Config
 from .path_policy import iter_files
+from .safe_mover import SafeMover
 
 logger = logging.getLogger(__name__)
 
@@ -17,48 +23,49 @@ class FileHandler:
         self.config = config or Config()
         self._action_history: List[dict] = []
         self._backup_dir = Path(self.config.database_path) / "backups"
+        self._mover = SafeMover(verify_checksum=True, move_sidecar=True)
 
     def move_file(self, src: str, dest_category: str, base_dir: str) -> dict:
-        """نقل ملف إلى مجلد التصنيف"""
+        """نقل ملف إلى مجلد التصنيف — عبر SafeMover (IFM-002)"""
         src_path = Path(src)
         dest_dir = Path(base_dir) / dest_category
         dest_path = dest_dir / src_path.name
 
-        # تجنب الكتابة فوق ملف موجود
-        if dest_path.exists():
-            stem = src_path.stem
-            suffix = src_path.suffix
-            counter = 1
-            while dest_path.exists():
-                dest_path = dest_dir / f"{stem}_{counter}{suffix}"
-                counter += 1
-
         # نسخ احتياطي
         backup_path = self._backup_file(src_path)
-        dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            shutil.move(str(src_path), str(dest_path))
-            self._record_action("move", str(src_path), str(dest_path), backup_path)
+            result = self._mover.move(src_path, dest_path)
+            if not result.success:
+                logger.error(f"فشل نقل {src}: {result.error}")
+                return {"success": False, "error": result.error}
+            self._record_action("move", str(src_path), result.final_path, backup_path)
             logger.info(f"تم نقل: {src_path.name} -> {dest_category}/")
-            return {"success": True, "dest": str(dest_path)}
+            return {"success": True, "dest": result.final_path}
         except Exception as e:
             logger.error(f"خطأ في نقل {src}: {e}")
             return {"success": False, "error": str(e)}
 
     def copy_file(self, src: str, dest: str) -> dict:
-        """نسخ ملف"""
+        """نسخ ملف — عبر SafeMover (IFM-002)"""
         try:
-            Path(dest).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
-            logger.info(f"تم نسخ: {src} -> {dest}")
+            result = self._mover.copy(src, dest)
+            if not result.success:
+                logger.error(f"فشل نسخ {src}: {result.error}")
+                return {"success": False, "error": result.error}
+            logger.info(f"تم نسخ: {src} -> {result.final_path}")
             return {"success": True}
         except Exception as e:
             logger.error(f"خطأ في نسخ {src}: {e}")
             return {"success": False, "error": str(e)}
 
-    def delete_file(self, filepath: str, use_trash: bool = True) -> dict:
-        """حذف ملف (نقل إلى سلة المحذوفات أو حذف نهائي)"""
+    def delete_file(self, filepath: str, use_trash: bool = True,
+                    confirm_permanent_delete: bool = False) -> dict:
+        """حذف ملف (نقل إلى سلة المحذوفات أو حذف نهائي مؤكَّد)
+
+        IFM-007: الحذف النهائي معطل افتراضيًا — يتطلب confirm_permanent_delete=True
+        صراحةً مع use_trash=False، ويبقى النسخ الاحتياطي سابقًا للحذف.
+        """
         file_path = Path(filepath)
         if not file_path.exists():
             return {"success": False, "error": "الملف غير موجود"}
@@ -71,11 +78,22 @@ class FileHandler:
                 trash_dir.mkdir(parents=True, exist_ok=True)
                 trash_name = f"{file_path.name}_{datetime.now().timestamp()}"
                 trash_path = trash_dir / trash_name
-                shutil.move(str(file_path), str(trash_path))
-                self._record_action("delete", str(file_path), str(trash_path), backup_path)
-            else:
+                result = self._mover.move(file_path, trash_path)
+                if not result.success:
+                    logger.error(f"فشل نقل إلى السلة {filepath}: {result.error}")
+                    return {"success": False, "error": result.error}
+                self._record_action("delete", str(file_path), result.final_path, backup_path)
+            elif confirm_permanent_delete:
                 file_path.unlink()
                 self._record_action("delete_permanent", str(file_path), None, backup_path)
+            else:
+                return {
+                    "success": False,
+                    "error": (
+                        "الحذف النهائي محظور افتراضيًا (IFM-007) — مرر "
+                        "confirm_permanent_delete=True صراحةً أو استخدم use_trash=True"
+                    ),
+                }
             logger.info(f"تم حذف: {filepath}")
             return {"success": True}
         except Exception as e:
@@ -83,7 +101,7 @@ class FileHandler:
             return {"success": False, "error": str(e)}
 
     def rename_file(self, filepath: str, new_name: str) -> dict:
-        """إعادة تسمية ملف"""
+        """إعادة تسمية ملف — عبر SafeMover (IFM-002)؛ تضارب الاسم يأخذ لاحقة لا استبدال"""
         file_path = Path(filepath)
         if not file_path.exists():
             return {"success": False, "error": "الملف غير موجود"}
@@ -92,16 +110,23 @@ class FileHandler:
         backup_path = self._backup_file(file_path)
 
         try:
-            file_path.rename(new_path)
-            self._record_action("rename", str(file_path), str(new_path), backup_path)
-            logger.info(f"تم إعادة تسمية: {file_path.name} -> {new_name}")
-            return {"success": True, "new_path": str(new_path)}
+            result = self._mover.move(file_path, new_path)
+            if not result.success:
+                logger.error(f"فشل إعادة تسمية {filepath}: {result.error}")
+                return {"success": False, "error": result.error}
+            self._record_action("rename", str(file_path), result.final_path, backup_path)
+            logger.info(f"تم إعادة تسمية: {file_path.name} -> {Path(result.final_path).name}")
+            return {"success": True, "new_path": result.final_path}
         except Exception as e:
             logger.error(f"خطأ في إعادة تسمية {filepath}: {e}")
             return {"success": False, "error": str(e)}
 
     def undo_last_action(self) -> dict:
-        """التراجع عن آخر عملية"""
+        """التراجع عن آخر عملية
+
+        ملاحظة: هذا مسار الاسترداد وليس عملية تنظيم — يستخدم shutil/copy2
+        عمداً لاستعادة الحالة السابقة، ولا يُعد تجاوزاً لباب SafeMover
+        (الذي يحكم عمليات التنظيم فقط)."""
         if not self._action_history:
             return {"success": False, "error": "لا توجد عمليات للتراجع عنها"}
 
