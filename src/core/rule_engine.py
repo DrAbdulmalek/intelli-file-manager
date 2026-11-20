@@ -402,6 +402,7 @@ class RuleEngine:
             rule_name=planned.rule_name,
             timestamp=timestamp,
             success=True,
+            checksum_after=result.checksum_after,  # حارس التراجع (DeepSeek 11)
         )
         undo_log.append(entry)
         return entry
