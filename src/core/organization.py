@@ -215,6 +215,13 @@ def preflight_item(
             item.error_category = "protected_location"
             return item
 
+        # افحص مكونات المسار قبل أي walk أو قراءة metadata لشجرة المصدر.
+        if _has_symlink_component(src) or _has_symlink_component(dst.parent):
+            item.status = STATUS_BLOCKED_PREFLIGHT
+            item.reason = "A symbolic-link path component was detected."
+            item.error_category = "symlink_rejected"
+            return item
+
         try:
             source_info = src.lstat()
         except OSError as exc:
@@ -256,12 +263,6 @@ def preflight_item(
             item.status = STATUS_BLOCKED_PREFLIGHT
             item.reason = "Only regular files and directories are supported."
             item.error_category = "unsupported_file_type"
-            return item
-
-        if _has_symlink_component(src) or _has_symlink_component(dst.parent):
-            item.status = STATUS_BLOCKED_PREFLIGHT
-            item.reason = "A symbolic-link path component was detected."
-            item.error_category = "symlink_rejected"
             return item
 
         try:
