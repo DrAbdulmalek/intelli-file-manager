@@ -280,3 +280,74 @@ def test_atomic_move_exdev_fails_closed_without_noreplace_primitive(tmp_path, mo
     assert src.read_text() == "SOURCE"
     assert not dst.exists()
     assert not list(tmp_path.glob(".ifm_tmp_*"))
+
+
+
+# ─── 7) رفض الروابط الرمزية والمصادر غير العادية ──────────────────────────
+
+def test_safe_mover_rejects_symlink_source(tmp_path):
+    target = tmp_path / "target.txt"
+    target.write_text("PROTECTED")
+    source_link = tmp_path / "source-link.txt"
+    try:
+        source_link.symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    destination = tmp_path / "destination.txt"
+    result = SafeMover().move(source_link, destination)
+
+    assert not result.success
+    assert "رابطاً رمزياً" in (result.error or "")
+    assert source_link.is_symlink()
+    assert target.read_text() == "PROTECTED"
+    assert not destination.exists()
+
+
+def test_safe_mover_rejects_symlinked_destination_parent(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text("SOURCE")
+    real_directory = tmp_path / "real-destination"
+    real_directory.mkdir()
+    linked_directory = tmp_path / "linked-destination"
+    try:
+        linked_directory.symlink_to(real_directory, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    result = SafeMover().copy(source, linked_directory / "copy.txt")
+
+    assert not result.success
+    assert "رابطاً رمزياً" in (result.error or "")
+    assert source.read_text() == "SOURCE"
+    assert not (real_directory / "copy.txt").exists()
+
+
+def test_safe_mover_rejects_symlinked_destination_leaf(tmp_path):
+    source = tmp_path / "source.txt"
+    source.write_text("SOURCE")
+    occupant = tmp_path / "occupant.txt"
+    occupant.write_text("DO NOT CHANGE")
+    destination_link = tmp_path / "destination.txt"
+    try:
+        destination_link.symlink_to(occupant)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    result = SafeMover().copy(source, destination_link)
+
+    assert not result.success
+    assert "رابطاً رمزياً" in (result.error or "")
+    assert occupant.read_text() == "DO NOT CHANGE"
+    assert destination_link.is_symlink()
+
+
+def test_safe_mover_rejects_directory_source(tmp_path):
+    source_directory = tmp_path / "source-directory"
+    source_directory.mkdir()
+    result = SafeMover().move(source_directory, tmp_path / "destination")
+
+    assert not result.success
+    assert "ليس ملفاً عادياً" in (result.error or "")
+    assert source_directory.is_dir()
+    assert not (tmp_path / "destination").exists()
