@@ -203,6 +203,13 @@ def compute_sha256(file_path: Union[str, Path], *, chunk_size: int = _CHECKSUM_C
     return h.hexdigest()
 
 
+def _reraise_if_interrupt(exc: BaseException) -> None:
+    """إعادة إطلاق المقاطعات (KeyboardInterrupt/SystemExit) — لا يجوز ابتلاعها
+    داخل نتائج العمليات؛ تنظيف الحالة ثم الإطلاق (مراجعة جلسة ChatGPT، المرحلة 3)."""
+    if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+        raise exc
+
+
 def _sidecar_path(file_path: Union[str, Path]) -> Path:
     """يُرجع مسار ملف sidecar (.ifm_meta_<name>.json) بجانب الملف
 
@@ -592,6 +599,7 @@ class SafeMover:
         try:
             _atomic_move(src, final_dst)
         except BaseException as e:
+            _reraise_if_interrupt(e)
             result.success = False
             result.error = f"فشل النقل: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -608,6 +616,7 @@ class SafeMover:
                     _atomic_move(final_dst, src)
                 except BaseException:
                     logger.error(f"فشل rollback من {final_dst} إلى {src}")
+                _reraise_if_interrupt(e)
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النقل: {e}"
                 result.duration_ms = (time.monotonic() - start) * 1000
@@ -645,9 +654,31 @@ class SafeMover:
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
             except BaseException as e:
-                # فشل نقل sidecar ليس فادحًا — السجل يحذّر فقط
-                logger.warning(f"فشل نقل sidecar من {src_sidecar} إلى {dst_sidecar}: {e}")
+                # توحيد الفشل (مراجعة جلسة ChatGPT، المرحلة 4): فشل نقل sidecar
+                # ليس نجاحاً جزئياً مقبولاً — نتراجع عن نقل الملف الرئيسي ثم
+                # نفشل العملية كاملة (لا نجاح مضلل ولا فقد بيانات).
+                _reraise_if_interrupt(e)
+                logger.error(
+                    f"فشل نقل sidecar من {src_sidecar} إلى {dst_sidecar}: {e} "
+                    f"— تراجع عن نقل الملف الرئيسي"
+                )
+                rolled_back = True
+                try:
+                    _atomic_move(final_dst, src)
+                except OSError as rb:
+                    rolled_back = False
+                    logger.critical(
+                        f"فشل التراجع من {final_dst} إلى {src}: {rb} — الحالة غير متجانسة"
+                    )
                 result.sidecar_moved = False
+                result.success = False
+                result.error = (
+                    f"فشل نقل sidecar — تم التراجع: {e}"
+                    if rolled_back
+                    else f"فشل نقل sidecar وفشل التراجع: {e} / الحالة غير متجانسة"
+                )
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
 
         result.success = True
         result.duration_ms = (time.monotonic() - start) * 1000
@@ -764,6 +795,7 @@ class SafeMover:
         try:
             _atomic_copy(src, final_dst)
         except BaseException as e:
+            _reraise_if_interrupt(e)
             result.success = False
             result.error = f"فشل النسخ: {e}"
             result.duration_ms = (time.monotonic() - start) * 1000
@@ -779,6 +811,7 @@ class SafeMover:
                     final_dst.unlink()
                 except BaseException:
                     pass
+                _reraise_if_interrupt(e)
                 result.success = False
                 result.error = f"فشل حساب checksum بعد النسخ: {e}"
                 result.duration_ms = (time.monotonic() - start) * 1000
@@ -813,8 +846,31 @@ class SafeMover:
                 result.sidecar_source = str(src_sidecar)
                 result.sidecar_destination = str(dst_sidecar)
             except BaseException as e:
-                logger.warning(f"فشل نسخ sidecar: {e}")
+                # توحيد الفشل (مراجعة جلسة ChatGPT، المرحلة 4): فشل نسخ sidecar
+                # ليس نجاحاً جزئياً مقبولاً — نحذف النسخة في الوجهة ثم نفشل
+                # العملية كاملة (لا نسخة ناقصة بلا بياناتها الوصفية).
+                _reraise_if_interrupt(e)
+                logger.error(
+                    f"فشل نسخ sidecar من {src_sidecar} إلى {dst_sidecar}: {e} "
+                    f"— حذف النسخة في الوجهة"
+                )
+                cleaned = True
+                try:
+                    final_dst.unlink()
+                except OSError as rb:
+                    cleaned = False
+                    logger.critical(
+                        f"فشل حذف النسخة في الوجهة عند التراجع: {rb} — الحالة غير متجانسة"
+                    )
                 result.sidecar_copied = False
+                result.success = False
+                result.error = (
+                    f"فشل نسخ sidecar — تم التراجع بحذف النسخة: {e}"
+                    if cleaned
+                    else f"فشل نسخ sidecar وفشل حذف النسخة: {e} / الحالة غير متجانسة"
+                )
+                result.duration_ms = (time.monotonic() - start) * 1000
+                return result
 
         result.success = True
         result.duration_ms = (time.monotonic() - start) * 1000
