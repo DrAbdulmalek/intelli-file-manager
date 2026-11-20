@@ -92,3 +92,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 - Verification secret scanning now reports file paths only and never prints matched secret values.
+
+## Unreleased
+- Moved marathon-ocr-core from base requirements to an opt-in, commit-pinned OCR integration requirements file.
