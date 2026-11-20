@@ -508,3 +508,10 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+## 2026-11-20 — GPT-6 review follow-up (PR #66)
+- Removed os.replace() fallbacks from cross-device SafeMover publication and atomic copy: if a no-clobber primitive is unavailable, operations now fail closed rather than risk replacing a destination created after preflight.
+- Added negative tests proving os.replace() is never called, sources remain intact, and temporary files are cleaned when hard-link publication is unavailable.
+- Added lstat-based rejection of symlink path components and non-regular sources in SafeMover entry points and atomic helpers.
+- Added regression tests for symlink sources, symlinked destination parents/leaves, and directory sources.
+- GitHub Actions runs were not returned for the current stacked PR head; no local or CI test pass is claimed.
