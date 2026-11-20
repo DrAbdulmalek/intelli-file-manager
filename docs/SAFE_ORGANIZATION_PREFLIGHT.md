@@ -2,12 +2,12 @@
 
 **Status:** Proposal for implementation  
 **Scope:** Desktop-first local file organization  
-**Evidence source:** Manually authored operational notes committed on 2026-11-19 in `LOGS/home_organization_stage1.log` (the source file contains an absolute home path and is not sanitized)  
+**Evidence source:** Privately reviewed local operational notes from 2026-11-19; the raw log, absolute paths, usernames, and file inventory are intentionally not included in this repository  
 **Non-goal:** This document does not authorize moving any user's files or changing protected operating-system locations.
 
 ## 1. What the operational log tells us
 
-A real organization session recorded these outcomes:
+A local organization session (with identifying details redacted) recorded these general outcomes:
 
 - Two user-selected folders were moved successfully.
 - A non-empty documents folder and a small library folder could not be moved because the operation was blocked at the home-directory boundary.
@@ -17,7 +17,7 @@ A real organization session recorded these outcomes:
 
 This is useful workflow evidence, not an IntelliFile runtime/crash log. It does **not** prove whether the block came from permissions, a sandbox, a desktop portal, filesystem policy, or another OS mechanism. IntelliFile must report the observed error rather than guessing its cause.
 
-The log's suggested shell commands are not safe to reuse verbatim: `Calibre Library/` is unquoted despite containing a space, and `2>/dev/null || true` suppresses errors for the empty media-folder moves. The application must use filesystem APIs, preserve each error, and report per-item outcomes instead of copying these commands.
+The source notes included shell examples that were not safe to reuse verbatim: a path containing spaces was unquoted, and error suppression hid failures. The application must use filesystem APIs, preserve each error, and report per-item outcomes instead of copying shell commands.
 
 ## 2. Product improvements justified by this evidence
 
@@ -108,4 +108,4 @@ This proposal is intentionally documentation-only. It does not change `SafeMover
 
 ## 7. Evidence and limitations
 
-The source log reports successful moves for two folders, blocked attempts for several others, and two user-requested exclusions. It also contains an absolute home path; redact that path in any shareable copy. The log's claims are treated as reported observations, not independently verified filesystem facts. It does not include command output, errno values, filesystem metadata, checksums, or a complete before/after manifest. Therefore this proposal converts the observed workflow into testable product requirements without claiming that IntelliFile itself caused or resolved the operating-system restriction.
+The private source record reported successful moves for some folders, blocked attempts for others, and user-requested exclusions. The raw record is intentionally not included in the repository. Its claims are treated as reported observations, not independently verified filesystem facts. It does not include command output, errno values, filesystem metadata, checksums, or a complete before/after manifest. Therefore this proposal converts the observed workflow into testable product requirements without claiming that IntelliFile itself caused or resolved the operating-system restriction.
