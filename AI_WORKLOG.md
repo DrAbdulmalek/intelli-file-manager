@@ -6,6 +6,18 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ---
 
+## 2026-11-20 — AlphaCode local MCP bridge (feature branch)
+
+- Implemented `src/integrations/alphacode_mcp_server.py`: local stdio MCP server using the 2025-11-25 lifecycle; no TCP/HTTP listener and no network client.
+- Exposed only three tools: status, metadata-only inventory, and dry-run plan validation. No content reads, OCR/RAG, shell, file mutation, delete, overwrite, or undo tools.
+- Added `iter_entries_reported` to shared Path Policy to report hidden/excluded paths, symlinks, mount boundaries, depth limits, and read errors without following links or reading file contents.
+- Added synthetic tests for allowlist boundaries, hidden/sensitive exclusions, symlinks, truncation, plan validation, MCP lifecycle, and stdio framing.
+- Added `docs/ALPHACODE_MCP_INTEGRATION.md` with local MCP client configuration instructions.
+- **Not verified:** whether the installed AlphaCode build exposes an MCP stdio client or its exact configuration location. The device-side client registration and end-to-end connection remain blocked until tested on the device.
+- No user files were accessed; no operational logs or personal paths were committed. No changes to `main`; PR remains Draft pending CI and review.
+
+---
+
 ## 📋 Current Execution Status
 
 | Phase | Status | Agent | Start Date | Completion Date |
