@@ -216,8 +216,13 @@ cd intelli-file-manager
 python -m venv venv
 source venv/bin/activate
 
-# 3. تثبيت متطلبات Python
+# 3. تثبيت متطلبات Python الأساسية
 pip install -r requirements.txt
+
+# ملاحظة: ميزات الذكاء الاصطناعي/الصوت/OCR اختيارية — ثبّتها حسب الحاجة فقط:
+# pip install -r requirements-ai.txt
+# pip install -r requirements-voice.txt
+# pip install -r requirements-ocr.txt
 
 # 4. تثبيت Ollama وتحميل النماذج (اختياري)
 curl -fsSL https://ollama.com/install.sh | sh
@@ -440,8 +445,7 @@ python -m venv venv
 source venv/bin/activate
 
 # 2. تثبيت متطلبات التطوير
-pip install -r requirements.txt
-pip install pytest pytest-cov ruff mypy
+pip install -r requirements.txt -r requirements-dev.txt
 
 # 3. تشغيل الاختبارات
 pytest -v

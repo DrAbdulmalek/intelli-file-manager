@@ -2,48 +2,46 @@
 # IntelliFile - تطبيق تصنيف الملفات الذكي
 # Smart File Classifier
 # =============================================================================
-# Install:  pip install -r requirements.txt
-# Dev:      pip install -r requirements.txt[dev]
+# التثبيت الأساسي (Core):
+#   pip install -r requirements.txt
+#
+# الإضافات الاختيارية (extras) — ثبّتها حسب الحاجة فقط:
+#   pip install -r requirements-ai.txt      # الذكاء الاصطناعي والتضمينات والرسوم
+#   pip install -r requirements-voice.txt   # الأوامر الصوتية وTTS
+#   pip install -r requirements-ocr.txt     # محرك OCR المركزي (يشمل اعتماد git خارجي)
+#   pip install -r requirements-dev.txt     # أدوات التطوير والاختبار
+#
+# أو عبر extras الحزمة:  pip install intellifile[ai]  /  [voice]  /  [ocr-core]  /  [dev]
 # =============================================================================
 
 # ─── Core ────────────────────────────────────────────────────────────────────
-# Required for basic file operations, GUI, and scheduling
+# Required for basic file operations, GUI, scheduling, and the API server
 pyside6>=6.6.0
-magika>=0.5.0
+magika>=1.0.3
 httpx>=0.24.0
 watchdog>=3.0.0
-apscheduler>=3.10.0
+apscheduler>=3.11.3
 networkx>=3.1
 Pillow>=10.0.0
-
-# ─── AI / Machine Learning ──────────────────────────────────────────────────
-# Required for classification, embeddings, and vector search
-ollama>=0.1.0
-chromadb>=0.4.0
-langchain>=0.2.0
-sentence-transformers>=2.2.0
+PyYAML>=6.0
+python-magic>=0.4.27
 numpy>=1.24.0
-scipy>=1.10.0
+send2trash>=1.8.2
+
+# ─── API Server ──────────────────────────────────────────────────────────────
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+websockets>=12.0
+pydantic>=2.0.0
 
 # ─── Document Processing ────────────────────────────────────────────────────
 # Required for text extraction from office documents
-pdfplumber>=0.10.0
+pdfplumber>=0.11.10
 python-docx>=1.0.0
 openpyxl>=3.1.2
 python-pptx>=0.6.21
 
-# ─── Voice / Speech (Optional) ──────────────────────────────────────────────
-# Needed only for voice commands and TTS features
-pyttsx3>=2.90
-SpeechRecognition>=3.10.0
-pyaudio>=0.2.12
-
-# ─── Utilities (Optional) ──────────────────────────────────────────────────
-# Nice-to-have extras for analytics and advanced detection
-python-magic>=0.4.27
-PyYAML>=6.0
-plotly>=5.18.0
-pandas>=2.0.0
-
-# OCR Central Engine
-marathon-ocr-core[tesseract] @ git+https://github.com/DrAbdulmalek/ocr-core.git@v0.5.0
+# ─── Utilities ──────────────────────────────────────────────────────────────
+rich>=13.0.0
+rapidfuzz>=3.0.0
