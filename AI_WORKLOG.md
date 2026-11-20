@@ -500,3 +500,8 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 ## 2026-11-20 — verification secret-output follow-up (PR #48)
 - Changed verify.sh secret scanning to report only matched file paths, never matching line contents that could include secret values.
 - Added a regression guard for path-only secret reporting and removed secret inventory details from memory/context.md.
+
+## 2026-11-20 — optional OCR dependency follow-up (PR #48)
+- Removed the GitHub VCS dependency on marathon-ocr-core from the base requirements so normal installation does not require a GitHub fetch.
+- Added requirements-ocr-core.txt as an explicit optional integration pinned to commit 5613a1c05f7b657678a810b96c6ba5cab3b92e53; documented prebuilt wheelhouse use for offline deployments.
+- Added a static regression test and documented the optional install in README.
