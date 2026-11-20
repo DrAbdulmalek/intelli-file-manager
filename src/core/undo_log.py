@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Union
@@ -47,8 +46,20 @@ class UndoLog:
         """
         self.path = Path(path) if path else None
         self.entries: List[UndoEntry] = []
+        self._safe_mover = None  # SafeMover إلزامي للتراجع (لا shutil مباشر)
         if self.path and self.path.exists():
             self.load()
+
+    @property
+    def safe_mover(self):
+        """يُرجع SafeMover مشترك للتراجع (يُنشأ عند الطلب).
+
+        move_sidecar=False لأن UndoLog يدير الـsidecar صراحة في منطقه القائم.
+        """
+        if self._safe_mover is None:
+            from .safe_mover import SafeMover
+            self._safe_mover = SafeMover(verify_checksum=True, move_sidecar=False)
+        return self._safe_mover
 
     # ─── الواجهة الأساسية ───────────────────────────────────────────────
 
@@ -183,16 +194,20 @@ class UndoLog:
 
         dst.parent.mkdir(parents=True, exist_ok=True)
 
-        # نقل الملف + sidecar (إن وُجد في الوجهة)
+        # نقل الملف عبر SafeMover (بوابة واحدة — التضارب يأخذ لاحقة، لا استبدال صامت)
         from .rule_engine import _sidecar_path
         src_sidecar = _sidecar_path(str(src))
-        shutil.move(str(src), str(dst))
+        result = self.safe_mover.move(str(src), str(dst))
+        if not result.success:
+            raise RuntimeError(f"فشل التراجع عن النقل عبر SafeMover: {result.error}")
         if src_sidecar.exists():
             dst_sidecar = _sidecar_path(str(dst))
             if dst_sidecar.exists():
                 # دمج (نادر)
                 dst_sidecar.unlink()
-            shutil.move(str(src_sidecar), str(dst_sidecar))
+            result_sc = self.safe_mover.move(str(src_sidecar), str(dst_sidecar))
+            if not result_sc.success:
+                raise RuntimeError(f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error}")
 
     def _rollback_copy(self, entry: UndoEntry) -> None:
         """عكس النسخ: حذف النسخة المنشأة (مع sidecar)"""
