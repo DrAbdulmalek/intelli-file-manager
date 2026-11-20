@@ -495,3 +495,6 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 - Changed manifest publication from os.replace() to exclusive os.link() publication; existing destinations and symlinked parent paths are rejected, and unsupported no-clobber publication fails closed.
 - Added tests for manifest collision preservation, symlinked parent rejection, no os.replace fallback, nested mount pruning, and hidden system subtree exclusion.
 - CI/local test execution has not yet been observed for the updated head; no pass is claimed.
+
+## 2026-11-20 — symlink traversal ordering follow-up (PR #54)
+- Moved symlink-component validation ahead of source directory metadata traversal; added a test that fails if `_tree_summary()` is called for a source reached through a symlinked ancestor.
