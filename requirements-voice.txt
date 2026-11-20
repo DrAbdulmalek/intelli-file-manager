@@ -1,0 +1,7 @@
+# الأوامر الصوتية وTTS (اختياري)
+# التثبيت:  pip install -r requirements-voice.txt
+-r requirements.txt
+
+pyttsx3>=2.90
+SpeechRecognition>=3.10.0
+pyaudio>=0.2.14

@@ -1,55 +1,68 @@
 """مدير الملفات - نقل ونسخ وحذف وإعادة تسمية"""
-import shutil
+import os
+import time
 import logging
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 from .config import Config
+from .safe_mover import SafeMover
+from .path_policy import iter_files
 
 logger = logging.getLogger(__name__)
 
+# سياسة النسخ الاحتياطي (مراجعة كيمي — المرحلة 1):
+# ما فوق BACKUP_MAX_SIZE لا يُنسخ احتياطياً (نعتمد سلة المحذوفات)،
+# والنسخ الأقدم من BACKUP_MAX_AGE_DAYS يُحذف تلقائياً لمنع امتلاء القرص.
+BACKUP_MAX_SIZE = 100 * 1024 * 1024  # 100MB
+BACKUP_MAX_AGE_DAYS = 7
+
 
 class FileHandler:
-    """مدير عمليات الملفات مع دعم التراجع"""
+    """مدير عمليات الملفات مع دعم التراجع — جميع العمليات تمر عبر SafeMover"""
 
     def __init__(self, config: Optional[Config] = None):
         self.config = config or Config()
         self._action_history: List[dict] = []
         self._backup_dir = Path(self.config.database_path) / "backups"
+        self._safe_mover = None  # SafeMover إلزامي لجميع العمليات (لا مسارات تخطي)
+
+    @property
+    def safe_mover(self):
+        """يُرجع SafeMover مشترك (يُنشأ عند الطلب)"""
+        if self._safe_mover is None:
+            from .safe_mover import SafeMover
+            self._safe_mover = SafeMover(verify_checksum=True, move_sidecar=True)
+        return self._safe_mover
 
     def move_file(self, src: str, dest_category: str, base_dir: str) -> dict:
-        """نقل ملف إلى مجلد التصنيف"""
+        """نقل ملف إلى مجلد التصنيف عبر SafeMover (إجباري)"""
         src_path = Path(src)
         dest_dir = Path(base_dir) / dest_category
         dest_path = dest_dir / src_path.name
 
-        # تجنب الكتابة فوق ملف موجود
-        if dest_path.exists():
-            stem = src_path.stem
-            suffix = src_path.suffix
-            counter = 1
-            while dest_path.exists():
-                dest_path = dest_dir / f"{stem}_{counter}{suffix}"
-                counter += 1
-
-        # نسخ احتياطي
-        backup_path = self._backup_file(src_path)
+        # ضمان وجود مجلد الوجهة
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         try:
-            shutil.move(str(src_path), str(dest_path))
-            self._record_action("move", str(src_path), str(dest_path), backup_path)
+            result = self.safe_mover.move(str(src_path), str(dest_path))
+            if not result.success:
+                logger.error(f"فشل نقل {src}: {result.error}")
+                return {"success": False, "error": result.error or "safe_move failed"}
+            self._record_action("move", str(src_path), result.final_path, None)
             logger.info(f"تم نقل: {src_path.name} -> {dest_category}/")
-            return {"success": True, "dest": str(dest_path)}
+            return {"success": True, "dest": result.final_path}
         except Exception as e:
             logger.error(f"خطأ في نقل {src}: {e}")
             return {"success": False, "error": str(e)}
 
     def copy_file(self, src: str, dest: str) -> dict:
-        """نسخ ملف"""
+        """نسخ ملف عبر SafeMover (إجباري)"""
         try:
-            Path(dest).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
+            result = self.safe_mover.copy(src, dest)
+            if not result.success:
+                logger.error(f"فشل نسخ {src}: {result.error}")
+                return {"success": False, "error": result.error or "safe_copy failed"}
             logger.info(f"تم نسخ: {src} -> {dest}")
             return {"success": True}
         except Exception as e:
@@ -57,67 +70,105 @@ class FileHandler:
             return {"success": False, "error": str(e)}
 
     def delete_file(self, filepath: str, use_trash: bool = True) -> dict:
-        """حذف ملف (نقل إلى سلة المحذوفات أو حذف نهائي)"""
+        """حذف ملف (نقل إلى سلة المحذوفات فقط؛ الحذف النهائي محظور)
+
+        وفق تعليمات المستخدم: ممنوع rm -r/-rf، الاستثناء rmdir للمجلد الفارغ فقط.
+        """
         file_path = Path(filepath)
         if not file_path.exists():
             return {"success": False, "error": "الملف غير موجود"}
 
-        backup_path = self._backup_file(file_path)
-
         try:
             if use_trash:
-                trash_dir = Path.home() / ".local/share/Trash/files"
-                trash_dir.mkdir(parents=True, exist_ok=True)
-                trash_name = f"{file_path.name}_{datetime.now().timestamp()}"
-                trash_path = trash_dir / trash_name
-                shutil.move(str(file_path), str(trash_path))
-                self._record_action("delete", str(file_path), str(trash_path), backup_path)
+                # send2trash أولاً (متوافقة XDG/Windows/macOS مع بيانات وصفية
+                # سليمة)؛ الخطة البديلة: نقل آمن عبر SafeMover إلى مسار XDG
+                # القياسي على لينكس (مراجعة كيمي — توافق كل الأنظمة).
+                try:
+                    trash_path = self._send_to_trash(file_path)
+                except Exception as trash_err:
+                    logger.error(f"خطأ في نقل {filepath} إلى السلة: {trash_err}")
+                    return {"success": False, "error": str(trash_err)}
+                self._record_action("delete", str(file_path), str(trash_path), None)
+                logger.info(f"تم نقل إلى سلة المحذوفات: {filepath}")
+                return {"success": True}
             else:
-                file_path.unlink()
-                self._record_action("delete_permanent", str(file_path), None, backup_path)
-            logger.info(f"تم حذف: {filepath}")
-            return {"success": True}
+                # الحذف النهائي محظور وفق تعليمات المستخدم
+                logger.warning(f"محاولة حذف نهائي محظورة: {filepath}")
+                return {
+                    "success": False,
+                    "error": "الحذف النهائي محظور. استخدم use_trash=True أو rmdir للمجلد الفارغ فقط."
+                }
         except Exception as e:
             logger.error(f"خطأ في حذف {filepath}: {e}")
             return {"success": False, "error": str(e)}
 
     def rename_file(self, filepath: str, new_name: str) -> dict:
-        """إعادة تسمية ملف"""
+        """إعادة تسمية ملف عبر SafeMover (إجباري)"""
         file_path = Path(filepath)
         if not file_path.exists():
             return {"success": False, "error": "الملف غير موجود"}
 
+        # Security: الاسم يجب أن يكون اسماً بسيطاً — منع الهروب من المجلد
+        # عبر مسارات مثل "../../evil" (مراجعة كيمي — ثغرة حرجة).
+        # ملاحظة: نرفض "\\" حتى على لينكس لأنها فاصل مسارات على Windows.
+        if not new_name or not new_name.strip():
+            return {"success": False, "error": "اسم غير صالح — الاسم فارغ"}
+        if (
+            Path(new_name).name != new_name
+            or os.sep in new_name
+            or "/" in new_name
+            or "\\" in new_name
+            or (os.altsep and os.altsep in new_name)
+        ):
+            return {"success": False, "error": "اسم غير صالح — لا يجوز أن يحوي مساراً"}
+
         new_path = file_path.parent / new_name
-        backup_path = self._backup_file(file_path)
+        if new_path.exists():
+            return {"success": False, "error": "يوجد ملف بنفس الاسم"}
 
         try:
-            file_path.rename(new_path)
-            self._record_action("rename", str(file_path), str(new_path), backup_path)
+            result = self.safe_mover.move(str(file_path), str(new_path))
+            if not result.success:
+                logger.error(f"فشل إعادة تسمية {filepath}: {result.error}")
+                return {"success": False, "error": result.error or "safe_move failed"}
+            self._record_action("rename", str(file_path), result.final_path, None)
             logger.info(f"تم إعادة تسمية: {file_path.name} -> {new_name}")
-            return {"success": True, "new_path": str(new_path)}
+            return {"success": True, "new_path": result.final_path}
         except Exception as e:
             logger.error(f"خطأ في إعادة تسمية {filepath}: {e}")
             return {"success": False, "error": str(e)}
 
     def undo_last_action(self) -> dict:
-        """التراجع عن آخر عملية"""
+        """التراجع عن آخر عملية باستخدام SafeMover (لا استبدال صامت للملف الجديد)."""
         if not self._action_history:
             return {"success": False, "error": "لا توجد عمليات للتراجع عنها"}
 
         action = self._action_history[-1]
         try:
             if action["type"] == "move":
-                shutil.move(action["dest"], action["src"])
+                result = self.safe_mover.move(action["dest"], action["src"])
+                if not result.success:
+                    logger.error(f"فشل التراجع عن نقل: {result.error}")
+                    return {"success": False, "error": result.error}
             elif action["type"] == "delete":
                 backup = action.get("backup")
                 if backup and Path(backup).exists():
-                    shutil.copy2(backup, action["src"])
+                    result = self.safe_mover.move(backup, action["src"])
+                    if not result.success:
+                        logger.error(f"فشل التراجع عن حذف: {result.error}")
+                        return {"success": False, "error": result.error}
             elif action["type"] == "rename":
-                Path(action["dest"]).rename(action["src"])
+                result = self.safe_mover.move(action["dest"], action["src"])
+                if not result.success:
+                    logger.error(f"فشل التراجع عن إعادة تسمية: {result.error}")
+                    return {"success": False, "error": result.error}
             elif action["type"] == "delete_permanent":
                 backup = action.get("backup")
                 if backup and Path(backup).exists():
-                    shutil.copy2(backup, action["src"])
+                    result = self.safe_mover.move(backup, action["src"])
+                    if not result.success:
+                        logger.error(f"فشل التراجع عن حذف نهائي: {result.error}")
+                        return {"success": False, "error": result.error}
 
             self._action_history.pop()
             logger.info(f"تم التراجع عن: {action['type']}")
@@ -170,33 +221,80 @@ class FileHandler:
             return []
 
         results = []
-        pattern = "**/*" if recursive else "*"
-
-        for item in dir_path.glob(pattern):
-            if not item.is_file() or item.name.startswith("."):
-                continue
+        # اجتياز موحد: لا يدخل المجلدات المخفية/المستثناة ولا يتبع
+        # symlinks أو يعبر نقاط تركيب فرعية. الجذر المختار صراحةً مسموح.
+        for item in iter_files(dir_path, recursive=recursive):
             try:
                 info = self.get_file_info(str(item))
                 info["type"] = item.suffix.lstrip(".").lower() or "بدون_امتداد"
                 results.append(info)
-            except Exception as e:
-                logger.debug(f"خطأ في مسح {item}: {e}")
+            except OSError as e:
+                logger.debug(f"تعذر فحص {item}: {e}")
 
         logger.info(f"تم مسح {len(results)} ملف في {directory}")
         return results
 
     def _backup_file(self, filepath: Path) -> Optional[str]:
-        """نسخ ملف احتياطي"""
+        """نسخ ملف احتياطي عبر SafeMover — مع حد حجم وسياسة احتفاظ"""
         try:
+            if filepath.stat().st_size > BACKUP_MAX_SIZE:
+                logger.info(
+                    f"تخطي النسخ الاحتياطي (الحجم يتجاوز {BACKUP_MAX_SIZE // (1024 * 1024)}MB): {filepath.name}"
+                )
+                return None
             self._backup_dir.mkdir(parents=True, exist_ok=True)
             backup = self._backup_dir / filepath.name
             if backup.exists():
                 backup = self._backup_dir / f"{filepath.stem}_{datetime.now().timestamp()}{filepath.suffix}"
-            shutil.copy2(str(filepath), str(backup))
-            return str(backup)
+            result = self.safe_mover.copy(str(filepath), str(backup))
+            if not result.success:
+                logger.warning(f"لم يتم النسخ الاحتياطي: {result.error}")
+                return None
+            self._cleanup_old_backups()
+            return str(result.final_path)
         except Exception as e:
             logger.warning(f"لم يتم النسخ الاحتياطي: {e}")
             return None
+
+    def _cleanup_old_backups(self, max_age_days: int = BACKUP_MAX_AGE_DAYS) -> int:
+        """حذف النسخ الاحتياطية الأقدم من max_age_days — سياسة احتفاظ تمنع امتلاء القرص"""
+        cutoff = time.time() - max_age_days * 86400
+        removed = 0
+        try:
+            for f in self._backup_dir.glob("*"):
+                try:
+                    if f.is_file() and f.stat().st_mtime < cutoff:
+                        f.unlink(missing_ok=True)
+                        removed += 1
+                except OSError:
+                    continue
+        except Exception as e:
+            logger.debug(f"تنظيف النسخ الاحتياطية: {e}")
+        if removed:
+            logger.info(f"تم حذف {removed} نسخة احتياطية أقدم من {max_age_days} يوماً")
+        return removed
+
+    def _send_to_trash(self, file_path: Path) -> str:
+        """نقل إلى سلة المحذوفات عبر send2trash إن توفرت وتعمل (XDG/Windows/macOS)،
+        مع نقل آمن عبر SafeMover إلى مسار XDG القياسي كخطة بديلة."""
+        try:
+            from send2trash import send2trash
+            send2trash(str(file_path))
+            return f"trash://{file_path.name}"
+        except ImportError:
+            pass  # المكتبة غير مثبتة — الخطة البديلة أدناه
+        except OSError as trash_err:
+            # قد تفشل send2trash عبر الأجهزة (ملف على جهاز مختلف عن $HOME)
+            # أو عند غياب سلة XDG مهيأة — نتحول للنقل الآمن عبر SafeMover
+            logger.debug(f"send2trash فشل ({trash_err}) — نستخدم مسار XDG عبر SafeMover")
+        trash_dir = Path.home() / ".local/share/Trash/files"
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        trash_name = f"{file_path.name}_{datetime.now().timestamp()}"
+        trash_path = trash_dir / trash_name
+        result = self.safe_mover.move(str(file_path), str(trash_path))
+        if not result.success:
+            raise RuntimeError(result.error or "safe_move to trash failed")
+        return str(result.final_path or trash_path)
 
     def _record_action(self, action_type: str, src: str, dest: str, backup: str):
         """تسجيل عملية للتراجع"""

@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - اختبارات: 23 وحدة + 8 تكامل جديدة (snippet_db, glossary, exporter,
   snippets API, rate limit, lightweight, file-serve sandbox).
 
+### أُصلح
+- **سياسة اجتياز موحّدة** (`src/core/path_policy.py`): المخفي يُحدَّد نسبةً إلى
+  جذر المسح، وتُقلَّم المجلدات المخفية والمستثناة قبل النزول فيها، ولا تُتبع
+  الروابط الرمزية للمجلدات أو الملفات. استُخدمت في المصنّف والوكيل ومدير الملفات
+  والوسوم والبحث الهجين والدلالي ومحرك التصنيف الناشئ.
+- **التصنيف الناشئ**: معالجة عدم تطابق مفتاح الإحصاء (`extensions` مقابل
+  `extension_distribution`) الذي كان يمنع توليد التصنيفات المقترحة.
 ### ملاحظات
 - ثقة 0.0 تعني "غير معروفة" (سياسة ocr-core) — لا تُختلق درجات أبدًا.
 - الرفع إلى HuggingFace منفصل صريح عن التصدير المحلي.
@@ -131,3 +138,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 - Added a regression test for fail-closed manifest publication when atomic no-clobber linking is unavailable.
+- Removed raw LOGS references and identifying operational details from the safe-organization preflight proposal.
+- Redacted personal filesystem paths and detailed operational inventory data from the organization-lessons document.
+- Redacted private log filenames and credential-incident details from the independent review document.
+- SafeMover now fails closed when atomic no-clobber publication is unavailable and rejects symlink path components and non-regular sources; added regression tests for unsafe fallback and symlink cases.
+- Hardened FileHandler scans to use the shared path policy; permit explicitly selected mount roots while pruning nested mounts; fail closed on mount-inspection errors; exclude .gnupg; and add hidden-tree/symlink regression coverage.
+- Scan-root validation now rejects symlinked ancestor components, with regression coverage.
