@@ -11,10 +11,11 @@ test_mem0_memory.py — اختبار الذاكرة عبر الجلسات (Mem0 
 
 الاستخدام:
   export MEM0_API_KEY="m0-your-key"   # من البيئة فقط — لا يُكتب في أي ملف
-  python3 scripts/test_mem0_memory.py
+  python3 scripts/test_mem0_memory.py --confirm-remote
 
 ملاحظة أمان: هذا السكريبت لا يحفظ أسراراً في الذاكرة ولا يطبع المفتاح.
 """
+import argparse
 import json
 import os
 import subprocess
@@ -173,6 +174,13 @@ def print_mcp_equivalents():
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Explicit remote Mem0 integration test")
+    parser.add_argument("--confirm-remote", action="store_true", help="explicitly authorize network writes to Mem0")
+    args = parser.parse_args()
+    if not args.confirm_remote:
+        log("رفض التشغيل: هذا الاختبار يكتب بيانات إلى Mem0 عبر الإنترنت. أعد تشغيله مع --confirm-remote فقط عند الموافقة.", "FAIL")
+        return 2
+
     print("=" * 60)
     print("🧠 اختبار Mem0 — الذاكرة عبر الجلسات (Harness Engineering)")
     print("=" * 60)
