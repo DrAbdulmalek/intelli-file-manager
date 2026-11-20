@@ -85,7 +85,7 @@ def iter_files(
     """
     base = Path(root)
     if _has_symlink_component(base):
-        raise OSError(f"جذر المسح يحتوي مكوّناً رابطاً رمزياً محظوراً: {base}")
+        raise OSError(f"جذر المسح يحتوي مكوّن رابط رمزي محظور: {base}")
     if not base.is_dir():
         return
 
