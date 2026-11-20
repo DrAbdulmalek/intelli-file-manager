@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Union
@@ -22,6 +23,7 @@ DEFAULT_SKIP_DIRS = frozenset(
         "venv",
         ".ssh",
         ".config",
+        ".gnupg",
     }
 )
 PathLike = Union[str, "os.PathLike[str]"]
@@ -45,7 +47,25 @@ def _is_mount_point(path: Path) -> bool:
     try:
         return Path(path).is_mount()
     except OSError:
-        return False
+        # Fail closed: تعذر التحقق من حدّ التركيب يعني عدم دخول هذا الفرع.
+        return True
+
+
+def _has_symlink_component(path: Path) -> bool:
+    """يفحص جميع المكونات الموجودة دون اتباع الروابط الرمزية."""
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        if stat.S_ISLNK(info.st_mode):
+            return True
+    return False
 
 
 def iter_files(
@@ -64,13 +84,13 @@ def iter_files(
       - لا يدخل المجلدات المحددة في skip_dirs.
     """
     base = Path(root)
+    if _has_symlink_component(base):
+        raise OSError(f"جذر المسح يحتوي مكوّن رابط رمزي محظور: {base}")
     if not base.is_dir():
         return
 
-    # لا نبدأ من نقطة تركيب (تجنب عبور وسائط خارجية عن غير قصد).
-    if _is_mount_point(base):
-        raise OSError(f"نقطة تركيب محظورة كنقطة بداية: {base}")
-
+    # الجذر الذي اختاره المستخدم صراحةً مسموح حتى لو كان mount point
+    # (مثلاً قرصاً خارجياً). تُمنع نقاط التركيب الفرعية غير المختارة.
     skipped = frozenset(skip_dirs or ())
 
     def on_walk_error(error: OSError) -> None:
