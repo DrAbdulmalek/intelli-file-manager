@@ -332,7 +332,7 @@ class TestSafeMoverCollision:
         assert src.exists()
 
     def test_move_overwrite_true_is_forbidden(self, tmp_workspace: Path):
-        """نقل مع overwrite=True يُرفض per تعليمات المستخدم"""
+        """نقل مع overwrite=True يُرفض وفق تعليمات المستخدم"""
         # يجب أن يُرفع استثناء عند إنشاء SafeMover بـ overwrite=True
         import pytest
         with pytest.raises(OverwriteForbiddenError):
@@ -354,7 +354,7 @@ class TestSafeMoverCollision:
         assert src.exists()
 
     def test_copy_overwrite_true_is_forbidden(self, tmp_workspace: Path):
-        """نسخ مع overwrite=True يُرفض per تعليمات المستخدم"""
+        """نسخ مع overwrite=True يُرفض وفق تعليمات المستخدم"""
         import pytest
         with pytest.raises(OverwriteForbiddenError):
             SafeMover(overwrite=True)

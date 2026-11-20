@@ -67,7 +67,7 @@ _CHECKSUM_CHUNK_SIZE = 64 * 1024
 # أقصى عدد محاولات لإيجاد اسم فريد عند التضارب
 _MAX_NAME_COLLISION_RETRIES = 999
 
-# overwrite محظور كلياً per تعليمات المستخدم: "ممنوع الكتابة فوق أي موجود"
+# overwrite محظور كلياً وفق تعليمات المستخدم: "ممنوع الكتابة فوق أي موجود"
 OVERWRITE_FORBIDDEN = True
 
 
@@ -137,7 +137,7 @@ class SourceNotFoundError(SafeMoveError):
 
 
 class OverwriteForbiddenError(SafeMoveError):
-    """محاولة الكتابة فوق ملف موجود — محظور per تعليمات المستخدم"""
+    """محاولة الكتابة فوق ملف موجود — محظور وفق تعليمات المستخدم"""
 
 
 # ─── دوال مساعدة ───────────────────────────────────────────────────────────
@@ -414,7 +414,7 @@ class SafeMover:
     ):
         if overwrite:
             raise OverwriteForbiddenError(
-                "overwrite=True محظور per تعليمات المستخدم: ممنوع الكتابة فوق أي موجود. "
+                "overwrite=True محظور وفق تعليمات المستخدم: ممنوع الكتابة فوق أي موجود. "
                 "يُضاف لاحقة _1, _2, ... تلقائيًا عند التضارب."
             )
         self.verify_checksum = verify_checksum

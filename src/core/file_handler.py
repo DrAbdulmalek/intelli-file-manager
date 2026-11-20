@@ -63,7 +63,7 @@ class FileHandler:
     def delete_file(self, filepath: str, use_trash: bool = True) -> dict:
         """حذف ملف (نقل إلى سلة المحذوفات فقط؛ الحذف النهائي محظور)
 
-        per تعليمات المستخدم: ممنوع rm -r/-rf، الاستثناء rmdir للمجلد الفارغ فقط.
+        وفق تعليمات المستخدم: ممنوع rm -r/-rf، الاستثناء rmdir للمجلد الفارغ فقط.
         """
         file_path = Path(filepath)
         if not file_path.exists():
@@ -82,7 +82,7 @@ class FileHandler:
                 logger.info(f"تم نقل إلى سلة المحذوفات: {filepath}")
                 return {"success": True}
             else:
-                # الحذف النهائي محظور per تعليمات المستخدم
+                # الحذف النهائي محظور وفق تعليمات المستخدم
                 logger.warning(f"محاولة حذف نهائي محظورة: {filepath}")
                 return {
                     "success": False,
