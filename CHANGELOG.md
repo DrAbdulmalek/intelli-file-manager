@@ -156,3 +156,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Established local-first desktop file manager scope
 - Created PRODUCT_IDENTITY.md, REPO_POLICY.md, SECURITY_NOTES.md
 - Removed all medical/DICOM/SyncManager scope creep
+
+## Unreleased
+- Hardened read-only organization preflight against hidden/system and nested mount traversal; manifest output now uses exclusive no-clobber publication and rejects symlinked parents.
+
+## Unreleased
+- Organization preflight now rejects symlinked source ancestors before walking directory trees.
+
+## Unreleased
+- Added a regression test for fail-closed manifest publication when atomic no-clobber linking is unavailable.
+- Removed raw LOGS references and identifying operational details from the safe-organization preflight proposal.
+- Redacted personal filesystem paths and detailed operational inventory data from the organization-lessons document.
+- Redacted private log filenames and credential-incident details from the independent review document.
+- SafeMover now fails closed when atomic no-clobber publication is unavailable and rejects symlink path components and non-regular sources; added regression tests for unsafe fallback and symlink cases.
+- Hardened FileHandler scans to use the shared path policy; permit explicitly selected mount roots while pruning nested mounts; fail closed on mount-inspection errors; exclude .gnupg; and add hidden-tree/symlink regression coverage.
+- Scan-root validation now rejects symlinked ancestor components, with regression coverage.

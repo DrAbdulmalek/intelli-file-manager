@@ -20,12 +20,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       - name: Install Java JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -34,14 +34,14 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev libltdl-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libblas-dev liblapack-dev gfortran libjpeg-dev libpng-dev libfreetype6-dev patchelf
 
       - name: Cache Buildozer global
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.buildozer
           key: buildozer-global-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
           restore-keys: buildozer-global-${{ runner.os }}-
 
       - name: Cache Buildozer Android
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .buildozer
           key: buildozer-android-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
@@ -64,7 +64,7 @@ jobs:
           ls -lh bin/ 2>/dev/null || echo "No bin/ directory"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: intellifile-debug-apk
@@ -73,6 +73,6 @@ jobs:
 
       - name: Release APK on tag
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ./**/*.apk

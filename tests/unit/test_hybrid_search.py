@@ -108,3 +108,88 @@ class TestHybridSearchEngine:
         engine = HybridSearchEngine()
         text = engine._extract_text(str(tmp_path / "nonexistent.pdf"))
         assert text == ""
+
+
+class TestArabicNormalizationExtended:
+    """إزالة التشكيل والتطويل عند التطبيع (مراجعة كيمي — تحسينات صغيرة)"""
+
+    def test_strip_diacritics_and_tatweel(self):
+        assert _normalize_arabic("تقريرٌ") == _normalize_arabic("تقرير")
+        assert _normalize_arabic("مُحَمَّد") == _normalize_arabic("محمد")
+        assert _normalize_arabic("طــويل") == _normalize_arabic("طويل")
+
+    def test_diacritics_match_in_bm25(self):
+        engine = BM25Engine()
+        engine.add_documents(["تقريرٌ طبي مهم"])
+        results = engine.search("تقرير")
+        assert len(results) == 1
+        assert results[0][0] == 0
+
+    def test_definite_article_documented_limitation(self):
+        # موثَّق (مراجعة كيمي 2026-11): BM25 القياسي لا يزيل أداة التعريف "ال"،
+        # فالاستعلام "التقرير" لا يطابق الوثيقة "تقرير" — إزالة بادئات العربية
+        # تحسين مخطط للمرحلة التالية وليست خللاً في التطبيع الحالي.
+        engine = BM25Engine()
+        engine.add_documents(["تقرير أشعة صدر"])
+        assert engine.search("التقرير") == []
+
+
+class TestIdempotentIndexing:
+    """الفهرسة المتكررة لا تكرر المستندات ولا تخل بترتيب _doc_ids (مراجعة كيمي — المرحلة 1)"""
+
+    def test_reindex_same_directory_no_duplicates(self, tmp_path):
+        (tmp_path / "a.txt").write_text("محتوى أول", encoding="utf-8")
+        (tmp_path / "b.txt").write_text("محتوى ثانٍ", encoding="utf-8")
+        engine = HybridSearchEngine()
+
+        n1 = engine.index_files(str(tmp_path), extensions=(".txt",))
+        n2 = engine.index_files(str(tmp_path), extensions=(".txt",))
+
+        assert n1 == 2
+        assert n2 == 2
+        assert engine.bm25.document_count == 2
+        assert len(engine._doc_ids) == 2
+        # تطابق _doc_ids مع نصوص الفهرس يبقى سليماً بعد إعادة الفهرسة
+        assert set(engine._doc_ids) == set(engine._doc_texts.keys())
+
+    def test_reset_false_appends(self, tmp_path):
+        (tmp_path / "a.txt").write_text("نص أول", encoding="utf-8")
+        engine = HybridSearchEngine()
+        engine.index_files(str(tmp_path), extensions=(".txt",))
+
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "b.txt").write_text("نص آخر", encoding="utf-8")
+        engine.index_files(str(sub), extensions=(".txt",), reset=False)
+
+        assert engine.bm25.document_count == 2
+        assert len(engine._doc_ids) == 2
+
+
+class TestThreadSafety:
+    """أقفال المحرك المشترك بين خيوط FastAPI المتوازية (مراجعة كيمي — المرحلة 1)"""
+
+    def test_concurrent_search_is_safe(self, tmp_path):
+        import threading
+
+        (tmp_path / "a.txt").write_text("نص للاختبار", encoding="utf-8")
+        engine = HybridSearchEngine()
+        engine.index_files(str(tmp_path), extensions=(".txt",))
+
+        errors: list[Exception] = []
+
+        def worker():
+            try:
+                for _ in range(30):
+                    res = engine.search("نص", top_k=3)
+                    assert isinstance(res, list)
+            except Exception as exc:  # pragma: no cover
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == []

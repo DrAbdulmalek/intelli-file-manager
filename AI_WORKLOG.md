@@ -89,6 +89,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
+<<<<<<< HEAD
 ### 2026-11-20 - Claude (protocol v2.0 merge; docs only)
 - Recreated (previous local-only commit was lost with a sandbox clone) the merged
   AlphaCode + IntelliFile Continuous Improvement Protocol v2.0 in
@@ -116,6 +117,25 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
   passes adversarial review.
 - CI status is recorded against the exact branch head in the pull request; no
   claim of local execution is made.
+=======
+### 2026-11-20 - GPT-6 (review of uploaded IntelliFile patch; regression-only follow-up)
+- Reviewed the uploaded `intellifile-path-policy.patch` against current `main`.
+- Confirmed the shared path policy, traversal migrations, emergent-category
+  statistics-key fix, and baseline regression tests are already present in
+  `main`; did not reapply or overwrite those implementations.
+- Added focused regression coverage for the local AlphaCode/file-agent use
+  cases: duplicate detection must not enter hidden trees; FileHandler must
+  ignore hidden subtrees while still scanning a selected root beneath a
+  hidden ancestor; excluded directories remain excluded when hidden files are
+  explicitly included.
+- Deliberately did **not** add the proposed `shell_plan.py`: a generated
+  `mv -nT` script is still a separate filesystem executor, bypasses SafeMover's
+  checksum/transaction boundary, and has unresolved symlink/path-race and
+  command-semantics concerns. Keep all actual file operations behind the
+  reviewed SafeMover path; no shell execution was added.
+- Validation: changes are committed to a review branch only. No local pytest
+  execution is claimed; GitHub Actions must validate the PR before merge.
+>>>>>>> origin/main
 
 ### 2026-11-20 - GPT-6 (independent implementation; branch only)
 - Created branch `fix/unified-path-policy-shell-plan-2026-11-20`; no changes to `main`.
@@ -549,3 +569,40 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+## 2026-11-20 — GPT-6 review follow-up (PR #54)
+- Hardened directory preflight summaries to skip hidden/system subtrees and prune nested mount points; mount-inspection failures fail closed and the explicitly selected root remains allowed.
+- Changed manifest publication from os.replace() to exclusive os.link() publication; existing destinations and symlinked parent paths are rejected, and unsupported no-clobber publication fails closed.
+- Added tests for manifest collision preservation, symlinked parent rejection, no os.replace fallback, nested mount pruning, and hidden system subtree exclusion.
+- CI/local test execution has not yet been observed for the updated head; no pass is claimed.
+
+## 2026-11-20 — symlink traversal ordering follow-up (PR #54)
+- Moved symlink-component validation ahead of source directory metadata traversal; added a test that fails if `_tree_summary()` is called for a source reached through a symlinked ancestor.
+
+## 2026-11-20 — manifest publication fallback test (PR #54)
+- Added a negative test proving manifest publication fails closed and cleans its temporary file when hard-link no-clobber publication is unavailable.
+## 2026-11-20 — privacy redaction follow-up (PR #53)
+- Removed the tracked/unredacted LOGS path reference and identifying source details from the preflight proposal.
+- Reframed evidence as privately reviewed local observations; raw logs and file inventories remain outside the repository.
+## 2026-11-20 — privacy redaction follow-up (PR #59)
+- Removed the absolute home path, username, exact inventory counts, personal directory names, and references to the uncommitted raw report from the published lessons document.
+- Reframed the document as reusable engineering lessons; raw local reports and LOGS remain outside the repository.
+## 2026-11-20 — privacy redaction follow-up (PR #64)
+- Removed the credential-exposure incident narrative, private backup-log filenames, and direct undo-log filename from the independent review document.
+- Replaced them with generic security guidance and a statement that local raw logs remain outside the repository.
+## 2026-11-20 — GPT-6 review follow-up (PR #66)
+- Removed os.replace() fallbacks from cross-device SafeMover publication and atomic copy: if a no-clobber primitive is unavailable, operations now fail closed rather than risk replacing a destination created after preflight.
+- Added negative tests proving os.replace() is never called, sources remain intact, and temporary files are cleaned when hard-link publication is unavailable.
+- Added lstat-based rejection of symlink path components and non-regular sources in SafeMover entry points and atomic helpers.
+- Added regression tests for symlink sources, symlinked destination parents/leaves, and directory sources.
+- GitHub Actions runs were not returned for the current stacked PR head; no local or CI test pass is claimed.
+
+## 2026-11-20 — GPT-6 review follow-up (PR #65)
+- Replaced the Path.glob("**/*") scan in FileHandler.scan_directory() with the shared iter_files() traversal policy to prevent entering hidden/excluded trees and symlinks.
+- Allowed an explicitly selected mount root while pruning nested mount points; mount-inspection errors now fail closed.
+- Added .gnupg to default excluded directories and reject a symlink as the selected scan root.
+- Added regression tests for hidden subtrees, explicit hidden roots, .gnupg, nested mount boundaries, and symlink roots; ported hidden-tree coverage for FileAgent and skip_hidden=False behavior.
+- CI was not observed for the resulting head SHA; no test pass is claimed.
+
+## 2026-11-20 — symlinked scan-root follow-up (PR #65)
+- Extended root validation to reject symlinked ancestor components, not only a symlink at the selected leaf; added a regression test for a selected directory reached through a symlinked parent.
