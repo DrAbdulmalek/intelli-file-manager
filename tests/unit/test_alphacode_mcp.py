@@ -168,3 +168,53 @@ def test_stdio_emits_only_jsonrpc_frames():
     frames = [json.loads(line) for line in output.getvalue().splitlines()]
     assert [frame["id"] for frame in frames] == [1, 2]
     assert all(frame["jsonrpc"] == "2.0" for frame in frames)
+
+
+
+def test_inventory_caps_returned_entries_but_reports_truncation(tmp_path, monkeypatch):
+    root = tmp_path / "allowed"
+    root.mkdir()
+    for name in ("a.txt", "b.txt", "c.txt"):
+        (root / name).write_text(name, encoding="utf-8")
+    _configure_root(monkeypatch, root)
+
+    result = _inventory(str(root), 2)
+
+    assert result["counts"]["files"] == 3
+    assert result["files_returned"] == 2
+    assert result["truncated"] is True
+
+
+def test_validate_plan_rejects_symlinked_source_parent(tmp_path, monkeypatch):
+    root = tmp_path / "allowed"
+    real = root / "real"
+    real.mkdir(parents=True)
+    (real / "source.txt").write_text("source", encoding="utf-8")
+    alias = root / "alias"
+    try:
+        alias.symlink_to(real, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not supported in this environment")
+    _configure_root(monkeypatch, root)
+
+    result = _validate_plan(str(root), [{
+        "source": "alias/source.txt",
+        "destination": "out/source.txt",
+    }])
+
+    assert result["validated_count"] == 0
+    assert result["rejected"][0]["reason"] == "symlinked_source_component"
+
+
+def test_symlinked_scan_root_is_rejected(tmp_path, monkeypatch):
+    root = tmp_path / "allowed"
+    root.mkdir()
+    alias = tmp_path / "alias"
+    try:
+        alias.symlink_to(root, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not supported in this environment")
+    _configure_root(monkeypatch, root)
+
+    with pytest.raises(IntegrationError, match="Symlinked scan roots"):
+        _inventory(str(alias), 10)
