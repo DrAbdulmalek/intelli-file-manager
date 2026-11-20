@@ -124,11 +124,6 @@ def _inventory(root_arg: str, max_entries: int = 300) -> dict[str, Any]:
     if not 1 <= max_entries <= MAX_INVENTORY_ENTRIES:
         raise IntegrationError(f"max_entries must be between 1 and {MAX_INVENTORY_ENTRIES}.")
     root = _resolve_root(root_arg)
-    try:
-        root_device = root.stat().st_dev
-    except OSError as exc:
-        raise IntegrationError("Unable to inspect the selected root.") from exc
-
     files: list[dict[str, Any]] = []
     totals: dict[str, int] = {}
     counts = {
@@ -247,11 +242,18 @@ def _validate_plan(root_arg: str, items: Any) -> dict[str, Any]:
             resolved_parent = destination.parent.resolve(strict=False)
             if not _is_within(resolved_source, root) or not _is_within(resolved_parent, root):
                 raise IntegrationError("path_escape")
-            if source.is_symlink() or not resolved_source.is_file():
+            if not _is_within(resolved_source, root) or not _is_within(resolved_parent, root):
+                raise IntegrationError("path_escape")
+            # Reject symlinks in every existing source/destination path component.
+            current = source
+            while current != root and _is_within(current, root):
+                if current.is_symlink():
+                    raise IntegrationError("symlinked_source_component")
+                current = current.parent
+            if not resolved_source.is_file():
                 raise IntegrationError("source_not_regular_file")
             if os.path.lexists(destination):
                 raise IntegrationError("destination_exists")
-            # Reject any existing symlink in the destination's parent chain.
             current = destination.parent
             while current != root and _is_within(current, root):
                 if current.is_symlink():
