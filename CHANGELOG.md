@@ -128,3 +128,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 - Organization preflight now rejects symlinked source ancestors before walking directory trees.
+
+## Unreleased
+- Added a regression test for fail-closed manifest publication when atomic no-clobber linking is unavailable.
