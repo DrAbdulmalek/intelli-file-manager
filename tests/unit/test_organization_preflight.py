@@ -178,7 +178,6 @@ def test_directory_preflight_skips_hidden_system_trees(tmp_path):
 
 
 def test_symlinked_source_ancestor_is_rejected_before_tree_walk(tmp_path, monkeypatch):
-    from pathlib import Path
     import pytest
     import src.core.organization as organization
 
