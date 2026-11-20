@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from .path_policy import iter_files
+
 logger = logging.getLogger(__name__)
 
 
@@ -310,9 +312,7 @@ class SmartTagger:
         """Find all files in a directory that have a specific tag."""
         results = []
         dir_path = Path(directory)
-        for item in dir_path.rglob("*"):
-            if not item.is_file():
-                continue
+        for item in iter_files(dir_path):
             ft = self.get_tags(str(item))
             for tag in ft.tags:
                 if tag.name == tag_name or tag.name.startswith(tag_name + "/"):
@@ -324,9 +324,7 @@ class SmartTagger:
         """Get tag frequency count across all files in a directory."""
         tag_counts: dict[str, int] = {}
         dir_path = Path(directory)
-        for item in dir_path.rglob("*"):
-            if not item.is_file():
-                continue
+        for item in iter_files(dir_path):
             ft = self.get_tags(str(item))
             for tag in ft.tags:
                 tag_counts[tag.name] = tag_counts.get(tag.name, 0) + 1

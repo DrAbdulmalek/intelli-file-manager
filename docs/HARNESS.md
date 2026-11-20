@@ -52,7 +52,7 @@
 ### 2.3 التحقق (Verification)
 
 **الملفات**: `init.sh` (بوابة الدخول — بداية الجلسة)، `scripts/verify.sh` (بوابة
-الجودة — قبل الالتزام)، `scripts/session-handoff.py` (بوابة التسليم — نهاية الجلسة).
+الجودة — قبل الالتزام)، `scripts/session_handoff.py` (بوابة التسليم — نهاية الجلسة).
 
 **قاعدة**: لا تقبل "يبدو صحيحاً". اقبل فقط مخرجاً خاماً.
 
@@ -69,7 +69,7 @@ Resume → Advance → Handoff
 
 1. Resume : ./init.sh ثم اقرأ AGENTS.md + session-handoff.md + ابحث في Mem0
 2. Advance: اختر مهمة واحدة غير مكتملة → نفّذ → ./scripts/verify.sh → commit
-3. Handoff: python3 scripts/session-handoff.py --note "..." --next "..."
+3. Handoff: python3 scripts/session_handoff.py --note "..." --next "..."
             ثم اكتب progress.md وCommit
 ```
 
@@ -144,7 +144,7 @@ git checkout -b feat/<task>              # 3. فرع جديد — لا عمل ع
 # ... التنفيذ ...
 ./scripts/verify.sh                      # 4. بوابة الجودة قبل الالتزام
 git commit -m "feat: ..."                # 5. التزام مستقل
-python3 scripts/session-handoff.py --note "أنجزت X" --next "ابدأ بـ Y"
+python3 scripts/session_handoff.py --note "أنجزت X" --next "ابدأ بـ Y"
 git add progress.md session-handoff.md && git commit -m "chore: session handoff"
 git push origin feat/<task>              # 6. فرع فقط — ثم PR مسودة للمالك
 ```

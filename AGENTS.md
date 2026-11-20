@@ -58,7 +58,7 @@ Resume → Advance → Handoff
 3. نفّذ، تحقق (./scripts/verify.sh)، حدّث الحالة.
 4. احفظ الدروس المستفادة في Mem0 (انظر القسم 11).
 5. اكتب session-handoff.md جديداً:
-   python3 scripts/session-handoff.py --note "..." --next "..."
+   python3 scripts/session_handoff.py --note "..." --next "..."
 6. Commit.
 ```
 
@@ -142,7 +142,7 @@ git checkout -b feat/my-feature
 ./scripts/verify.sh
 
 # تسليم الجلسة (نهاية كل جلسة)
-python3 scripts/session-handoff.py --note "..." --next "..."
+python3 scripts/session_handoff.py --note "..." --next "..."
 
 # بوابة هذا المستودع مباشرة
 python3 -m pytest tests/unit -q

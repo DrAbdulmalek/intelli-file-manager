@@ -12,7 +12,7 @@
 
 لا تشمل هذه الوحدة:
   - أي ذكاء اصطناعي (AI/embeddings) — مرحلة B
-  - أي ميزات طبية — ممنوعة per PRODUCT_IDENTITY.md
+  - أي ميزات طبية — ممنوعة وفق PRODUCT_IDENTITY.md
   - أي تخزين دائم — مسؤولية طبقة db
 
 PR-02 من development-roadmap-v1.0 (FileInventory + اختبارات تكامل)
@@ -30,6 +30,7 @@ from typing import Iterable, Iterator, List, Optional
 
 from ..db.schemas import FileCategory, FileMetadata, FileRecord
 from .metadata_extractor import detect_content_type, extract_extended_metadata
+from .sensitive_barrier import block_if_sensitive, external_send_allowed, is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,23 @@ class FileInventory:
             include_content: هل يُستخرج النص من الملفات المدعومة؟
         """
         self.skip_hidden = skip_hidden
-        self.skip_dirs = set(skip_dirs or {"__pycache__", "node_modules", ".git", ".venv", "venv"})
+        self.skip_dirs = set(
+            skip_dirs
+            or {
+                "__pycache__",
+                "node_modules",
+                ".git",
+                ".venv",
+                "venv",
+                ".ssh",
+                ".config",
+                ".gnupg",
+                ".pki",
+                ".certs",
+                "secrets",
+                "credentials",
+            }
+        )
         self.max_file_size = max_file_size
         self.include_content = include_content
         self.last_stats: Optional[InventoryStats] = None
@@ -175,15 +192,25 @@ class FileInventory:
     # ─── البناء الداخلي ──────────────────────────────────────────────────
 
     def _iter_files(self, dir_path: Path, *, recursive: bool) -> Iterator[Path]:
-        """مولّد للمسارات فقط، مع تطبيق skip_hidden و skip_dirs"""
+        """مولّد للمسارات فقط، مع تطبيق skip_hidden و skip_dirs
+
+        ملاحظة: الفحص يتم على المسار **النسبي** داخل dir_path، وليس المطلق.
+        وإلا فإن أي مجلد جذري يقع تحت أب مخفي (مثل ~/.cache أو ~/.config)
+        سيؤدي إلى تخطي كل الملفات رغم أن المجلد المستهدف نفسه غير مخفي.
+        """
         pattern = "**/*" if recursive else "*"
         for item in dir_path.glob(pattern):
             if not item.is_file():
                 continue
-            if self.skip_hidden and any(part.startswith(".") for part in item.parts):
+            # المسار النسبي فقط — أجزاء المسار الأب لا تُحتسب
+            try:
+                relative_parts = item.relative_to(dir_path).parts
+            except ValueError:
+                relative_parts = item.parts
+            if self.skip_hidden and any(part.startswith(".") for part in relative_parts):
                 continue
             # تخطي الملفات داخل مجلدات مستثناة
-            if any(part in self.skip_dirs for part in item.parts):
+            if any(part in self.skip_dirs for part in relative_parts):
                 continue
             yield item
 
@@ -231,12 +258,21 @@ class FileInventory:
 
         # استخراج المحتوى (اختياري)
         document_text = ""
+        content_blocked = False
         if self.include_content and ext in TEXT_EXTRACTABLE_EXT and stat.st_size <= self.max_file_size:
-            document_text = self._extract_content(file_path, ext)
-            if document_text:
-                stats.content_extracted += 1
+            # حظر استخراج المحتوى من الملفات الحساسة وفق تعليمات المستخدم
+            if is_sensitive_path(file_path, skip_dirs=self.skip_dirs):
+                content_blocked = True
+                logger.debug(f"محظور استخراج المحتوى من ملف حساس: {file_path}")
+            elif not external_send_allowed(file_path, service_name="file_inventory"):
+                content_blocked = True
+                logger.debug(f"محظور استخراج المحتوى للإرسال الخارجي: {file_path}")
             else:
-                stats.content_extraction_failed += 1
+                document_text = self._extract_content(file_path, ext)
+                if document_text:
+                    stats.content_extracted += 1
+                else:
+                    stats.content_extraction_failed += 1
         elif self.include_content and stat.st_size > self.max_file_size:
             stats.content_extraction_failed += 1
             stats.errors.append(f"file too large for content extraction: {file_path}")

@@ -50,6 +50,25 @@ The system runs as a FastAPI service with a Next.js web interface and an optiona
 
 ---
 
+## Product Scope | نطاق المنتج
+
+IntelliFile is a **general-purpose local-first desktop file manager** for
+personal use. The supported surfaces are:
+
+- **FastAPI service** (backend)
+- **PySide6 desktop GUI** (primary user-facing surface)
+- **Next.js web UI** (optional companion)
+
+The `mobile/` directory and `buildozer.spec` are **experimental and not
+part of the product core** — see [`mobile/README.md`](mobile/README.md).
+Android / Kivy is not the product direction for the foreseeable future.
+
+IntelliFile is **not** a medical tool. Any medical-specific classification
+logic that may exist in the codebase is unintended scope and is being
+tracked separately.
+
+---
+
 ## Features | المميزات
 
 ### 🔍 Hybrid Search | البحث الهجين
@@ -197,12 +216,13 @@ cd intelli-file-manager
 python -m venv venv
 source venv/bin/activate
 
-# 3. تثبيت متطلبات Python
+# 3. تثبيت متطلبات Python الأساسية
 pip install -r requirements.txt
 
-# OCR Central Engine (اختياري فقط؛ يحتاج جلب الحزمة من GitHub)
-# للبيئات غير المتصلة: جهّز wheel محلياً ثم ثبّته من wheelhouse بدلاً من هذا الأمر.
-pip install -r requirements-ocr-core.txt
+# ملاحظة: ميزات الذكاء الاصطناعي/الصوت/OCR اختيارية — ثبّتها حسب الحاجة فقط:
+# pip install -r requirements-ai.txt
+# pip install -r requirements-voice.txt
+# pip install -r requirements-ocr.txt
 
 # 4. تثبيت Ollama وتحميل النماذج (اختياري)
 curl -fsSL https://ollama.com/install.sh | sh
@@ -237,7 +257,7 @@ npm run dev
 
 ### Running the Desktop App | تشغيل واجهة سطح المكتب
 
-> **جديد في v2.2.0** — واجهة PySide6 محلية بالكامل (Phase C مكتملة)
+> **جديد (غير مُصدَّر بعد — Unreleased)** — واجهة PySide6 محلية بالكامل (Phase C مكتملة على الفرع الرئيسي؛ أحدث إصدار مُصدَّر هو `v2.1.0`، وانتظر `v2.2.0` حتى اكتمال `docs/RELEASE_CHECKLIST_v2.2.0.md`)
 
 ```bash
 # تشغيل واجهة سطح المكتب
@@ -425,8 +445,7 @@ python -m venv venv
 source venv/bin/activate
 
 # 2. تثبيت متطلبات التطوير
-pip install -r requirements.txt
-pip install pytest pytest-cov ruff mypy
+pip install -r requirements.txt -r requirements-dev.txt
 
 # 3. تشغيل الاختبارات
 pytest -v
