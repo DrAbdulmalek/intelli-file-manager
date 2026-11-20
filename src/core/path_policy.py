@@ -76,7 +76,7 @@ def iter_entries_reported(
     لا يقرأ محتوى الملفات ولا ينفذ أي تعديل.
     """
     base = Path(root)
-    if isinstance(max_depth, bool) or max_depth < 0:
+    if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
         raise ValueError("max_depth must be a non-negative integer")
     skipped = frozenset(skip_dirs or ())
     try:
@@ -115,8 +115,8 @@ def iter_entries_reported(
                     if info.st_dev != root_device:
                         yield path, info, None, "mount_boundary"
                         continue
-                    yield path, info, None, None
                     if depth < max_depth:
+                        yield path, info, None, None
                         child_directories.append((path, parts, depth + 1))
                     else:
                         yield path, info, None, "depth_limit"
