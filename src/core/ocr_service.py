@@ -74,6 +74,9 @@ def tesseract_available() -> bool:
 
 def _legacy_pytesseract(filepath: str) -> dict:
     """مسار ما قبل المركزية — يبقى فقط للتثبيتات بلا ocr-core."""
+    # حاجز دفاعي داخلي (مراجعة جلسة ChatGPT، المرحلة 2): كل منفذ قراءة
+    # يحرس نفسه حتى لو استُدعي مباشرة من خارج ocr_image.
+    block_if_sensitive(filepath, operation="OCR (legacy)")
     try:
         import pytesseract
         from PIL import Image
@@ -211,6 +214,8 @@ def enhance_image(filepath: str) -> Optional[str]:
     حرفيًا: contrast 1.5 / sharpness 2.0 / median 3). يعيد مسار صورة
     مؤقتة (ينظفه المستدعي) أو None عند الفشل.
     """
+    # حاجز دفاعي داخلي (مراجعة جلسة ChatGPT، المرحلة 2) — قبل أي فتح للملف
+    block_if_sensitive(filepath, operation="تحسين الصورة")
     try:
         out = _core_enhance(filepath)
         if out:

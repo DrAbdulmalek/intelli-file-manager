@@ -227,21 +227,33 @@ class FileInventory:
             stats.errors.append(f"stat failed {file_path}: {e}")
             return None
 
-        # حساب الـ hash (مهم لكشف التكرار)
-        sha256 = self._compute_hash(file_path)
-        is_duplicate = False
-        if sha256 and sha256 in seen_hashes:
-            is_duplicate = True
-        elif sha256:
-            seen_hashes[sha256] = str(file_path)
-
-        # بناء FileMetadata
         ext = file_path.suffix.lower()
         category = FileCategory.from_extension(ext)
-        # كشف نوع المحتوى عبر python-magic مع fallback للامتداد
-        content_type = detect_content_type(file_path, ext)
-        # استخراج الميتاداتا الموسّعة (EXIF للصور، ffprobe للصوت/الفيديو)
-        extra_metadata = self._safe_extract_extended(file_path, ext)
+
+        # حاجز الحساسية أولاً — قبل أي قراءة محتوى (مراجعة جلسة ChatGPT، المرحلة 1):
+        # الملف الحساس لا يُفتح إطلاقاً — لا SHA ولا كشف نوع عبر magic ولا
+        # ميتاداتا موسّعة؛ الفهرسة بالعناوين فقط (stat لا يقرأ المحتوى).
+        # خلاف ذلك كان SHA-256 وكشف النوع يقرآن المحتوى قبل فحص الحاجز.
+        sensitive = is_sensitive_path(file_path, skip_dirs=self.skip_dirs)
+
+        sha256 = None
+        is_duplicate = False
+        content_type = None
+        extra_metadata = None
+
+        if not sensitive:
+            # حساب الـ hash (مهم لكشف التكرار)
+            sha256 = self._compute_hash(file_path)
+            if sha256 and sha256 in seen_hashes:
+                is_duplicate = True
+            elif sha256:
+                seen_hashes[sha256] = str(file_path)
+
+            # كشف نوع المحتوى عبر python-magic مع fallback للامتداد
+            content_type = detect_content_type(file_path, ext)
+            # استخراج الميتاداتا الموسّعة (EXIF للصور، ffprobe للصوت/الفيديو)
+            extra_metadata = self._safe_extract_extended(file_path, ext)
+
         metadata = FileMetadata(
             file_name=file_path.name,
             file_path=str(file_path),
@@ -259,12 +271,12 @@ class FileInventory:
         # استخراج المحتوى (اختياري)
         document_text = ""
         content_blocked = False
-        if self.include_content and ext in TEXT_EXTRACTABLE_EXT and stat.st_size <= self.max_file_size:
-            # حظر استخراج المحتوى من الملفات الحساسة وفق تعليمات المستخدم
-            if is_sensitive_path(file_path, skip_dirs=self.skip_dirs):
+        if sensitive:
+            if self.include_content and ext in TEXT_EXTRACTABLE_EXT and stat.st_size <= self.max_file_size:
                 content_blocked = True
-                logger.debug(f"محظور استخراج المحتوى من ملف حساس: {file_path}")
-            elif not external_send_allowed(file_path, service_name="file_inventory"):
+            logger.debug(f"محظور استخراج المحتوى من ملف حساس: {file_path}")
+        elif self.include_content and ext in TEXT_EXTRACTABLE_EXT and stat.st_size <= self.max_file_size:
+            if not external_send_allowed(file_path, service_name="file_inventory"):
                 content_blocked = True
                 logger.debug(f"محظور استخراج المحتوى للإرسال الخارجي: {file_path}")
             else:
