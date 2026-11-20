@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pytest
 from pathlib import Path
 
 from src.core.path_policy import iter_files, is_hidden_relative, relative_parts
@@ -65,3 +66,40 @@ def test_relative_parts_ignores_hidden_ancestor_of_root(tmp_path):
     root = tmp_path / ".hidden-parent" / "root"
     assert relative_parts(root, root / "a" / "b.txt") == ("a", "b.txt")
     assert is_hidden_relative(root, root / ".private" / "b.txt")
+
+
+
+def test_default_skip_dirs_include_gnupg(tmp_path):
+    touch(tmp_path / ".gnupg" / "private-keys-v1.d" / "secret.key")
+    found = list(iter_files(tmp_path))
+    assert found == []
+
+
+def test_explicit_mount_root_is_allowed_but_nested_mount_is_pruned(tmp_path, monkeypatch):
+    import src.core.path_policy as policy
+
+    root_file = tmp_path / "root.txt"
+    root_file.write_text("root")
+    nested_mount = tmp_path / "external"
+    touch(nested_mount / "nested.txt")
+
+    monkeypatch.setattr(
+        policy,
+        "_is_mount_point",
+        lambda path: Path(path) in {tmp_path, nested_mount},
+    )
+    found = list(policy.iter_files(tmp_path))
+    assert found == [root_file]
+
+
+def test_symlink_scan_root_is_rejected(tmp_path):
+    target = tmp_path / "target"
+    target.mkdir()
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    with pytest.raises(OSError, match="رابط رمزي"):
+        list(iter_files(link))
