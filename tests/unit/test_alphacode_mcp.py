@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import src.integrations.alphacode_mcp_server as bridge
 from src.integrations.alphacode_mcp_server import (
     IntegrationError,
     _inventory,
@@ -255,3 +256,20 @@ def test_server_direct_script_launch_works_from_external_working_directory(tmp_p
     frames = [json.loads(line) for line in completed.stdout.splitlines()]
     assert [frame["id"] for frame in frames] == [1, 2]
     assert all(frame["jsonrpc"] == "2.0" for frame in frames)
+
+
+
+def test_inventory_has_a_hard_scan_limit(tmp_path, monkeypatch):
+    root = tmp_path / "allowed"
+    root.mkdir()
+    for name in ("a.txt", "b.txt", "c.txt", "d.txt"):
+        (root / name).write_text(name, encoding="utf-8")
+    _configure_root(monkeypatch, root)
+    monkeypatch.setattr(bridge, "MAX_SCAN_ENTRIES", 2)
+
+    result = bridge._inventory(str(root), 10)
+
+    assert result["entries_scanned"] == 2
+    assert result["scan_complete"] is False
+    assert result["truncated"] is True
+    assert result["counts"]["files"] == 2
