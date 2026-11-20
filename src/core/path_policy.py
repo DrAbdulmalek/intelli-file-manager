@@ -22,6 +22,7 @@ DEFAULT_SKIP_DIRS = frozenset(
         "venv",
         ".ssh",
         ".config",
+        ".gnupg",
     }
 )
 PathLike = Union[str, "os.PathLike[str]"]
@@ -45,7 +46,8 @@ def _is_mount_point(path: Path) -> bool:
     try:
         return Path(path).is_mount()
     except OSError:
-        return False
+        # Fail closed: تعذر التحقق من حدّ التركيب يعني عدم دخول هذا الفرع.
+        return True
 
 
 def iter_files(
@@ -64,13 +66,13 @@ def iter_files(
       - لا يدخل المجلدات المحددة في skip_dirs.
     """
     base = Path(root)
+    if base.is_symlink():
+        raise OSError(f"جذر المسح رابط رمزي محظور: {base}")
     if not base.is_dir():
         return
 
-    # لا نبدأ من نقطة تركيب (تجنب عبور وسائط خارجية عن غير قصد).
-    if _is_mount_point(base):
-        raise OSError(f"نقطة تركيب محظورة كنقطة بداية: {base}")
-
+    # الجذر الذي اختاره المستخدم صراحةً مسموح حتى لو كان mount point
+    # (مثلاً قرصاً خارجياً). تُمنع نقاط التركيب الفرعية غير المختارة.
     skipped = frozenset(skip_dirs or ())
 
     def on_walk_error(error: OSError) -> None:
