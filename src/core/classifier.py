@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from .config import Config
+from .path_policy import iter_files
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +91,9 @@ class SmartFileClassifier:
                     return ""
             elif ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"):
                 try:
-                    import pytesseract
-                    from PIL import Image
-                    img = Image.open(filepath)
-                    return pytesseract.image_to_string(img, lang="ara+eng")[:5000]
+                    from .ocr_service import ocr_image
+                    res = ocr_image(filepath, max_chars=5000)
+                    return res.get("extracted_text") or path.name
                 except Exception:
                     return path.name
         except Exception as e:
@@ -173,14 +173,13 @@ class SmartFileClassifier:
             logger.error(f"المجلد غير موجود: {directory}")
             return results
 
-        for item in dir_path.rglob("*"):
-            if item.is_file() and not item.name.startswith("."):
-                try:
-                    result = self.classify_file(str(item))
-                    if "error" not in result:
-                        results.append(result)
-                except Exception as e:
-                    logger.debug(f"خطأ في تصنيف {item}: {e}")
+        for item in iter_files(dir_path):
+            try:
+                result = self.classify_file(str(item))
+                if "error" not in result:
+                    results.append(result)
+            except Exception as e:
+                logger.debug(f"خطأ في تصنيف {item}: {e}")
 
         logger.info(f"تم تصنيف {len(results)} ملف في {directory}")
         return results
