@@ -202,23 +202,44 @@ class UndoLog:
             raise RuntimeError(f"فشل التراجع عن النقل عبر SafeMover: {result.error}")
         if src_sidecar.exists():
             dst_sidecar = _sidecar_path(str(dst))
-            if dst_sidecar.exists():
-                # دمج (نادر)
-                dst_sidecar.unlink()
+            # لا حذف صامت لشاغل الـsidecar (جولة DeepSeek 11 — كان
+            # dst_sidecar.unlink() يمسح بيانات شاغل): عقد «اللاحقة لا
+            # الاستبدال» يُطبق هنا أيضاً — SafeMover يتضارب باللاحقة
             result_sc = self.safe_mover.move(str(src_sidecar), str(dst_sidecar))
             if not result_sc.success:
                 raise RuntimeError(f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error}")
 
     def _rollback_copy(self, entry: UndoEntry) -> None:
-        """عكس النسخ: حذف النسخة المنشأة (مع sidecar)"""
+        """عكس النسخ: حذف النسخة المنشأة (مع sidecar)
+
+        استثناء معتمد موثق (جولة DeepSeek 11): الحذف هنا مباشر (unlink)
+        لأن النسخة أُنشئت بواسطة العملية نفسها المراد التراجع عنها لحظة
+        قليلة مضت — لا بيانات سابقة على القرص تُمس بهذا الحذف. الحارس:
+        إن عُدّل الملف بعد نسخه (checksum يخالف المسجل في القيد) يُرفض
+        التراجع صراحةً حمايةً لتعديلات المستخدم اللاحقة.
+        """
         if not entry.file_path_after:
             raise ValueError("file_path_after مفقود لعملية copy")
         copied = Path(entry.file_path_after)
-        if copied.exists():
-            copied.unlink()
-        else:
+        if not copied.exists():
             logger.warning(f"النسخة المنسوخة غير موجودة: {copied}")
-        # حذف sidecar المنسوخ إن وُجد
+        else:
+            # حارس التعديل اللاحق: checksum_after يسجله _exec_copy عند النسخ
+            recorded = getattr(entry, "checksum_after", None)
+            if recorded and copied.is_file():
+                from .safe_mover import compute_sha256
+                try:
+                    current = compute_sha256(copied)
+                except OSError as e:
+                    raise RuntimeError(f"تعذر التحقق من النسخة قبل التراجع: {e}")
+                if current != recorded:
+                    raise RuntimeError(
+                        "رفض التراجع عن النسخ: عُدّل الملف بعد إنشائه — "
+                        f"حماية من فقد تعديلات المستخدم: {copied}"
+                    )
+            copied.unlink()
+        # حذف sidecar المنسوخ إن وُجد (جزء من النسخة المنشأة نفسها —
+        # يخضع لنفس الاستثناء المعتمد أعلاه)
         from .rule_engine import _sidecar_path
         copied_sidecar = _sidecar_path(str(copied))
         if copied_sidecar.exists():

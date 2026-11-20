@@ -218,14 +218,17 @@ def _atomic_move(src: Path, dst: Path) -> None:
     src_str = str(src)
     dst_str = str(dst)
 
-    # رفض إذا كانت الوجهة مجلداً (P5)
+    # رفض إذا كانت الوجهة مجلداً (P5) — الفحص داخل try فقط لأن is_dir()
+    # قد يفشل بنظام الملفات؛ الخطأ الصريح يُرفع خارج try حتى لا يبتلعه
+    # except OSError (عيب جولة DeepSeek 7: IsADirectoryError صنف فرعي من OSError)
     try:
-        if dst.is_dir():
-            raise IsADirectoryError(
-                f"ممنوع النقل فوق مجلد موجود: {dst}"
-            )
+        _dst_is_dir = dst.is_dir()
     except OSError:
-        pass
+        _dst_is_dir = False
+    if _dst_is_dir:
+        raise IsADirectoryError(
+            f"ممنوع النقل فوق مجلد موجود: {dst}"
+        )
 
     # renameat2(RENAME_NOREPLACE) — ذرّي ويرفض الاستبدال
     # AT_FDCWD غير متوفر على جميع الأنظمة (مثلاً macOS) — نتحقق قبل الاستدعاء
@@ -256,8 +259,6 @@ def _atomic_move(src: Path, dst: Path) -> None:
     # Fallback: hard link ثم حذف المصدر (ذرّي على نظام الملفات نفسه)
     try:
         os.link(str(src), str(dst))
-        src.unlink()
-        return
     except FileExistsError:
         raise FileExistsError(f"الوجهة موجودة بالفعل (fallback link): {dst}")
     except OSError as e:
@@ -272,8 +273,38 @@ def _atomic_move(src: Path, dst: Path) -> None:
                 ) as tmp:
                     tmp_path = Path(tmp.name)
                 shutil.copy2(str(src), str(tmp_path))
-                os.replace(str(tmp_path), str(dst))  # dst مؤكد غير موجود
-                src.unlink()
+                # بديل ذرّي لـ os.replace: os.link يفشل ذرياً إن ظهر dst بين
+                # الفحص والكتابة (فجوة TOCTOU — جولة DeepSeek 7، البند 3)
+                _linked = False
+                try:
+                    os.link(str(tmp_path), str(dst))
+                    _linked = True
+                except FileExistsError:
+                    raise FileExistsError(
+                        f"الوجهة موجودة (سباق ما بعد الفحص — رفض بلا استبدال): {dst}"
+                    )
+                except OSError as link_err:
+                    # أنظمة ملفات بلا hardlink: تراجع إلى os.replace (نافذة
+                    # سباق نظرية ضيقة — موثقة بدل فشل كامل على FUSE/شبكة)
+                    logger.warning(
+                        f"os.link غير مدعوم ({link_err}) — fallback إلى os.replace: {dst}"
+                    )
+                    os.replace(str(tmp_path), str(dst))
+                if _linked:
+                    try:
+                        tmp_path.unlink()
+                    except OSError:
+                        pass
+                try:
+                    src.unlink()
+                except OSError as unlink_err:
+                    # dst نسخة كاملة والصفر الأصلي سليم — نزيل النسخة
+                    # لإعادة الحالة الأصلية ثم نرفع خطأً صريحاً
+                    try:
+                        os.unlink(str(dst))
+                    except OSError:
+                        pass
+                    raise OSError(f"فشل حذف المصدر بعد النسخ — أُزيلت الوجهة: {unlink_err}")
                 return
             finally:
                 if tmp_path is not None and tmp_path.exists():
@@ -283,20 +314,35 @@ def _atomic_move(src: Path, dst: Path) -> None:
                         pass
         raise
 
+    # حذف المصدر بعد ربط ناجح — فشله يترك «كلاهما موجود» (hardlink، صفر
+    # فقد بيانات): نزيل الرابط dst لإعادة الحالة الأصلية ثم نرفع صريحاً
+    # (جولة DeepSeek 7 — البند 4)
+    try:
+        src.unlink()
+    except OSError as e:
+        try:
+            os.unlink(str(dst))
+        except OSError:
+            pass
+        raise OSError(f"فشل حذف المصدر بعد الربط الناجح — أُزيل الرابط: {e}")
+    return
+
 
 def _atomic_copy(src: Path, dst: Path) -> None:
     """نسخ ذرّي: كتابة إلى ملف مؤقت في نفس مجلد الوجهة ثم rename.
 
     يرفض الكتابة فوق أي موجود — لو الوجهة موجودة يُرفع FileExistsError.
     """
-    # رفض إذا كانت الوجهة مجلداً
+    # رفض إذا كانت الوجهة مجلداً — الخطأ الصريح خارج try (عيب جولة DeepSeek 7:
+    # IsADirectoryError صنف فرعي من OSError وكان يُبتلع بـexcept OSError: pass)
     try:
-        if dst.is_dir():
-            raise IsADirectoryError(
-                f"ممنوع النسخ فوق مجلد موجود: {dst}"
-            )
+        _dst_is_dir = dst.is_dir()
     except OSError:
-        pass
+        _dst_is_dir = False
+    if _dst_is_dir:
+        raise IsADirectoryError(
+            f"ممنوع النسخ فوق مجلد موجود: {dst}"
+        )
 
     tmp_path: Optional[Path] = None
     try:
@@ -307,7 +353,24 @@ def _atomic_copy(src: Path, dst: Path) -> None:
         ) as tmp:
             tmp_path = Path(tmp.name)
         shutil.copy2(str(src), str(tmp_path))
-        os.replace(str(tmp_path), str(dst))  # dst مؤكد غير موجود (تم التحقق عبر _resolve_collision)
+        # بديل ذرّي لـ os.replace (فجوة TOCTOU — جولة DeepSeek 7): الربط
+        # يفشل ذرياً إن ظهرت الوجهة بين الفحص والكتابة
+        try:
+            os.link(str(tmp_path), str(dst))
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        except FileExistsError:
+            raise FileExistsError(
+                f"الوجهة موجودة (سباق ما بعد الفحص — رفض بلا استبدال): {dst}"
+            )
+        except OSError as link_err:
+            # أنظمة ملفات بلا hardlink: تراجع إلى os.replace (نافذة نظرية)
+            logger.warning(
+                f"os.link غير مدعوم ({link_err}) — fallback إلى os.replace: {dst}"
+            )
+            os.replace(str(tmp_path), str(dst))
     finally:
         if tmp_path is not None and tmp_path.exists() and tmp_path != dst:
             try:
