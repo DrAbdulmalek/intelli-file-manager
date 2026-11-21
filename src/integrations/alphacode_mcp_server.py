@@ -20,9 +20,15 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.core.path_policy import iter_entries_reported
+from src.integrations.alphacode_preference_tools import (
+    PREFERENCE_TOOLS,
+    PreferenceIntegrationError,
+    create_toolkit,
+    is_preference_tool,
+)
 
 SERVER_NAME = "intellifile-alphacode"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "0.2.0"
 PROTOCOL_VERSION = "2025-11-25"
 MAX_MESSAGE_BYTES = 1024 * 1024
 MAX_INVENTORY_ENTRIES = 1000
@@ -289,6 +295,8 @@ def _validate_plan(root_arg: str, items: Any) -> dict[str, Any]:
     }
 
 
+# Read-only file tools + preference-store tools (the latter mutate the local
+# preference database only — never files, no shell, no network).
 TOOLS = [
     {
         "name": "intellifile.status",
@@ -340,6 +348,8 @@ TOOLS = [
     },
 ]
 
+TOOLS.extend(PREFERENCE_TOOLS)
+
 
 def _tool_result(value: Any, *, is_error: bool = False) -> dict[str, Any]:
     return {
@@ -378,8 +388,11 @@ def dispatch(message: dict[str, Any], state: dict[str, Any]) -> dict[str, Any] |
                     "version": SERVER_VERSION,
                 },
                 "instructions": (
-                    "Local-only, read-only bridge. File contents and sensitive paths are not exposed. "
-                    "No file mutation or execution tools are available."
+                    "Local-only bridge. File contents and sensitive paths are not exposed. "
+                    "No file mutation or execution tools exist. Preference tools "
+                    "(intellifile.get_suggestion/record_user_correction/...) mutate only "
+                    "the local preference store — learning requires explicit "
+                    "user_confirmed=true from the human."
                 ),
             },
         }
@@ -418,6 +431,14 @@ def dispatch(message: dict[str, Any], state: dict[str, Any]) -> dict[str, Any] |
                 result = _inventory(arguments.get("root"), arguments.get("max_entries", 300))
             elif name == "intellifile.validate_plan":
                 result = _validate_plan(arguments.get("root"), arguments.get("items"))
+            elif is_preference_tool(name):
+                # أدوات التفضيلات: تمس مخزن التفضيلات المحلي فقط — لا ملفات،
+                # لا shell، لا شبكة. تُنشأ مرة واحدة لكل جلسة خادم.
+                toolkit = state.get("preference_toolkit")
+                if toolkit is None:
+                    toolkit = create_toolkit()
+                    state["preference_toolkit"] = toolkit
+                result = toolkit.handle(name, arguments)
             else:
                 raise IntegrationError("Unknown IntelliFile tool.")
             return {"jsonrpc": "2.0", "id": request_id, "result": _tool_result(result)}

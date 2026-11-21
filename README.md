@@ -539,6 +539,28 @@ class MyPlugin(IntelliFilePlugin):
 
 ---
 
+
+## Learning Preferences | تفضيلات التعلم
+
+يتعلم IntelliFile من تصحيحاتك: كل تصحيح تصنيف يصبح «مرشحًا» يُطبَّق بعد
+موافقتك الصريحة، والقواعد المكتسبة تقترح وجهات مع شرح كامل (الثقة، عدد
+التأكيدات المستقلة، التعارضات، المصدر). الاقتراح لا ينفّذ أي عملية ملف —
+النقل يمر حصرًا عبر مسار الموافقة الحالي (dry-run → تنفيذ عبر SafeMover).
+
+- **التعطيل:** انقل/احذف `~/.intellifile/preferences.json` — يعمل المصنف
+  التقليدي كما كان حرفيًا.
+- **الاستعادة:** `preferences.json.bak` (ببصمة sha256 موثقة) أو
+  `store.restore_backup()`.
+- **التراجع عن التعلم:** `revert_last_update()` أو زر اللوحة.
+
+التوثيق الكامل:
+[PREFERENCE_STORE](docs/PREFERENCE_STORE.md) ·
+[FEEDBACK_ENGINE](docs/FEEDBACK_ENGINE.md) ·
+[ALPHACODE_ADAPTER](docs/ALPHACODE_ADAPTER.md) ·
+[PREFERENCE_SECURITY](docs/PREFERENCE_SECURITY.md)
+
+---
+
 ## License | الترخيص
 
 هذا المشروع مرخص بموجب رخصة **MIT**. يمكنك الاطلاع على ملف [LICENSE](LICENSE) للتفاصيل الكاملة.
