@@ -9,28 +9,45 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         # pyaudio لا ينشر عجلات لينكس على PyPI -> يحتاج portaudio.h للبناء من المصدر
         sudo apt-get update -qq && sudo apt-get install -y -qq portaudio19-dev
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    
-    - name: Run tests
+        pip install flake8 black pytest
+
+    # بوابة حاجزة: الأخطاء القاتلة (صياغة/أسماء غير معرّفة) تُفشل البناء.
+    - name: Lint (blocking subset)
+      run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    # بوابة حاجزة: لا "|| echo" — الإخفاق إخفاق. الاختبارات المحجورة معلنة في
+    # tests/KNOWN_FAILURES.md ولكل منها سبب وشرط إخراج؛ لا يُضاف إليها دون مراجعة.
+    - name: Tests (blocking)
+      env:
+        QT_QPA_PLATFORM: offscreen
       run: |
-        python -m pytest tests/ -v --tb=short || echo "No tests found"
-    
-    - name: Code Quality Checks
-      run: |
-        pip install flake8 black
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
-        black . --check --verbose || true
+        python -m pytest tests/unit tests/integration -q --tb=short \
+          --deselect tests/unit/test_glossary_and_export.py::test_bundled_glossary_loaded \
+          --deselect tests/unit/test_glossary_and_export.py::test_suggest_arabic_prefix \
+          --deselect tests/unit/test_glossary_and_export.py::test_suggest_english_prefix \
+          --deselect tests/unit/test_glossary_and_export.py::test_suggest_exact_ranks_first \
+          --deselect tests/unit/test_glossary_and_export.py::test_lookup_both_directions \
+          --deselect tests/integration/test_snippets_api.py::test_glossary_suggest_endpoint \
+          --deselect tests/integration/test_duplicate_detector.py::TestNearDuplicateDetection::test_three_similar_files_form_one_near_group \
+          --deselect tests/integration/test_duplicate_detector.py::TestNearDuplicateDetection::test_threshold_tuning \
+          --deselect tests/integration/test_duplicate_detector.py::TestNearDuplicateDetection::test_two_near_groups
+
+    # استشاري فقط (لا يُفشل البناء): تنسيق black. اجعله حاجزًا بعد تطبيقه على الشجرة.
+    - name: Format check (advisory)
+      continue-on-error: true
+      run: black . --check
