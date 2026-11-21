@@ -143,10 +143,6 @@ class CopilotMessage(BaseModel):
     message: str = Field(..., min_length=1, description="رسالة المستخدم")
     conversation_id: Optional[str] = Field(None, description="معرف المحادثة")
 
-class NerRequest(BaseModel):
-    text: str = Field(..., min_length=1, description="النص الطبي")
-    use_llm: bool = Field(False, description="استخدام LLM للتحسين")
-
 # --- Training snippets (قصاصات قابلة للتدريب) --------------------------
 
 class BBoxModel(BaseModel):
@@ -272,10 +268,6 @@ def create_app() -> FastAPI:
             from src.core.enhanced_multimodal import EnhancedMultimodalProcessor
             _engines[name] = EnhancedMultimodalProcessor()
 
-        elif name == "ner":
-            from src.core.medical_ner import ArabicMedicalNER
-            _engines[name] = ArabicMedicalNER()
-
         elif name == "file_handler":
             from src.core.file_handler import FileHandler
             _engines[name] = FileHandler()
@@ -296,7 +288,7 @@ def create_app() -> FastAPI:
     @_app.get("/api/health", response_model=HealthResponse)
     async def health():
         engines = {}
-        for name in ["classifier", "hybrid_search", "tagger", "copilot", "multimodal", "ner"]:
+        for name in ["classifier", "hybrid_search", "tagger", "copilot", "multimodal"]:
             try:
                 eng = _get_engine(name)
                 engines[name] = eng is not None
@@ -673,31 +665,6 @@ def create_app() -> FastAPI:
                 tmp_path.unlink()
             except Exception:
                 pass
-
-    # -------------------------------------------------------------------
-    # Medical NER
-    # -------------------------------------------------------------------
-
-    @_app.post("/api/ner/extract")
-    async def ner_extract(req: NerRequest, _auth: str = Depends(_verify_api_key)):
-        ner = _get_engine("ner")
-        if not ner:
-            raise HTTPException(500, "NER engine unavailable")
-        if req.use_llm:
-            result = ner.extract_with_llm(req.text)
-        else:
-            result = ner.extract(req.text)
-        return {
-            "entities": [{"text": e.text, "type": e.entity_type,
-                          "confidence": e.confidence, "source": e.source}
-                         for e in result.entities],
-            "patient_name": result.patient_name,
-            "patient_id": result.patient_id,
-            "diagnosis": result.diagnosis,
-            "medications": result.medications,
-            "procedures": result.procedures,
-            "summary": result.summary,
-        }
 
     # -------------------------------------------------------------------
     # Organize

@@ -159,7 +159,7 @@ pytest tests/unit/ -v
 pytest tests/integration/ -v
 
 # اختبار محدد
-pytest tests/unit/test_medical_ner.py -v
+pytest tests/unit/test_path_policy.py -v
 
 # مع تغطية الكود (الحد الأدنى 80%)
 pytest --cov=src tests/ --cov-report=term-missing
@@ -369,11 +369,9 @@ raise HTTPException(400, f"المسار غير موجود: {req.path} | Path not
 
 ```python
 # ✅ صحيح — اختبار مع نص عربي
-def test_arabic_medical_ner():
-    text = "المريض أحمد محمد، تشخيص: التهاب رئوي حاد"
-    result = ner.extract(text)
-    assert result.patient_name == "أحمد محمد"
-    assert "التهاب رئوي حاد" in result.diagnosis
+def test_arabic_filename_is_scanned(tmp_path):
+    (tmp_path / "تقرير_اجتماع.txt").write_text("نص")
+    assert [p.name for p in iter_files(tmp_path)] == ["تقرير_اجتماع.txt"]
 
 # ✅ صحيح — اختبار النص المختلط
 def test_mixed_language_search():
