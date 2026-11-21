@@ -89,6 +89,24 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
+### 2026-11-21 - Super Z/jitta (implementation; feature branch, PR pending review)
+- Implemented the Preference Engine + Feedback Engine + AlphaCode integration
+  mission on `feature/intellifile-preference-feedback-integration` (from main
+  a9415c0): PreferenceStore (schema v2, atomic+flock+backup, SAFE READ-ONLY),
+  PreferenceEngine (independent-session promotion, deterministic tie-breaking,
+  soft delete + revert), FeedbackEngine (separate append-only JSONL log,
+  whitelisted evidence), PreferenceAwareClassifier (zero base-classifier
+  changes), 7 preference MCP tools on the existing AlphaCode bridge
+  (user_confirmed=true gate), PreferencesPanel (learning-only UI, zero file
+  operations), SafeMover optional on_conflict="reject" (default unchanged).
+- Baseline re-run on main before work: 777 passed / 6 failed (glossary data
+  file absent via .gitignore - pre-existing) / 163 skipped.
+- New tests: 84 (synthetic data only). Desktop Qt tests skip without libEGL
+  (same as existing suite). AlphaCode GUI connection NOT claimed complete -
+  documented as ready-to-integrate (requires AlphaCode MCP stdio support).
+- No merge to main; PR opened for review only.
+
+
 <<<<<<< HEAD
 ### 2026-11-20 - Claude (protocol v2.0 merge; docs only)
 - Recreated (previous local-only commit was lost with a sandbox clone) the merged

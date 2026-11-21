@@ -449,7 +449,13 @@ class SafeMover:
       - verify_checksum: افتراضيًا True، يتحقّق بعد العملية
       - move_sidecar: افتراضيًا True، ينقل/ينسخ sidecar إن وُجد
       - overwrite: محظور كليًا (سيُرفع OverwriteForbiddenError إذا True)
+      - on_conflict: سياسة التضارب مع وجهة موجودة:
+          "suffix" (الافتراضي — التوافق مع UndoLog): لاحقة _1, _2 تلقائيًا
+          "reject": رفض العملية صراحةً (وفق سياسة المستخدم في مهمة
+            التفضيلات) — error يحوي destination_exists والمصدر يبقى كما هو
     """
+
+    VALID_ON_CONFLICT = ("suffix", "reject")
 
     def __init__(
         self,
@@ -457,15 +463,22 @@ class SafeMover:
         verify_checksum: bool = True,
         move_sidecar: bool = True,
         overwrite: bool = False,
+        on_conflict: str = "suffix",
     ):
         if overwrite:
             raise OverwriteForbiddenError(
                 "overwrite=True محظور وفق تعليمات المستخدم: ممنوع الكتابة فوق أي موجود. "
                 "يُضاف لاحقة _1, _2, ... تلقائيًا عند التضارب."
             )
+        if on_conflict not in self.VALID_ON_CONFLICT:
+            raise ValueError(
+                f"on_conflict غير معروف: {on_conflict!r} — المسموح: "
+                f"{self.VALID_ON_CONFLICT}"
+            )
         self.verify_checksum = verify_checksum
         self.move_sidecar = move_sidecar
         self.overwrite = overwrite
+        self.on_conflict = on_conflict
 
     # ─── Move ──────────────────────────────────────────────────────────────
 
@@ -477,6 +490,7 @@ class SafeMover:
         verify_checksum: Optional[bool] = None,
         move_sidecar: Optional[bool] = None,
         overwrite: Optional[bool] = None,
+        on_conflict: Optional[str] = None,
     ) -> MoveResult:
         """نقل آمن لملف مع تحقّق checksum
 
@@ -486,6 +500,7 @@ class SafeMover:
             verify_checksum: تجاوز الإعداد الافتراضي
             move_sidecar: تجاوز إعداد نقل sidecar
             overwrite: تجاوز إعداد overwrite (محظور)
+            on_conflict: تجاوز سياسة التضارب لهذه العملية ("suffix"/"reject")
 
         Returns:
             MoveResult بتفاصيل العملية
@@ -494,6 +509,13 @@ class SafeMover:
         verify = self.verify_checksum if verify_checksum is None else verify_checksum
         do_sidecar = self.move_sidecar if move_sidecar is None else move_sidecar
         do_overwrite = self.overwrite if overwrite is None else overwrite
+        conflict_mode = self.on_conflict if on_conflict is None else on_conflict
+        if conflict_mode not in self.VALID_ON_CONFLICT:
+            result = MoveResult(source=str(source), destination=str(destination))
+            result.success = False
+            result.error = f"on_conflict غير معروف: {conflict_mode!r}"
+            result.duration_ms = (time.monotonic() - start) * 1000
+            return result
 
         if do_overwrite:
             result = MoveResult(source=str(source), destination=str(destination))
@@ -564,13 +586,23 @@ class SafeMover:
             result.duration_ms = (time.monotonic() - start) * 1000
             return result
 
-        # حل التضارب (ممنوع overwrite — يُضاف لاحقة تلقائيًا)
+        # حل التضارب (ممنوع overwrite — لاحقة تلقائيًا أو رفض صريح حسب السياسة)
         try:
             if do_overwrite:
                 # ओवर写 محظور — لا يُنفذ أبدًا
                 raise OverwriteForbiddenError(
                     f"ممنوع الكتابة فوق الملف الموجود: {dst}"
                 )
+            elif conflict_mode == "reject":
+                # سياسة الرفض (مهمة التفضيلات §2-B): الوجهة الموجودة تُرفض
+                # بدل إنشاء اسم بديل تلقائيًا — المصدر يبقى دون مساس.
+                if dst.exists():
+                    result.success = False
+                    result.error = f"destination_exists (on_conflict=reject): {dst}"
+                    result.duration_ms = (time.monotonic() - start) * 1000
+                    logger.warning("رفض نقل (وجهة موجودة، on_conflict=reject): %s", dst)
+                    return result
+                final_dst, renamed = dst, False
             else:
                 final_dst, renamed = _resolve_collision(dst, src)
         except SafeMoveError as e:
