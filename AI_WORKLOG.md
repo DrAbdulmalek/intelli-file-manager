@@ -89,7 +89,67 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 📊 Work Log
 
-<<<<<<< HEAD
+### 2026-11-21 - Claude (comprehensive sensitive-barrier hardening; branch only)
+- Branch `security/comprehensive-sensitive-barrier-hardening` from `main`
+  (a9415c0). No direct writes to `main`; Draft PR only after tests.
+- Closed a PROVEN bypass: `FileInventory` passed `skip_dirs` (containing
+  `secrets`/`credentials`) into `is_sensitive_path`, which subtracted them
+  from the sensitive path parts — SHA-256 hashing and magic-byte detection
+  then read the full contents of secret files. The barrier rules are now
+  mandatory; `skip_dirs` is ignored by the barrier (kept for signature
+  compat) and legitimate only for traversal pruning in `iter_files`.
+- Added mandatory secret-file rules (`.env*`, `.netrc`, `credentials.json`,
+  private SSH key names, `.pem/.p12/.pfx/.key/.kdbx/.jks`/certificates) and
+  more medical path indicators (medical_records/clinical/hospital_records/
+  radiology/prescriptions/laboratory + Arabic equivalents).
+- Symlink policy: classification covers link + realpath target including
+  intermediate symlink components; new `open_checked()` (O_NOFOLLOW +
+  regular-file fstat) and `verify_open_identity()`; documented residual
+  TOCTOU limits honestly (parent-dir rename race remains out of scope).
+- Wired the barrier into previously unguarded readers: AIEngine
+  summarize/keywords, FileCopilot summarize + index_files (directory
+  expansion with per-file barrier before RAG — no raw folder reaches RAG),
+  SmartTagger content extraction, MultimodalProcessor image/audio/video +
+  text extractors, metadata_extractor EXIF/ffprobe/magic (EXIF treated as
+  potentially sensitive), SmartFileClassifier (Magika skipped on sensitive
+  files, batch via iter_files), HFExporter crop.
+- API: auth added to /api/tags/search, /api/tags/all,
+  /api/copilot/conversations, /api/file/serve (+ barrier 403);
+  constant-time key comparison; WebSocket now requires the API key BEFORE
+  accept() (Origin is not authentication); HF push token moved from Query
+  param (log leakage) to X-HF-Token header, never echoed back;
+  `_get_allowed_dirs` no longer unconditionally appends cwd when an
+  explicit allowlist is configured; broken /api/process/* wiring repaired
+  via EnhancedMultimodalProcessor (audio/video/document were
+  AttributeError; image fix_scan was TypeError).
+- Removed dead NER wiring per PRODUCT_IDENTITY.md: /api/ner/extract always
+  returned 500 (module `medical_ner` does not exist); removed the engine
+  entry, NerRequest, and dead NER tagging in smart_tagger.
+- tree_manifest: rejects symlink roots (snapshot+verify), detects symlink
+  target changes (target_changed) — previously a false success — and
+  detects files mutated during hashing (fail-closed via fresh os.stat;
+  DirEntry.stat caching was silently defeating re-checks); O_NOFOLLOW
+  hashing.
+- CI fail-closed: `python-ci.yml` and `ci-kimi-review.yml` no longer mask
+  test failures (`|| true`, `|| echo "No tests found"` removed; zero-test
+  guard; flake8/ruff serious classes blocking; API startup check blocking);
+  fixed 8 pre-existing F821 undefined-name errors so the blocking lint
+  passes.
+- Repo hygiene: untracked project_context.txt (1.6 MB generated) and
+  web/tsconfig.tsbuildinfo; removed docs/ARCHITECTURE.md (stale duplicate of
+  docs/architecture.md); de-duplicated pytest config (pytest.ini is the
+  single source); added [tool.ruff]; unified version source as
+  src/__version__.py with content byte-identical to open PR #72 so both can
+  merge without conflict (server.py wired to it).
+- Resolved real conflict markers (`<<<<<<< HEAD` … `>>>>>>> origin/main`)
+  in AI_WORKLOG.md by keeping both dated entries.
+- Tests: +88 (barrier v2, read-prevention instrumentation measuring actual
+  bytes read per reader, recursive-indexing per-file barrier, API auth/WS/
+  HF-token, tree-manifest symlink/mutation). Baseline before changes: 777
+  passed / 6 failed (pre-existing missing data/medical_glossary.csv) /
+  158 skipped; post-change results recorded against the branch head SHA in
+  the PR description.
+
 ### 2026-11-20 - Claude (protocol v2.0 merge; docs only)
 - Recreated (previous local-only commit was lost with a sandbox clone) the merged
   AlphaCode + IntelliFile Continuous Improvement Protocol v2.0 in
@@ -117,7 +177,7 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
   passes adversarial review.
 - CI status is recorded against the exact branch head in the pull request; no
   claim of local execution is made.
-=======
+
 ### 2026-11-20 - GPT-6 (review of uploaded IntelliFile patch; regression-only follow-up)
 - Reviewed the uploaded `intellifile-path-policy.patch` against current `main`.
 - Confirmed the shared path policy, traversal migrations, emergent-category
@@ -125,8 +185,8 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
   `main`; did not reapply or overwrite those implementations.
 - Added focused regression coverage for the local AlphaCode/file-agent use
   cases: duplicate detection must not enter hidden trees; FileHandler must
-  ignore hidden subtrees while still scanning a selected root beneath a
-  hidden ancestor; excluded directories remain excluded when hidden files are
+  ignore hidden subtrees while still scanning a selected root beneath a hidden
+  ancestor; excluded directories remain excluded when hidden files are
   explicitly included.
 - Deliberately did **not** add the proposed `shell_plan.py`: a generated
   `mv -nT` script is still a separate filesystem executor, bypasses SafeMover's
@@ -135,7 +195,6 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
   reviewed SafeMover path; no shell execution was added.
 - Validation: changes are committed to a review branch only. No local pytest
   execution is claimed; GitHub Actions must validate the PR before merge.
->>>>>>> origin/main
 
 ### 2026-11-20 - GPT-6 (independent implementation; branch only)
 - Created branch `fix/unified-path-policy-shell-plan-2026-11-20`; no changes to `main`.
