@@ -27,9 +27,13 @@ jobs:
         pip install pytest pytest-asyncio httpx
 
     # fail-closed: غياب الاختبارات فشل — لا "No tests found" يخفيه
+    # ملاحظة: addopts يحوي -v فتأتي سطر الملخص محاطاً بحواف ==== —
+    # لذلك نطابق "N tests collected" في أي مكان، ونُظهر مخرجات الجمع
+    # بدل كتمها (2>/dev/null كان يخفي أخطاء الجمع نفسها)
     - name: Guard — tests must exist
       run: |
-        COUNT=$(python -m pytest tests/ --collect-only -q 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
+        python -m pytest tests/ --collect-only -q 2>&1 | tail -3
+        COUNT=$(python -m pytest tests/ --collect-only -q 2>&1 | grep -oE '[0-9]+ tests? collected' | grep -oE '^[0-9]+' | head -1 || echo 0)
         echo "collected tests: $COUNT"
         if [ "$COUNT" -le 0 ]; then
           echo "::error::لم يُعثر على أي اختبار في tests/ — فشل إجباري (fail-closed)"
