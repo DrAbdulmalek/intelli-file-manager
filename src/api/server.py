@@ -6,15 +6,26 @@ REST API + WebSocket endpoints for the IntelliFile Manager:
   - Smart tagging: auto-tag, manual tags, tag search
   - File Copilot: RAG chat with files (WebSocket for streaming)
   - Multimodal processing: images, audio, video, documents
-  - Medical NER: extract medical entities from Arabic text
   - Health check: engine availability
 
 All endpoints support Arabic RTL content natively.
 Privacy-first: all processing is local, no data leaves the device.
+
+الأمان:
+  - مصادقة X-API-Key على جميع endpoints المحتوى (تشمل endpoints كانت
+    بلا مصادقة سابقًا: /api/tags/search، /api/tags/all،
+    /api/copilot/conversations، /api/file/serve).
+  - WebSocket /api/copilot/ws يتطلب المفتاح قبل accept() — Origin ليس
+    مصادقة.
+  - توكن HuggingFace يُمرَّر في رأس X-HF-Token فقط (لا Query params —
+    منع التسرب إلى access logs).
+  - الحاجز الحساسي (sensitive_barrier) مُطبَّق على كل قارئ ملفات؛ الملفات
+    الحساسة تعيد 403 عبر HTTP ولا تُخدم.
 """
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import re
@@ -22,11 +33,13 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Security, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, HTTPException, Header, Query, Request, Security, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
+
+from src.core.sensitive_barrier import SensitiveFileBlockedError, is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +62,14 @@ _api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def _verify_api_key(api_key: str = Security(_api_key_scheme)) -> str:
-    """Dependency that enforces API key when INTELLIFILE_API_KEY is configured."""
+    """Dependency that enforces API key when INTELLIFILE_API_KEY is configured.
+
+    المقارنة بزمن ثابت (compare_digest) لمنع قياس توقيت المقارنة.
+    """
     if not _API_KEY:
         # No API key configured — skip auth (localhost-only is the default)
         return "anonymous"
-    if api_key == _API_KEY:
+    if api_key and hmac.compare_digest(api_key.encode(), _API_KEY.encode()):
         return api_key[:4] + "..."
     raise HTTPException(
         status_code=401,
@@ -62,21 +78,33 @@ async def _verify_api_key(api_key: str = Security(_api_key_scheme)) -> str:
 
 
 def _get_allowed_dirs() -> list[Path]:
-    """Get and cache the list of allowed directories."""
+    """Get and cache the list of allowed directories.
+
+    الأمان: Path.cwd() يُضاف فقط في الوضع الافتراضي (بلا INTELLIFILE_ALLOWED_DIRS)
+    للحفاظ على سلوك localhost؛ عند ضبط قائمة صريحة تُحترم حرفياً ولا يُضاف
+    مجلد العمل تلقائياً — كان ذلك يسمح بتجاوز الصندوق عبر أي مسار تحت cwd.
+    """
     global _ALLOWED_DIRS
     if _ALLOWED_DIRS is not None:
         return _ALLOWED_DIRS
-    dirs_str = os.environ.get(
-        "INTELLIFILE_ALLOWED_DIRS",
-        os.path.join(os.getcwd(), "data"),
-    )
-    _ALLOWED_DIRS = [
-        Path(d.strip()).resolve()
-        for d in dirs_str.split(",")
-        if d.strip()
-    ]
-    _ALLOWED_DIRS.append(Path.cwd().resolve())
+    if os.environ.get("INTELLIFILE_ALLOWED_DIRS", "").strip():
+        dirs_str = os.environ["INTELLIFILE_ALLOWED_DIRS"]
+        _ALLOWED_DIRS = [
+            Path(d.strip()).resolve()
+            for d in dirs_str.split(",")
+            if d.strip()
+        ]
+        return _ALLOWED_DIRS
+    # الوضع الافتراضي: مجلد data تحت مجلد العمل + مجلد العمل نفسه (سلوك قديم)
+    dirs_str = os.path.join(os.getcwd(), "data")
+    _ALLOWED_DIRS = [Path(dirs_str).resolve(), Path.cwd().resolve()]
     return _ALLOWED_DIRS
+
+
+def reset_allowed_dirs_cache() -> None:
+    """تصفير كاش المجلدات المسموحة — للاختبارات وبعد تغيير الإعدادات."""
+    global _ALLOWED_DIRS
+    _ALLOWED_DIRS = None
 
 
 def _validate_path(path_str: str, must_exist: bool = True) -> Path:
@@ -141,10 +169,6 @@ class CopilotMessage(BaseModel):
     message: str = Field(..., min_length=1, description="رسالة المستخدم")
     conversation_id: Optional[str] = Field(None, description="معرف المحادثة")
 
-class NerRequest(BaseModel):
-    text: str = Field(..., min_length=1, description="النص الطبي")
-    use_llm: bool = Field(False, description="استخدام LLM للتحسين")
-
 # --- Training snippets (قصاصات قابلة للتدريب) --------------------------
 
 class BBoxModel(BaseModel):
@@ -180,7 +204,7 @@ class OrganizeRequest(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "2.0.0"
+    version: str = "2.2.0.dev0"
     engines: dict[str, bool] = Field(default_factory=dict)
 
 
@@ -190,10 +214,12 @@ class HealthResponse(BaseModel):
 
 def create_app() -> FastAPI:
     """Create the IntelliFile Manager FastAPI application."""
+    from src.__version__ import __version__
+
     _app = FastAPI(
         title="IntelliFile Manager API",
         description="إدارة ملفات ذكية — بحث هجين، وسوم ذكية، مساعد ملفات",
-        version="2.0.0",
+        version=__version__,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
     )
@@ -270,10 +296,6 @@ def create_app() -> FastAPI:
             from src.core.enhanced_multimodal import EnhancedMultimodalProcessor
             _engines[name] = EnhancedMultimodalProcessor()
 
-        elif name == "ner":
-            from src.core.medical_ner import ArabicMedicalNER
-            _engines[name] = ArabicMedicalNER()
-
         elif name == "file_handler":
             from src.core.file_handler import FileHandler
             _engines[name] = FileHandler()
@@ -293,8 +315,10 @@ def create_app() -> FastAPI:
 
     @_app.get("/api/health", response_model=HealthResponse)
     async def health():
+        # ملاحظة: لا يوجد محرك "ner" — وحدة medical_ner غير موجودة في المستودع
+        # وPRODUCT_IDENTITY.md يستبعد NER من هذا المشروع (أسلاك ميتة أُزيلت).
         engines = {}
-        for name in ["classifier", "hybrid_search", "tagger", "copilot", "multimodal", "ner"]:
+        for name in ["classifier", "hybrid_search", "tagger", "copilot", "multimodal"]:
             try:
                 eng = _get_engine(name)
                 engines[name] = eng is not None
@@ -326,7 +350,7 @@ def create_app() -> FastAPI:
                 engines["ollama"] = False
         engines["lightweight_mode"] = lightweight
 
-        return HealthResponse(status="ok", version="2.1.0", engines=engines)
+        return HealthResponse(status="ok", version=__version__, engines=engines)
 
     # -------------------------------------------------------------------
     # Lightweight-mode flag is exposed via /api/health engines dict
@@ -505,7 +529,7 @@ def create_app() -> FastAPI:
         return {"removed": removed}
 
     @_app.get("/api/tags/search")
-    async def search_tags(directory: str = Query(...), tag: str = Query(...)):
+    async def search_tags(directory: str = Query(...), tag: str = Query(...), _auth: str = Depends(_verify_api_key)):
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
@@ -515,7 +539,7 @@ def create_app() -> FastAPI:
         return {"tag": tag, "files": files, "count": len(files)}
 
     @_app.get("/api/tags/all")
-    async def get_all_tags(directory: str = Query(...)):
+    async def get_all_tags(directory: str = Query(...), _auth: str = Depends(_verify_api_key)):
         tagger = _get_engine("tagger")
         if not tagger:
             raise HTTPException(500, "Tagger engine unavailable")
@@ -546,7 +570,7 @@ def create_app() -> FastAPI:
         return {"indexed": count}
 
     @_app.get("/api/copilot/conversations")
-    async def copilot_conversations():
+    async def copilot_conversations(_auth: str = Depends(_verify_api_key)):
         copilot = _get_engine("copilot")
         if not copilot:
             raise HTTPException(500, "Copilot engine unavailable")
@@ -564,7 +588,29 @@ def create_app() -> FastAPI:
     # WebSocket for streaming copilot chat
     @_app.websocket("/api/copilot/ws")
     async def copilot_ws(websocket: WebSocket):
-        # Security: validate origin
+        # Security 1: enforce API key BEFORE accept() — Origin ليس مصادقة
+        # (أي عميل غير متصفح لا يرسل Origin أصلاً كان يستطيع الاتصال بلا مفتاح).
+        #
+        # مقايضة موثّقة: المتصفحات لا تستطيع ضبط headers على WebSocket،
+        # لذا يُقبل المفتاح إما من رأس X-API-Key (للعملاء غير المتصفحين —
+        # مُفضَّل ولا يُسجَّل في access logs) أو من query param api_key
+        # (للمتصفحات — قد يظهر في access logs لخادم uvicorn؛ إن كان ذلك
+        # غير مقبول لديك فاستخدم عميلاً يدعم الرأس). الواجهة الويب
+        # (web/src/lib/api.ts createCopilotWebSocket) تحتاج تحديثاً لتضمين
+        # api_key في الـURL عند تفعيل المصادقة.
+        if _API_KEY:
+            provided = (
+                websocket.headers.get("x-api-key", "")
+                or websocket.query_params.get("api_key", "")
+            )
+            if not provided or not hmac.compare_digest(
+                provided.encode(), _API_KEY.encode()
+            ):
+                # رفض قبل قبول الاتصال — لا قبولاً ثم إغلاقاً
+                await websocket.close(code=4401, reason="API key required")
+                return
+
+        # Security 2: validate origin (دفاع إضافي ضد المتصفحات — ليس مصادقة)
         origin = websocket.headers.get("origin", "")
         allowed_origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:8420"]
         if origin and origin not in allowed_origins:
@@ -590,7 +636,8 @@ def create_app() -> FastAPI:
         except WebSocketDisconnect:
             logger.info("WebSocket disconnected")
         except Exception as exc:
-            logger.error("WebSocket error: %s", exc)
+            # لا يُسجَّل نص الرسالة ولا أي مفتاح — فقط نوع الخطأ
+            logger.error("WebSocket error: %s", type(exc).__name__)
 
     # -------------------------------------------------------------------
     # Multimodal Processing
@@ -603,7 +650,10 @@ def create_app() -> FastAPI:
             raise HTTPException(500, "Multimodal processor unavailable")
         # Security: validate path
         _validate_path(filepath)
-        return mm.process_image(filepath, fix_scan=fix_scan)
+        try:
+            return mm.process_image(filepath, fix_scan=fix_scan)
+        except SensitiveFileBlockedError as exc:
+            raise HTTPException(403, str(exc))
 
     @_app.post("/api/process/audio")
     async def process_audio(filepath: str = Query(...), _auth: str = Depends(_verify_api_key)):
@@ -612,7 +662,10 @@ def create_app() -> FastAPI:
             raise HTTPException(500, "Multimodal processor unavailable")
         # Security: validate path
         _validate_path(filepath)
-        return mm.process_audio(filepath)
+        try:
+            return mm.process_audio(filepath)
+        except SensitiveFileBlockedError as exc:
+            raise HTTPException(403, str(exc))
 
     @_app.post("/api/process/video")
     async def process_video(filepath: str = Query(...), _auth: str = Depends(_verify_api_key)):
@@ -621,7 +674,10 @@ def create_app() -> FastAPI:
             raise HTTPException(500, "Multimodal processor unavailable")
         # Security: validate path
         _validate_path(filepath)
-        return mm.process_video(filepath)
+        try:
+            return mm.process_video(filepath)
+        except SensitiveFileBlockedError as exc:
+            raise HTTPException(403, str(exc))
 
     @_app.post("/api/process/document")
     async def process_document(filepath: str = Query(...), _auth: str = Depends(_verify_api_key)):
@@ -630,7 +686,10 @@ def create_app() -> FastAPI:
             raise HTTPException(500, "Multimodal processor unavailable")
         # Security: validate path
         _validate_path(filepath)
-        return mm.process_document(filepath)
+        try:
+            return mm.process_document(filepath)
+        except SensitiveFileBlockedError as exc:
+            raise HTTPException(403, str(exc))
 
     @_app.post("/api/process/upload")
     async def upload_and_process(file: UploadFile = File(...), _auth: str = Depends(_verify_api_key)):
@@ -673,29 +732,11 @@ def create_app() -> FastAPI:
                 pass
 
     # -------------------------------------------------------------------
-    # Medical NER
+    # Medical NER — أُزيل (أسلاك ميتة): وحدة src/core/medical_ner.py غير
+    # موجودة وPRODUCT_IDENTITY.md يستبعد مكونات NER الطبية من هذا المستودع
+    # ("Medical NER components must be removed"). كان الـendpoint يعيد 500
+    # دائماً بسبب ImportError، والواجهة كانت توحي بميزة غير موجودة.
     # -------------------------------------------------------------------
-
-    @_app.post("/api/ner/extract")
-    async def ner_extract(req: NerRequest, _auth: str = Depends(_verify_api_key)):
-        ner = _get_engine("ner")
-        if not ner:
-            raise HTTPException(500, "NER engine unavailable")
-        if req.use_llm:
-            result = ner.extract_with_llm(req.text)
-        else:
-            result = ner.extract(req.text)
-        return {
-            "entities": [{"text": e.text, "type": e.entity_type,
-                          "confidence": e.confidence, "source": e.source}
-                         for e in result.entities],
-            "patient_name": result.patient_name,
-            "patient_id": result.patient_id,
-            "diagnosis": result.diagnosis,
-            "medications": result.medications,
-            "procedures": result.procedures,
-            "summary": result.summary,
-        }
 
     # -------------------------------------------------------------------
     # Organize
@@ -749,10 +790,11 @@ def create_app() -> FastAPI:
 
     @_app.get("/api/stats")
     async def get_stats(_auth: str = Depends(_verify_api_key)):
+        from src.__version__ import __version__
         from src.core.config import CATEGORIES
         return {
             "categories": CATEGORIES,
-            "version": "2.0.0",
+            "version": __version__,
         }
 
     # -------------------------------------------------------------------
@@ -760,13 +802,20 @@ def create_app() -> FastAPI:
     # -------------------------------------------------------------------
 
     @_app.get("/api/file/serve")
-    async def file_serve(filepath: str = Query(..., description="مسار الصورة داخل المجلدات المسموحة")):
-        """يخدم صورة من المجلدات المسموحة لمحرر القصاصات (لا يخرج عن الـsandbox)."""
+    async def file_serve(filepath: str = Query(..., description="مسار الصورة داخل المجلدات المسموحة"), _auth: str = Depends(_verify_api_key)):
+        """يخدم صورة من المجلدات المسموحة لمحرر القصاصات (لا يخرج عن الـsandbox).
+
+        الأمان: يتطلب مفتاح API عند تفعيله، والحاجز الحساسي يُطبق قبل الخدمة —
+        صور المرضى/المسارات الحساسة لا تُخدم عبر HTTP إطلاقاً.
+        """
         from fastapi.responses import FileResponse
         try:
             validated = _validate_path(filepath, must_exist=True)
         except HTTPException:
             raise
+        # حاجز الحساسية: لا تُخدم صور حساسة عبر HTTP (اسم/مسار/هدف رابط)
+        if is_sensitive_path(validated):
+            raise HTTPException(403, "الملف حساس — لا يُخدم عبر API")
         suffix = validated.suffix.lower()
         media = {
             ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -877,14 +926,30 @@ def create_app() -> FastAPI:
         return {"ok": True, "export_path": str(out)}
 
     @_app.post("/api/snippets/export-hf/push")
-    async def push_snippets_hf(token: str = Query(..., min_length=8), _auth: str = Depends(_verify_api_key)):
-        """رفع صريح إلى HuggingFace — يتطلب توكن في الطلب (لا يُخزَّن أبدًا)."""
+    async def push_snippets_hf(
+        x_hf_token: str = Header("", alias="X-HF-Token"),
+        _auth: str = Depends(_verify_api_key),
+    ):
+        """رفع صريح إلى HuggingFace — التوكن في رأس الطلب فقط.
+
+        الأمان: كان التوكن يُمرَّر عبر Query Parameter فيتسرب إلى access
+        logs وURLs؛ الآن Header (X-HF-Token) ولا يُسجَّل في أي سجل ولا
+        يظهر في رسائل الأخطاء ولا يُخزَّن.
+        """
+        if not x_hf_token or len(x_hf_token) < 8:
+            raise HTTPException(
+                400,
+                "توكن HuggingFace مطلوب في رأس الطلب X-HF-Token "
+                "(لا يُمرَّر في URL إطلاقاً)",
+            )
         from src.services.hf_exporter import HFExporter
         from src.db.snippet_db import SnippetDB
         try:
-            url = HFExporter(SnippetDB()).push_to_hf(token)
+            url = HFExporter(SnippetDB()).push_to_hf(x_hf_token)
         except (ValueError, RuntimeError) as exc:
-            raise HTTPException(400, str(exc))
+            # رسالة الخطأ من المكتبة قد تحتوي بيانات — لا نُمرر التوكن ولا
+            # نعيد تفاصيل الاستثناء كما هي
+            raise HTTPException(400, "فشل الرفع إلى HuggingFace — تحقق من التوكن والصلاحيات")
         return {"ok": True, "url": url}
 
     @_app.get("/api/snippets/lines")
