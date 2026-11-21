@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — AlphaCode closed-loop integration (تكامل الحلقة المغلقة)
+
+### أُضيف
+- `docs/alphacode-integration.md`: بروتوكول الحلقة المغلقة AlphaCode ↔
+  IntelliFile — الأدوار، تخطيط القرص، قضبان الأمان، والتشغيل السريع.
+- `scripts/alphacode_sync.py`: رفع تلقائي لمخرجات AlphaCode إلى فرع أيتام
+  `alphacode/artifacts` (بلا force push، بلا لمس main) بعد مسح حاجز
+  الحساسية v2 وسقوف صارمة، ثم تسليم للابتلاع وإفراغ الـoutbox.
+- `scripts/alphacode_ingest.py`: ابتلاع artifacts بأسماء غير قابلة
+  للتغيير + manifest.jsonl append-only + تصنيف SmartFileClassifier +
+  evidence في FeedbackEngine بحالة pending (لا تفعيل بلا تأكيد المستخدم)
+  + لوحة summary.md.
+- `scripts/alphacode_apply.py`: بوابة الموافقة الإلزامية — لا تعديل على
+  شجرة المشروع إلا بموافقة موقّعة بتجزئة sha256 للـpatch (أو موافقة
+  تفاعلية تُسجَّل)، فحص مسارات صارم، نسخة احتياطية، اختبارات بعد التطبيق،
+  وتراجع تلقائي بايت-بايت عند الفشل مع --rollback يدوي.
+- `tests/unit/test_alphacode_toolkit.py`: 14 اختباراً يغطي رفض الحاجز،
+  دفعات الفرع الأيتام، أرشفة الابتلاع، وكل مسارات رفض البوابة والتراجع.
+
 ## [Unreleased] — Preference & Feedback Learning (مهمة التفضيلات)
 
 ### أُضيف
