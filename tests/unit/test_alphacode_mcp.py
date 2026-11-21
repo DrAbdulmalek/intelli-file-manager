@@ -141,12 +141,25 @@ def test_mcp_requires_initialization_before_tools():
     listed = dispatch({"jsonrpc": "2.0", "id": 3, "method": "tools/list"}, state)
     tools = listed["result"]["tools"]
     names = {tool["name"] for tool in tools}
+    # عقد محدّث: أدوات الملفات الثلاث (read-only) + أدوات مخزن التفضيلات
+    # (تمس مخزن التفضيلات المحلي فقط — لا ملفات، لا shell، لا شبكة)
     assert names == {
         "intellifile.status",
         "intellifile.inventory",
         "intellifile.validate_plan",
+        "intellifile.get_suggestion",
+        "intellifile.record_user_correction",
+        "intellifile.explain_rule",
+        "intellifile.list_applicable_rules",
+        "intellifile.confirm_rule",
+        "intellifile.disable_rule",
+        "intellifile.enable_rule",
     }
-    assert all(tool["annotations"]["readOnlyHint"] is True for tool in tools)
+    # أدوات الملفات: read-only بالكامل
+    file_tools = [t for t in tools if t["name"] in (
+        "intellifile.status", "intellifile.inventory", "intellifile.validate_plan")]
+    assert all(tool["annotations"]["readOnlyHint"] is True for tool in file_tools)
+    # لا أداة مدمرة إطلاقًا (لا حذف/كتابة فوق — حتى أدوات التفضيلات)
     assert all(tool["annotations"]["destructiveHint"] is False for tool in tools)
 
 
