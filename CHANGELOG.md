@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — Preference & Feedback Learning (مهمة التفضيلات)
+
+### أُضيف
+- `src/core/preference_store.py`: مخزن تفضيلات (schema v2) بكتابة ذرّية
+  تحت flock، نسخة احتياطية موثقة بالبصمة، ترحيل v1→v2 لا يفقد الحقول
+  غير المعروفة، وSAFE READ-ONLY عند أي فشل (لا حفظ فوق الملف الأصلي).
+- `src/core/preference_engine.py`: قواعد تعلم provisional→stable عبر 3
+  جلسات مستقلة، أسبقية نطاق file>directory>global، حسم توازٍ حتمي، كشف
+  تعارضات، حذف منطقي قابل للتراجع، وشرح اقتراح كامل.
+- `src/core/feedback_engine.py`: دورة ملاحظات مغلقة بسجل JSONL منفصل
+  append-only، رفض/مؤقت لا يتعلمان، تكرار معلَّم بلا استقلالية، وأدلة
+  بقائمة بيضاء (لا مسارات/أسماء/محتوى).
+- `src/core/classifier_preferences.py`: غلاف الاقتراح فوق المصنف الحقيقي
+  — سلوك المصنف القديم بلا أي تغيير، والاقتراح منفصل عن التنفيذ.
+- `src/integrations/alphacode_preference_tools.py` + خمس أدوات تفضيلات
+  جديدة على جسر MCP المحلي (get_suggestion/record_user_correction/
+  explain_rule/list_applicable_rules/confirm_rule/disable_rule/
+  enable_rule) — لا ملفات، لا shell، لا شبكة؛ التطبيق يتطلب
+  user_confirmed=true صريحًا.
+- لوحة `PreferencesPanel` في واجهة سطح المكتب: عرض جميع حقول الاقتراح
+  وإدارة القواعد — أزرارها تعلم فقط ولا تنفذ أي عملية ملف.
+- وضع `on_conflict="reject"` اختياري في SafeMover (رفض الوجهة الموجودة
+  وفق سياسة المستخدم) — الافتراضي (لاحقة تلقائية) بلا تغيير للتوافق
+  مع UndoLog.
+- توثيق: PREFERENCE_STORE / FEEDBACK_ENGINE / ALPHACODE_ADAPTER /
+  PREFERENCE_SECURITY + قسم في README.
+
+### السلامة
+- المصنف الأساسي وSafeMover وUndoLog والحواجز الحساسية القائمة لم تُكسر:
+  الحزمة الكاملة بنفس نتائج main المزعومة (فشل glossary الستة معروف
+  سلفًا بغياب data/).
+- 84 اختبارًا جديدًا (بيانات اصطناعية فقط) + انحدار safe_mover/undo_log/MCP
+  كاملًا.
+
+### حدود معلومة
+- تكامل AlphaCode GUI الفعلي غير مثبت بعد — يتطلب تسجيل خادم MCP في
+  إعدادات AlphaCode؛ الواجهة موثقة كـ«جاهزة للتكامل».
+- اختبارات واجهة Qt لم تُشغَّل محليًا لغياب libEGL.so.1 (تتخطى آليًا
+  كالاختبارات القائمة).
+
+---
+
 ## [Unreleased] — AlphaCode local MCP bridge
 
 ### أُضيف
