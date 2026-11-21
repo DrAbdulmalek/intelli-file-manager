@@ -2,6 +2,7 @@
 import logging
 from typing import Optional
 from .config import Config
+from .sensitive_barrier import block_if_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,13 @@ class AIEngine:
             return []
 
     def summarize_file(self, filepath: str) -> str:
-        """تلخيص محتوى ملف"""
+        """تلخيص محتوى ملف
+
+        الحاجز أولاً: الملف الحساس لا يُفتح محتواه ولا يُرسل للنموذج.
+        """
+        # حاجز الحساسية قبل أي شيء — الملفات الطبية/الأسرار لا تُفتح
+        block_if_sensitive(filepath, operation="تلخيص الملف")
+
         client = self._get_ollama()
         if not client:
             return "خطأ: Ollama غير متاح"
@@ -139,7 +146,13 @@ class AIEngine:
             return f"خطأ: {e}"
 
     def extract_keywords(self, filepath: str) -> list:
-        """استخراج كلمات مفتاحية من ملف"""
+        """استخراج كلمات مفتاحية من ملف
+
+        الحاجز أولاً: الملف الحساس لا يُفتح محتواه ولا يُرسل للنموذج.
+        """
+        # حاجز الحساسية قبل أي شيء — الملفات الطبية/الأسرار لا تُفتح
+        block_if_sensitive(filepath, operation="استخراج الكلمات المفتاحية")
+
         client = self._get_ollama()
         if not client:
             return []

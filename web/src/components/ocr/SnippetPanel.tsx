@@ -59,7 +59,13 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
   }, [setAll]);
 
   useEffect(() => {
-    if (loadedPath) void loadSnippets(loadedPath);
+    if (!loadedPath) return;
+    // تأجيل الاستدعاء خارج جسم الـeffect: loadSnippets تضبط الحالة متزامنةً
+    // وبدايتها، وsetState المتزامن داخل effect يسبب سلسلة renders
+    // (react-hooks/set-state-in-effect) — التحميل هنا ليس عاجلاً فالتأخير
+    // بمقدار tick واحد لا تأثير له سلوكياً.
+    const t = setTimeout(() => void loadSnippets(loadedPath), 0);
+    return () => clearTimeout(t);
   }, [loadedPath, loadSnippets]);
 
   const active = snippets.find((s) => s.id === selectedId) ?? null;
@@ -304,7 +310,6 @@ export function SnippetPanel({ initialImageUrl = "" }: { initialImageUrl?: strin
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, snippets, undo, redo]);
 
   // ------------------------------------------------------------------

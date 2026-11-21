@@ -138,18 +138,23 @@ class SmartFileClassifier:
             self._magika = None
 
     def classify_file(self, filepath: str) -> dict:
-        """تصنيف ملف واحد وإرجاع معلوماته"""
+        """تصنيف ملف واحد وإرجاع معلوماته
+
+        الحاجز أولاً: الملف الحساس يُصنّف بالامتداد فقط — Magika تقرأ بايتات
+        المحتوى فلا تُستدعى عليه إطلاقاً (لا تصنيف بالمحتوى للملفات الحساسة).
+        """
         path = Path(filepath)
         if not path.exists():
             return {"error": f"الملف غير موجود: {filepath}"}
 
         extension = path.suffix.lower()
+        sensitive = is_sensitive_path(path)
         category = self.config.get_category(extension)
         confidence = 85.0  # default for rule-based
         content_type = "unknown"
 
-        # محاولة التصنيف بالمحتوى
-        if self._magika:
+        # محاولة التصنيف بالمحتوى — محظورة على الملفات الحساسة
+        if self._magika and not sensitive:
             try:
                 result = self._magika.identify_path(filepath)
                 if result and hasattr(result, "output"):
@@ -163,6 +168,8 @@ class SmartFileClassifier:
                         confidence = 75.0
             except Exception as e:
                 logger.debug(f"خطأ في تصنيف Magika: {e}")
+        elif sensitive:
+            content_type = "sensitive_blocked"
 
         stat = path.stat()
         return {
@@ -177,7 +184,14 @@ class SmartFileClassifier:
         }
 
     def classify_by_content(self, filepath: str) -> str:
-        """تصنيف الملف بناءً على محتواه فقط"""
+        """تصنيف الملف بناءً على محتواه فقط
+
+        الحاجز أولاً: الملف الحساس لا يُقرأ محتواه — يُصنّف بالامتداد.
+        """
+        if is_sensitive_path(filepath):
+            path = Path(filepath)
+            category = self.config.get_category(path.suffix.lower())
+            return category if category != "أخرى" else "أخرى"
         if not self._magika:
             return "أخرى"
         try:
@@ -189,21 +203,27 @@ class SmartFileClassifier:
         return "أخرى"
 
     def batch_classify(self, directory: str) -> list:
-        """تصنيف جميع الملفات في مجلد"""
+        """تصنيف جميع الملفات في مجلد
+
+        يستخدم iter_files (لا يتبع symlinks ولا يعبر نقاط التركيب) ويُطبق
+        الحاجز لكل ملف قبل القراءة.
+        """
+        from .path_policy import iter_files
+
         results = []
         dir_path = Path(directory)
         if not dir_path.is_dir():
             logger.error(f"المجلد غير موجود: {directory}")
             return results
 
-        for item in dir_path.rglob("*"):
-            if item.is_file() and not item.name.startswith("."):
-                try:
-                    result = self.classify_file(str(item))
-                    if "error" not in result:
-                        results.append(result)
-                except Exception as e:
-                    logger.debug(f"خطأ في تصنيف {item}: {e}")
+        for item in iter_files(dir_path):
+            try:
+                # حاجز لكل ملف — التصنيف حسّاس-بارير أولاً (اسم/امتداد فقط)
+                result = self.classify_file(str(item))
+                if "error" not in result:
+                    results.append(result)
+            except Exception as e:
+                logger.debug(f"خطأ في تصنيف {item}: {e}")
 
         logger.info(f"تم تصنيف {len(results)} ملف في {directory}")
         return results
