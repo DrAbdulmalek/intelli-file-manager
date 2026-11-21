@@ -193,7 +193,7 @@ def test_health_has_no_ner_engine_and_unified_version(restore_clean_server):
     assert r.status_code == 200
     body = r.json()
     assert "ner" not in body["engines"]
-    from src.__version__ import __version__
+    from src import __version__
     assert body["version"] == __version__
     assert body["version"] == client.get("/api/stats").json()["version"]
 

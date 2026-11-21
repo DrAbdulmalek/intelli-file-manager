@@ -62,7 +62,6 @@
 - [x] `GET /api/copilot/conversations` — list conversations
 - [x] `POST /api/copilot/summarize` — summarize file
 - [x] `WS /api/copilot/ws` — WebSocket streaming chat
-- [x] `POST /api/ner/extract` — NER extraction
 - [x] `POST /api/process/image` — image processing
 - [x] `POST /api/process/audio` — audio transcription
 - [x] `POST /api/process/video` — video processing

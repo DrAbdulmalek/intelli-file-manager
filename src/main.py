@@ -33,7 +33,7 @@ def setup_logging(verbose: bool = False):
 
 def main():
     """نقطة الدخول الرئيسية"""
-    from src.__version__ import __version__
+    from src import __version__
 
     parser = argparse.ArgumentParser(
         prog="intellifile",
@@ -88,9 +88,8 @@ def main():
 
     args = parser.parse_args()
 
-    # إنشاء مجلد البيانات — يجب أن يسبق تهيئة التسجيل
-    # (setup_logging يفتح FileHandler على ~/.intellifile/app.log،
-    #  وبدون المجلد ينهار التطبيق بـ FileNotFoundError في أول تشغيل)
+    # إنشاء مجلد البيانات — يجب أن يسبق تهيئة التسجيل: setup_logging يفتح
+    # FileHandler على ~/.intellifile/app.log فينهار بـ FileNotFoundError في أول تشغيل.
     data_dir = Path.home() / ".intellifile"
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -145,10 +144,9 @@ def main():
 
 def _start_gui(config, logger):
     """بدء واجهة سطح المكتب الرسومية"""
-    from src.__version__ import __version__
-
     try:
         from PySide6.QtWidgets import QApplication
+        from src import __version__
         from src.gui.main_window import MainWindow
     except ImportError as e:
         logger.error(f"لا يمكن تشغيل الواجهة الرسومية: {e}")

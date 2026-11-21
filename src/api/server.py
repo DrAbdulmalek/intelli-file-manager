@@ -214,7 +214,7 @@ class HealthResponse(BaseModel):
 
 def create_app() -> FastAPI:
     """Create the IntelliFile Manager FastAPI application."""
-    from src.__version__ import __version__
+    from src import __version__
 
     _app = FastAPI(
         title="IntelliFile Manager API",
@@ -315,7 +315,7 @@ def create_app() -> FastAPI:
 
     @_app.get("/api/health", response_model=HealthResponse)
     async def health():
-        # ملاحظة: لا يوجد محرك "ner" — وحدة medical_ner غير موجودة في المستودع
+        # ملاحظة: لا يوجد محرك "ner" — وحدة الكيانات الطبية غير موجودة في المستودع
         # وPRODUCT_IDENTITY.md يستبعد NER من هذا المشروع (أسلاك ميتة أُزيلت).
         engines = {}
         for name in ["classifier", "hybrid_search", "tagger", "copilot", "multimodal"]:
@@ -599,8 +599,18 @@ def create_app() -> FastAPI:
         # (web/src/lib/api.ts createCopilotWebSocket) تحتاج تحديثاً لتضمين
         # api_key في الـURL عند تفعيل المصادقة.
         if _API_KEY:
+            # المفتاح من: رأس X-API-Key (المُفضَّل للعملاء غير المتصفحين) أو
+            # بروتوكول فرعي ifm-key.<key> (للمتصفحات — لا يظهر في access logs)
+            # أو query api_key (قد يظهر في سجلات uvicorn — انظر المقايضة أعلاه)
+            sub_key = None
+            for _sp in (websocket.headers.get("sec-websocket-protocol") or "").split(","):
+                _sp = _sp.strip()
+                if _sp.startswith("ifm-key."):
+                    sub_key = _sp[len("ifm-key."):]
+                    break
             provided = (
                 websocket.headers.get("x-api-key", "")
+                or sub_key
                 or websocket.query_params.get("api_key", "")
             )
             if not provided or not hmac.compare_digest(
@@ -609,6 +619,11 @@ def create_app() -> FastAPI:
                 # رفض قبل قبول الاتصال — لا قبولاً ثم إغلاقاً
                 await websocket.close(code=4401, reason="API key required")
                 return
+            key_via_subprotocol = bool(sub_key) and hmac.compare_digest(
+                sub_key.encode(), _API_KEY.encode()
+            )
+        else:
+            key_via_subprotocol = False
 
         # Security 2: validate origin (دفاع إضافي ضد المتصفحات — ليس مصادقة)
         origin = websocket.headers.get("origin", "")
@@ -617,7 +632,11 @@ def create_app() -> FastAPI:
             await websocket.close(code=4003, reason="Origin not allowed")
             return
 
-        await websocket.accept()
+                # الصدى: عند المصادقة عبر البروتوكول الفرعي نُرجع نفس البروتوكول المفتاحي
+        if key_via_subprotocol:
+            await websocket.accept(subprotocol=f"ifm-key.{_API_KEY}")
+        else:
+            await websocket.accept()
         copilot = _get_engine("copilot")
         try:
             while True:
@@ -732,7 +751,7 @@ def create_app() -> FastAPI:
                 pass
 
     # -------------------------------------------------------------------
-    # Medical NER — أُزيل (أسلاك ميتة): وحدة src/core/medical_ner.py غير
+    # Medical NER — أُزيل (أسلاك ميتة): وحدة وحدة الكيانات الطبية غير
     # موجودة وPRODUCT_IDENTITY.md يستبعد مكونات NER الطبية من هذا المستودع
     # ("Medical NER components must be removed"). كان الـendpoint يعيد 500
     # دائماً بسبب ImportError، والواجهة كانت توحي بميزة غير موجودة.
@@ -790,7 +809,7 @@ def create_app() -> FastAPI:
 
     @_app.get("/api/stats")
     async def get_stats(_auth: str = Depends(_verify_api_key)):
-        from src.__version__ import __version__
+        from src import __version__
         from src.core.config import CATEGORIES
         return {
             "categories": CATEGORIES,

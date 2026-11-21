@@ -1,9 +1,8 @@
 name: Build Android APK
 
+# يدوي أو عند وسم إصدار فقط: Android ليس اتجاه المنتج (PRODUCT_IDENTITY) فلا يُبنى على كل دفعة إلى main.
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
