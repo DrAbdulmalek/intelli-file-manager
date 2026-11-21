@@ -131,8 +131,11 @@ class FileInventory:
                 ".gnupg",
                 ".pki",
                 ".certs",
-                "secrets",
-                "credentials",
+                # ملاحظة أمنية (مراجعة التصلّد الشامل): "secrets" و
+                # "credentials" أُزيلتا من استثناءات المسح — كان اخفاؤها
+                # هنا يمنع ظهورها في الجرد إطلاقاً (اختفاء صامت) بينما
+                # الحاجز يصنفها الآن إلزامياً كملفات حساسة (سجل بلا hash
+                # ولا محتوى) — ظاهرة بدل مخفية.
             }
         )
         self.max_file_size = max_file_size
@@ -197,9 +200,14 @@ class FileInventory:
         ملاحظة: الفحص يتم على المسار **النسبي** داخل dir_path، وليس المطلق.
         وإلا فإن أي مجلد جذري يقع تحت أب مخفي (مثل ~/.cache أو ~/.config)
         سيؤدي إلى تخطي كل الملفات رغم أن المجلد المستهدف نفسه غير مخفي.
+
+        الروابط الرمزية (ملفات أو مجلدات) لا تُتبع ولا تُسلَّم للقراءة —
+        هدف الرابط قد يقع خارج شجرة المسح.
         """
         pattern = "**/*" if recursive else "*"
         for item in dir_path.glob(pattern):
+            if item.is_symlink():
+                continue
             if not item.is_file():
                 continue
             # المسار النسبي فقط — أجزاء المسار الأب لا تُحتسب
@@ -234,7 +242,10 @@ class FileInventory:
         # الملف الحساس لا يُفتح إطلاقاً — لا SHA ولا كشف نوع عبر magic ولا
         # ميتاداتا موسّعة؛ الفهرسة بالعناوين فقط (stat لا يقرأ المحتوى).
         # خلاف ذلك كان SHA-256 وكشف النوع يقرآن المحتوى قبل فحص الحاجز.
-        sensitive = is_sensitive_path(file_path, skip_dirs=self.skip_dirs)
+        # ملاحظة: قواعد الحساسية إلزامية — skip_dirs لا يعطّلها (مراجعة
+        # التصلّد الشامل): كان تمرير self.skip_dirs هنا يُبطل كشف
+        # "secrets"/"credentials" لأنها ضمن استثناءات المسح.
+        sensitive = is_sensitive_path(file_path)
 
         sha256 = None
         is_duplicate = False
