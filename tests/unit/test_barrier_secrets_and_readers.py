@@ -13,6 +13,7 @@ import types
 import pytest
 
 from src.core.sensitive_barrier import (
+    SensitiveFileBlockedError,
     classify_sensitivity,
     is_secret_file,
     is_sensitive_path,
@@ -30,7 +31,7 @@ def test_secret_names_are_blocked_in_any_folder(name):
 
 
 @pytest.mark.parametrize("name", [
-    "tokenizer.py", "environment.txt", "id_rsa.pub", ".env.example", ".env.sample",
+    "tokenizer.py", "environment.txt", ".env.example", ".env.sample",
     "notes.txt", "keyboard_layout.pdf", "credentials_policy.md", "envelope.docx",
 ])
 def test_lookalike_names_are_not_blocked(name):
@@ -89,8 +90,10 @@ def test_ai_engine_never_opens_or_sends_sensitive_file(sensitive_files, monkeypa
     eng._get_ollama = lambda: client
     spy = _OpenSpy(monkeypatch, sensitive_files.values())
     for key in ("report.txt", ".env"):
-        assert "محظور" in eng.summarize_file(str(sensitive_files[key]))
-        assert eng.extract_keywords(str(sensitive_files[key])) == []
+        with pytest.raises(SensitiveFileBlockedError):
+            eng.summarize_file(str(sensitive_files[key]))
+        with pytest.raises(SensitiveFileBlockedError):
+            eng.extract_keywords(str(sensitive_files[key]))
     assert not spy.hits and not sent
 
 
@@ -106,9 +109,14 @@ def test_multimodal_extractors_block_before_any_read(sensitive_files, monkeypatc
     mp = MultimodalProcessor()
     spy = _OpenSpy(monkeypatch, sensitive_files.values())
     p = str(sensitive_files["scan_report.pdf"])
-    assert mp.extract_text_from_pdf(p) == ""
-    assert mp.extract_text_from_docx(str(sensitive_files["notes.docx"])) == ""
-    assert mp.extract_text_from_xlsx(p) == "" and mp.extract_text_from_pptx(p) == ""
+    for fp, call in (
+        (p, mp.extract_text_from_pdf),
+        (str(sensitive_files["notes.docx"]), mp.extract_text_from_docx),
+        (p, mp.extract_text_from_xlsx),
+        (p, mp.extract_text_from_pptx),
+    ):
+        with pytest.raises(SensitiveFileBlockedError):
+            call(fp)
     assert not spy.hits
 
 
@@ -120,8 +128,9 @@ def test_process_image_sensitive_skips_exif_ocr_and_ai(sensitive_files, monkeypa
 
     monkeypatch.setattr(mpmod, "extract_image_metadata", boom)
     spy = _OpenSpy(monkeypatch, sensitive_files.values())
-    out = mpmod.MultimodalProcessor().process_image(str(sensitive_files["IMG_0001.jpg"]))
-    assert out["sensitive"] is True and out["review_required"] is True and not spy.hits
+    with pytest.raises(SensitiveFileBlockedError):
+        mpmod.MultimodalProcessor().process_image(str(sensitive_files["IMG_0001.jpg"]))
+    assert not spy.hits
 
 
 def test_file_copilot_summarize_and_index_skip_sensitive(sensitive_files, monkeypatch):

@@ -32,7 +32,7 @@ def test_cli_version_matches_package_version(tmp_path):
 
 
 def test_no_hardcoded_version_literals_remain_in_entry_points():
-    """الإصدار من src.__version__ فقط: لا '2.0.0'/'2.1.0'/'1.0.0' مكتوبة في نقاط الدخول."""
+    """الإصدار من src (src/__init__.py) فقط: لا '2.0.0'/'2.1.0'/'1.0.0' مكتوبة في نقاط الدخول."""
     for rel in ("src/main.py", "src/api/server.py"):
         text = (ROOT / rel).read_text(encoding="utf-8")
         hits = re.findall(r'version\s*=\s*["\'](\d+\.\d+\.\d+)["\']|setApplicationVersion\(["\']', text)

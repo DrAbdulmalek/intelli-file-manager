@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — AlphaCode closed-loop integration (تكامل الحلقة المغلقة)
+
+### أُضيف
+- `docs/alphacode-integration.md`: بروتوكول الحلقة المغلقة AlphaCode ↔
+  IntelliFile — الأدوار، تخطيط القرص، قضبان الأمان، والتشغيل السريع.
+- `scripts/alphacode_sync.py`: رفع تلقائي لمخرجات AlphaCode إلى فرع أيتام
+  `alphacode/artifacts` (بلا force push، بلا لمس main) بعد مسح حاجز
+  الحساسية v2 وسقوف صارمة، ثم تسليم للابتلاع وإفراغ الـoutbox.
+- `scripts/alphacode_ingest.py`: ابتلاع artifacts بأسماء غير قابلة
+  للتغيير + manifest.jsonl append-only + تصنيف SmartFileClassifier +
+  evidence في FeedbackEngine بحالة pending (لا تفعيل بلا تأكيد المستخدم)
+  + لوحة summary.md.
+- `scripts/alphacode_apply.py`: بوابة الموافقة الإلزامية — لا تعديل على
+  شجرة المشروع إلا بموافقة موقّعة بتجزئة sha256 للـpatch (أو موافقة
+  تفاعلية تُسجَّل)، فحص مسارات صارم، نسخة احتياطية، اختبارات بعد التطبيق،
+  وتراجع تلقائي بايت-بايت عند الفشل مع --rollback يدوي.
+- `tests/unit/test_alphacode_toolkit.py`: 14 اختباراً يغطي رفض الحاجز،
+  دفعات الفرع الأيتام، أرشفة الابتلاع، وكل مسارات رفض البوابة والتراجع.
+
 ## [Unreleased] — Preference & Feedback Learning (مهمة التفضيلات)
 
 ### أُضيف
@@ -46,6 +65,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   إعدادات AlphaCode؛ الواجهة موثقة كـ«جاهزة للتكامل».
 - اختبارات واجهة Qt لم تُشغَّل محليًا لغياب libEGL.so.1 (تتخطى آليًا
   كالاختبارات القائمة).
+## [Unreleased] — security/comprehensive-sensitive-barrier-hardening
+
+### أُصلح — الحاجز الموحّد للبيانات الحساسة (انظر docs/SENSITIVE_BARRIER.md)
+- **قواعد إلزامية لا تعطّلها الإعدادات:** كان `skip_dirs` يُمرَّر إلى
+  `is_sensitive_path` فيُبطل كشف `secrets`/`credentials` (ثغرة مثبتة في
+  `FileInventory` كان hash+magic يقرآن محتوى ملف داخل مجلد أسرار). الآن
+  القواعد إلزامية والمعامل متجاهَل، وأزيل `secrets`/`credentials` من
+  استثناءات المسح ليظهر الحظر صراحة في الجرد بدل الاختفاء الصامت.
+- **ملفات الأسرار والاعتماديات:** كشف جديد بالاسم الصارم (`.env` وأي اسم
+  ينتهي بـ`.env`، `.netrc`، `credentials.json`، `secrets.yaml`، مفاتيح SSH
+  الخاصة `id_rsa`/`id_ed25519`/...) وبالامتداد (`.pem`، `.p12`، `.pfx`،
+  `.key`، `.kdbx`، `.jks`، الشهادات...).
+- **مؤشرات طبية إضافية:** `medical_records`، `clinical`، `hospital_records`،
+  `radiology`، `prescriptions`، `laboratory`، `lab_results` والأعرب المقابلة.
+- **الروابط الرمزية:** تصنيف الرابط + الهدف (`realpath`) بما في ذلك
+  المكوّنات الوسيطة؛ `open_checked()` يفتح بـ`O_NOFOLLOW` مع فحص ملف عادي
+  عبر `fstat`؛ `verify_open_identity()` ضد بدل الملف بين الفحص والقراءة.
+- **توثيق مستويات الكشف الثلاثة** (path/name مقابل header مقابل full-content):
+  فحص header DICOM يقرأ 4 بايتات موثّقة — لم يُعد تعداماً "قراءة صفرية".
+- **قارئات جديدة عبر الحاجز:** `AIEngine.summarize_file/extract_keywords`،
+  `FileCopilot.summarize_file/index_files`، `SmartTagger._extract_content`،
+  `MultimodalProcessor.process_image/audio/video` و`extract_text_from_*`،
+  `metadata_extractor` الثلاثية (EXIF/ffprobe/magic — EXIF يُعامل حساساً)،
+  `SmartFileClassifier.classify_file` (لا Magika على حساس) و`batch_classify`
+  (iter_files بلا symlinks)، `HFExporter._crop_and_save`.
+- **الفهرسة التكرارية:** `FileCopilot.index_files` يوسّع المجلدات عبر
+  `iter_files` ويفحص كل ملف على حدة قبل RAG — لا يمر مجلد خام إلى أي محرك.
+- **`FileInventory._iter_files`:** لا يسلّم روابط رمزية للقراءة (كانت
+  `glob` تُخرج روابط ملفات وقراءة هدفها خارج الشجرة).
+
+### أُصلح — API ومصادقة
+- **مصادقة ناقصة:** `/api/tags/search`، `/api/tags/all`،
+  `/api/copilot/conversations`، `/api/file/serve` كانت بلا `_auth` — مفتاح
+  API مضبوط لا يحميها؛ أُضيفت المصادقة ومقارنة زمن-ثابت (`compare_digest`).
+- **WebSocket `/api/copilot/ws`:** كان يقبل الاتصال بلا مفتاح (Origin ليس
+  مصادقة وأي عميل غير متصفح لا يرسله) — الآن المفتاح **قبل** `accept()`؛
+  ورسائل الخطأ لا تسرب محتوى.
+- **تسريب توكن HuggingFace:** `/api/snippets/export-hf/push` كان يستقبل
+  التوكن عبر Query Parameter (يتسرب إلى access logs) — الآن رأس
+  `X-HF-Token` فقط، ولا يظهر التوكن في أي رسالة خطأ.
+- **`_get_allowed_dirs`:** كان يلحق `Path.cwd()` دائماً فيتجاوز الصندوق عند
+  ضبط `INTELLIFILE_ALLOWED_DIRS` صراحةً — الآن cwd يُلحق في الوضع الافتراضي
+  فقط.
+- **`/api/file/serve`:** حاجز حساسي قبل خدمة أي صورة عبر HTTP (403).
+- **نقاط process المكسورة:** `/api/process/audio|video|document` كانت ترمي
+  `AttributeError` و`/api/process/image` ترمي `TypeError` (`fix_scan`) —
+  `EnhancedMultimodalProcessor` اكتملت منهجهما عبر توكيل محاجوز.
+
+### أُزيل — أسلاك ميتة (NER)
+- `/api/ner/extract` ومحرك `ner` من `/api/health`: وحدة
+  `src/core/medical_ner.py` غير موجودة والـendpoint كان يعيد 500 دائماً؛
+  `PRODUCT_IDENTITY.md` يستبعد مكونات NER من هذا المستودع. أُزيلت أيضاً
+  وسوم NER الميتة من `smart_tagger`.
+
+### أُصلح — CI fail-closed
+- `python-ci.yml`: `pytest ... || echo "No tests found"` → تشغيل صارم مع
+  حارس "اختبارات موجودة" (صفر اختبارات = فشل)، وflake8 (E9/F63/F7/F82)
+  حاجب، وblack غير حاجب معلن.
+- `ci-kimi-review.yml`: `|| true` على الاختبارات والـlint → حذفها؛ فحص
+  ruff على الفئات الجسيمة حاجب؛ فحص إقلاع الـAPI حاجب؛ إصلاح 8×F821
+  (استيرادات TYPE_CHECKING ناقصة).
+
+### أُصلح — tree_manifest (سلامة اللقطات)
+- **رفض جذر symlink** (وأي مكوّن وسيط) في `snapshot` و`verify`.
+- **تغيّر هدف الرابط الرمزي** بين اللقطة والتحقق → `target_changed` و
+  `ok=False` (كان ينتج نجاحاً كاذباً).
+- **تبدل الملف أثناء حساب الهاش** → fail-closed (لا سجل غير موثوق؛
+  re-check عبر `os.stat` الصريح — `DirEntry.stat` مخزّن مؤقتاً).
+- فتح بـ`O_NOFOLLOW` عند حساب الهاش.
+
+### تنظيف البنية
+- إزالة `project_context.txt` (1.6MB مولّد) و`web/tsconfig.tsbuildinfo`
+  (مخرجات بناء) من التتبع + `.gitignore`.
+- إزالة `docs/ARCHITECTURE.md` (الخلاصة المكررة؛ التفصيلية
+  `docs/architecture.md` هي المرجع، بلا أي مرجع للملف المحذوف).
+- تفكيك ازدواج pytest بين `pytest.ini` (المصدر الوحيد، يشمل علامة desktop)
+  و`pyproject.toml` + تكوين `[tool.ruff]` موحّد.
+- إصدار موحّد: `src/__version__.py` (2.2.0.dev0) — يتطابق مع محتوى PR #72
+  ليسهل دمجه لاحقاً؛ `server.py` (health/app/stats) تستورده.
+
+### اختبارات جديدة
+- `tests/unit/test_sensitive_barrier_v2.py` (42): أسرار، مؤشرات، symlink،
+  O_NOFOLLOW، عجز skip_dirs، إنذارات كاذبة محفوظة.
+- `tests/unit/test_reader_read_prevention.py` (27): قياس **عدم الفتح
+  الفعلي** لكل قارئ (ميزانية 4 بايتات)، الفهرسة التكرارية، سيناريوهات
+  الخلط، symlink root/target، التبدل أثناء الهاش.
+- `tests/integration/test_api_auth_ws.py` (19): مصادقة endpoints، WS
+  (بلا مفتاح/خاطئ/صحيح/Origin)، HF token، NER مُزال، file/serve، sandbox،
+  process endpoints.
+
+### معلوم
+- numpy: لا تعارض فعلي في main (`numpy>=1.24.0` فقط، بلا قيد `<2`) —
+  البند كانت مخالفته قد أُغلقت سابقاً.
+- اختبارات مسارد طبي أساسية (6) فاشلة قبل التغييرات وبعدها بسبب غياب
+  `data/medical_glossary.csv` عن المستودع (ليس من هذا الفرع).
 
 ---
 
