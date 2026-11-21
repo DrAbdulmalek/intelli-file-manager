@@ -41,6 +41,7 @@ from .panels.inventory_panel import InventoryPanel
 from .panels.preview_panel import FilePreviewPanel
 from .panels.rule_engine_panel import RuleEnginePanel
 from .panels.settings_panel import SettingsPanel
+from .panels.preferences_panel import PreferencesPanel
 from .panels.undo_log_panel import UndoLogPanel
 from .panels.watcher_panel import WatcherPanel
 from .settings import IFMSettings
@@ -116,6 +117,7 @@ class IFMMainWindow(QMainWindow):
         )
         self.rule_engine_panel = RuleEnginePanel()
         self.action_log_panel = ActionLogPanel()
+        self.preferences_panel = PreferencesPanel()
         self.undo_log_panel = UndoLogPanel()
         self.watcher_panel = WatcherPanel()
         self.settings_panel = SettingsPanel(settings=self.controller.settings)
@@ -126,6 +128,7 @@ class IFMMainWindow(QMainWindow):
         self.stack.addWidget(self.preview_panel)
         self.stack.addWidget(self.rule_engine_panel)
         self.stack.addWidget(self.action_log_panel)
+        self.stack.addWidget(self.preferences_panel)
         self.stack.addWidget(self.undo_log_panel)
         self.stack.addWidget(self.watcher_panel)
         self.stack.addWidget(self.settings_panel)
