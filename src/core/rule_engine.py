@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     # استيراد للأغراض النوعية فقط (لتجنّب الاستيراد الدائري)
     from .action_log import ActionLog
     from .safe_mover import SafeMover
+    from .undo_log import UndoLog
 
 logger = logging.getLogger(__name__)
 
