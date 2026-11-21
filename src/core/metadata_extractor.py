@@ -22,6 +22,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from .sensitive_barrier import is_sensitive_path
+
 logger = logging.getLogger(__name__)
 
 # ─── ثوابت ─────────────────────────────────────────────────────────────────
@@ -49,9 +51,17 @@ def extract_image_metadata(file_path: Path | str) -> Dict[str, Any]:
           - exif_count (int): عدد وسوم EXIF الخام
 
     ملاحظة: الملفات التالفة تُرجع قاموسًا جزئيًا (ربما فقط {"error": "..."})
+
+    الحاجز أولاً: الصورة الحساسة لا تُفتح — EXIF قد يحمل GPS وبيانات التعريف
+    الطبية ولا يُعتبر غير حساس تلقائياً؛ يُرجع {"error": "sensitive_blocked"}.
     """
     path = Path(file_path)
     result: Dict[str, Any] = {}
+
+    # حاجز الحساسية قبل أي فتح للصورة (Pillow يقرأ بايتات المحتوى وEXIF)
+    if is_sensitive_path(path):
+        logger.warning(f"محظور: ميتاداتا صورة حساسة: {path.name}")
+        return {"error": "sensitive_blocked"}
 
     try:
         from PIL import Image, ExifTags
@@ -134,8 +144,16 @@ def extract_av_metadata(file_path: Path | str) -> Dict[str, Any]:
           - tags (dict): وسوم مثل title, artist, album (إن وُجدت)
 
     ملاحظة: لو ffprobe غير مثبت يُرجع {"error": "ffprobe_unavailable"}
+
+    الحاجز أولاً: ffprobe يقرأ الملف في عملية خارجية — الملف الحساس
+    لا يُمرَّر إليه إطلاقاً ويُرجع {"error": "sensitive_blocked"}.
     """
     path = Path(file_path)
+
+    # حاجز الحساسية قبل أي استدعاء خارجي يفتح الملف
+    if is_sensitive_path(path):
+        logger.warning(f"محظور: ميتاداتا ملف حساس عبر ffprobe: {path.name}")
+        return {"error": "sensitive_blocked"}
 
     if not FFPROBE_BIN:
         logger.debug("ffprobe غير مثبت — تخطي ميتاداتا AV")
@@ -369,8 +387,19 @@ def detect_content_type(file_path: Path | str, ext: Optional[str] = None) -> str
 
     Returns:
         سلسلة MIME مثل "application/pdf" أو "application/octet-stream"
+
+    الحاجز أولاً: python-magic يقرأ أول ~1KB من الملف — للملف الحساس
+    لا تُقرأ magic bytes ويُرجع النوع من الامتداد فقط.
     """
     path = Path(file_path)
+
+    # حاجز الحساسية: الملف الحساس لا يُفتح حتى لكشف النوع — امتداد فقط
+    if is_sensitive_path(path):
+        if ext is None:
+            ext = path.suffix
+        ext_clean = ext.lower().lstrip(".")
+        logger.debug(f"كشف نوع الملف الحساس بالامتداد فقط: {path.name}")
+        return _EXT_MIME_FALLBACK.get(ext_clean, "application/octet-stream")
 
     # المحاولة 1: python-magic
     try:

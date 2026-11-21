@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.db.snippet_db import SnippetDB, TrainingSnippet
+from src.core.sensitive_barrier import block_if_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -139,9 +140,16 @@ class HFExporter:
     # ------------------------------------------------------------------
     @staticmethod
     def _crop_and_save(snippet: TrainingSnippet, out_path: Path) -> None:
-        """اقتطع الصورة من المصدر وحفظها (bbox corners x1,y1,x2,y2)."""
+        """اقتطع الصورة من المصدر وحفظها (bbox corners x1,y1,x2,y2).
+
+        الحاجز أولاً: صورة المصدر الحساسة (طبية/أسرار) لا تُفتح ولا تُصدَّر
+        خارج الجهاز إطلاقاً.
+        """
         try:
             from PIL import Image
+
+            # حاجز الحساسية قبل فتح صورة المصدر
+            block_if_sensitive(snippet.source_image, operation="تصدير قصاصة HF")
 
             with Image.open(snippet.source_image) as img:
                 x1, y1, x2, y2 = snippet.bbox

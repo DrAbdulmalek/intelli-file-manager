@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from .path_policy import iter_files
+from .sensitive_barrier import SensitiveFileBlockedError, block_if_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -170,19 +171,7 @@ class SmartTagger:
     def __init__(self, tags_dir: str | None = None):
         self._tags_dir = Path(tags_dir) if tags_dir else None
         self._cache: dict[str, FileTags] = {}
-        self._ner = None
         self._classifier = None
-
-    def _init_ner(self):
-        """Lazy-load ArabicMedicalNER."""
-        if self._ner is not None:
-            return
-        try:
-            from .medical_ner import ArabicMedicalNER
-            self._ner = ArabicMedicalNER()
-            logger.info("تم تحميل ArabicMedicalNER للوسوم الطبية")
-        except Exception as exc:
-            logger.debug(f"ArabicMedicalNER غير متاح: {exc}")
 
     def _init_classifier(self):
         """Lazy-load SmartFileClassifier."""
@@ -230,19 +219,9 @@ class SmartTagger:
                     for tag in tags:
                         ft.add_tag(Tag(tag.name, tag.category, tag.confidence, "auto"))
 
-        # 4. Medical NER tags
-        if content:
-            self._init_ner()
-            if self._ner:
-                try:
-                    ner_result = self._ner.extract(content)
-                    for entity in ner_result.entities:
-                        tag_name = f"medical/{entity.entity_type}/{entity.text[:30]}"
-                        ft.add_tag(Tag(tag_name, "medical", entity.confidence, "ner"))
-                except Exception as exc:
-                    logger.debug(f"NER tagging error: {exc}")
-
-        # 5. Classifier tags
+        # 4. Classifier tags
+        # ملاحظة: وسوم NER الطبية أُزيلت — وحدة medical_ner غير موجودة في
+        # المستودع وPRODUCT_IDENTITY.md يستبعد مكونات NER (أسلاك ميتة).
         self._init_classifier()
         if self._classifier:
             try:
@@ -352,7 +331,17 @@ class SmartTagger:
             logger.error(f"خطأ في حفظ sidecar: {exc}")
 
     def _extract_content(self, filepath: str) -> str:
-        """Extract text content from a file for keyword matching."""
+        """Extract text content from a file for keyword matching.
+
+        الحاجز أولاً: الملف الحساس لا يُقرأ محتواه للوسم/التصنيف.
+        """
+        # حاجز الحساسية قبل أي قراءة — الملفات الطبية/الأسرار لا تُفتح؛
+        # عقد الدالة يبقى إرجاع نص فارغ عند التعذّر (لا استثناء للسلاسل)
+        try:
+            block_if_sensitive(filepath, operation="استخراج محتوى الوسوم")
+        except SensitiveFileBlockedError:
+            logger.warning(f"محظور: ملف حساس مستثنى من وسوم المحتوى: {filepath}")
+            return ""
         path = Path(filepath)
         ext = path.suffix.lower()
         try:
