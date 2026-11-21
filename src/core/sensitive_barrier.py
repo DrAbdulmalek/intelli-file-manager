@@ -1,6 +1,6 @@
 """حسّاس-بارير — حاجز حماية الملفات الحساسة قبل القراءة/OCR/الإرسال الخارجي
 
-هذه الوحدة تمنع فتح محتوى أي ملف يُصنّف على أنه "حساس" قبل任何 عملية
+هذه الوحدة تمنع فتح محتوى أي ملف يُصنّف على أنه "حساس" قبل أي عملية
 قراءة أو استخراج نص أو OCR أو إرسال إلى خدمة خارجية.
 
 تصنيفات الحساسية المدعومة:
@@ -179,12 +179,49 @@ def is_medical_imaging_extension(ext: str) -> bool:
     return ext.lower() in MEDICAL_IMAGING_EXTENSIONS
 
 
+# ─── ملفات الأسرار (بالاسم/الامتداد، لا بالمجلد فقط) ─────────────────────────
+# المجلدات وحدها لا تكفي: ``~/proj/.env`` أو ``~/Downloads/id_rsa`` خارج ``.ssh``.
+# مطابقة تامة للأسماء (لا substring) كي لا يُحجب ``tokenizer.py`` أو ``environment.txt``.
+
+SECRET_EXACT_NAMES = frozenset(
+    {
+        ".env", ".netrc", ".htpasswd", ".pgpass", ".npmrc", ".pypirc",
+        ".git-credentials", "authorized_keys", "credentials.json",
+        "secrets.json", "wallet.dat",
+    }
+)
+
+SECRET_EXTENSIONS = frozenset(
+    {".pem", ".key", ".p12", ".pfx", ".kdbx", ".kdb", ".jks", ".keystore", ".ppk"}
+)
+
+_SECRET_KEY_NAME = re.compile(r"^id_(?:rsa|dsa|ecdsa|ed25519)(?:[_.-][a-z0-9_.-]+)?$")
+_ENV_VARIANT = re.compile(r"^\.env\.[a-z0-9_.-]+$")
+_ENV_TEMPLATE_SUFFIXES = (".example", ".sample", ".template", ".dist")
+
+
+def is_secret_file(file_path: Union[str, Path]) -> bool:
+    """هل اسم/امتداد الملف يدل على سرّ (مفتاح خاص، بيانات اعتماد، خزنة كلمات مرور)؟
+
+    لا تُقرأ محتويات الملف إطلاقًا. المفتاح العام (``id_rsa.pub``) وقوالب
+    ``.env.example`` لا تُعدّ أسرارًا.
+    """
+    name = Path(file_path).name.lower()
+    if name.endswith(".pub") or name.endswith(_ENV_TEMPLATE_SUFFIXES):
+        return False
+    if name in SECRET_EXACT_NAMES or _SECRET_KEY_NAME.match(name):
+        return True
+    if _ENV_VARIANT.match(name):
+        return True
+    return Path(name).suffix in SECRET_EXTENSIONS
+
+
 def _has_dicom_header(file_path: Path) -> bool:
     """يُعيد True لو كان الملف يبدأ بدليمة DICOM عند الإزاحة 128.
 
-    معيار DICOM: البايتات 128–131 devono أن تحتوي على "DICM" لو كان الملف
-    ملف DICOM صالح regardless من الامتداد. يُفتح الملف في وضع قراءة بايتات
-    فقط وتُقرأ 4 بايتات عند الإزاحة 128 دون تعديل任何 شيء.
+    معيار DICOM: البايتات 128–131 يجب أن تحتوي على "DICM" لو كان الملف
+    ملف DICOM صالح بغضّ النظر عن الامتداد. يُفتح الملف في وضع قراءة بايتات
+    فقط وتُقرأ 4 بايتات عند الإزاحة 128 دون تعديل أي شيء.
     """
     try:
         with file_path.open("rb") as f:
@@ -194,6 +231,11 @@ def _has_dicom_header(file_path: Path) -> bool:
     except OSError:
         # لو تعذّر القراءة، نتعامل مع الملف على أنه غير مؤكد (ليس DICOM مؤكد)
         return False
+
+
+def _should_probe_dicom(ext: str) -> bool:
+    """DICOM بلا امتداد (IM000001) أو متنكّر بصورة عامة؛ لا داعي لفتح غيرها."""
+    return ext == "" or ext.lstrip(".").isdigit() or ext in MEDICAL_IMAGE_EXTENSIONS
 
 
 def _name_parts_lower(name: str) -> set[str]:
@@ -218,7 +260,7 @@ def is_sensitive_path(
 
     قواعد الكشف (محدّثة per مراجعة F1):
       1. امتداد DICOM/تصوير طبي مؤكد (.dcm، .dicom، إلخ) → حساس دائمًا.
-      2. دليمة DICOM (байтات 128–131 = "DICM") حتى لو امتداد الملف عام
+      2. دليمة DICOM (بايتات 128–131 = "DICM") حتى لو امتداد الملف عام
          (.jpg، .png، .pdf...) → حساس دائمًا (كشف المحتوى دون فتح مضمون).
       3. أي جزء من المسار يتطابق مع SENSITIVE_PATH_PARTS (مطابقة كلمة كاملة)
          → حساس.
@@ -246,19 +288,15 @@ def is_sensitive_path(
     full_name_lower = path.name.lower()
     parts = _path_parts_lower(path)
 
+    # 0. أسرار بالاسم/الامتداد (.env، id_rsa، *.pem، *.kdbx…) — دائمًا محظورة
+    if is_secret_file(path):
+        return True
+
     # 1. امتداد تصوير طبي مؤكد — دائمًا محظور
     if is_medical_imaging_extension(ext) or any(
         s in MEDICAL_IMAGING_EXTENSIONS for s in all_suffixes
     ):
         return True
-
-    # 2. دليمة DICOM عند الإزاحة 128 — حتى لو الامتداد عام
-    # (يُقرأ فقط 4 بايتات، لا يُفتح محتوى الملف)
-    try:
-        if _has_dicom_header(path):
-            return True
-    except OSError:
-        pass
 
     # 3. أي جزء من المسار يشير إلى مجلد طبي/نظام/حساس
     sensitive_parts = set(parts) & SENSITIVE_PATH_PARTS
@@ -274,9 +312,19 @@ def is_sensitive_path(
     if sensitive_name_parts:
         return True
 
+    # 2. دليمة DICOM عند الإزاحة 128 — آخر فحص، وللملفات الغامضة فقط:
+    #    لا يُفتح ملف حُسم أنه حساس بالاسم/المسار (لا فتح بلا داعٍ)، ولا يُفتح كل ملف
+    #    في مسح ضخم (بلا امتداد أو صورة عامة فقط، حيث تُخزَّن DICOM بلا امتداد غالبًا).
+    if _should_probe_dicom(ext):
+        try:
+            if _has_dicom_header(path):
+                return True
+        except OSError:
+            pass
+
     # 5. امتدادات التقارير الطبية — محظورة فقط إذا كان هناك مؤشر مسار/اسم حساس
     if ext in MEDICAL_REPORT_EXTENSIONS:
-        # إذا وصلنا到这里 ولم يُعثر على جزء حساس، نعيد False للسماح بقراءة العادية
+        # إذا وصلنا إلى هنا ولم يُعثر على جزء حساس، نعيد False للسماح بقراءة العادية
         return False
 
     # 6. امتدادات الصور العادية — محظورة فقط إذا كان هناك مؤشر حساس
@@ -333,18 +381,20 @@ def classify_sensitivity(file_path: Union[str, Path]) -> dict:
 
     reason = "غير حساس"
 
-    if is_medical_imaging_extension(ext) or any(
+    if is_secret_file(path):
+        reason = "ملف أسرار (اسم/امتداد مفتاح أو بيانات اعتماد)"
+    elif is_medical_imaging_extension(ext) or any(
         s in MEDICAL_IMAGING_EXTENSIONS for s in path.suffixes
     ):
         reason = f"امتداد تصوير طبي مؤكد: {ext}"
-    elif _has_dicom_header(path):
-        reason = "دليمة DICOM عند الإزاحة 128 (ملف طبي حتى لو امتداده عام)"
     elif set(parts) & SENSITIVE_PATH_PARTS:
         matched = set(parts) & SENSITIVE_PATH_PARTS
         reason = f"جزء مسار حساس: {', '.join(sorted(matched))}"
     elif name_parts & SENSITIVE_FILENAME_PARTS:
         matched = name_parts & SENSITIVE_FILENAME_PARTS
         reason = f"جزء اسم ملف حساس (word-boundary): {', '.join(sorted(matched))}"
+    elif _should_probe_dicom(ext) and _has_dicom_header(path):
+        reason = "دليمة DICOM عند الإزاحة 128 (ملف طبي حتى لو امتداده عام)"
     elif ext in MEDICAL_REPORT_EXTENSIONS:
         reason = f"امتداد تقرير طبي (بدون مؤشر مسار): {ext}"
     elif ext in MEDICAL_IMAGE_EXTENSIONS:

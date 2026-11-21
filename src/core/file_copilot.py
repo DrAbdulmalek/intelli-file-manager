@@ -152,6 +152,10 @@ class FileCopilot:
                         count = self._hybrid_search.index_files(fp)
                         total += count
                     elif path.is_file():
+                        from .sensitive_barrier import is_sensitive_path
+                        if is_sensitive_path(path):
+                            logger.warning("حاجز الحساسية: استُبعد من الفهرسة %s", path.name)
+                            continue
                         text = self._hybrid_search._extract_text(fp)
                         if text.strip():
                             total += 1
@@ -348,6 +352,10 @@ class FileCopilot:
 
     def summarize_file(self, filepath: str) -> str:
         """Generate a summary of a file's content."""
+        from .sensitive_barrier import is_sensitive_path
+        if is_sensitive_path(filepath):
+            logger.warning("حاجز الحساسية: رفض تلخيص %s", Path(filepath).name)
+            return "محظور: ملف حساس — لا يُلخَّص محتواه"
         try:
             text = ""
             path = Path(filepath)

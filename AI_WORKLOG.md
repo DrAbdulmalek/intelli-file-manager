@@ -90,6 +90,18 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 ## 📊 Work Log
 
 <<<<<<< HEAD
+### 2026-11-21 - Claude (independent re-review of main a9415c0; sandbox patch, not pushed)
+- Re-verified main by probes (not by PR text): SafeMover no-replace (renameat2) and undo no-clobber now
+  hold; PR #63 was superseded and is not in main.
+- Found and fixed: secrets-by-filename regression in sensitive_barrier; the barrier opened files before
+  checking names; 7 unguarded content readers (ai_engine, multimodal_processor, file_copilot); stray
+  foreign-script fragments in 16 lines.
+- Evidence: 34 new tests, 4 reader tests fail without the reader fixes; full suite 779 passed with the same
+  8 failures as main (glossary/duplicate-detector data, environment). Qt tests and CI not run.
+- Known remaining: name-based barrier cannot see a generic-named patient image (IMG_0001.jpg) in a
+  neutral folder; `.key` also matches Keynote files (over-block); smart_tagger/ai_engine.suggest_category/
+  api/server not audited for content reads.
+
 ### 2026-11-20 - Claude (protocol v2.0 merge; docs only)
 - Recreated (previous local-only commit was lost with a sandbox clone) the merged
   AlphaCode + IntelliFile Continuous Improvement Protocol v2.0 in

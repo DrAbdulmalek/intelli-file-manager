@@ -1,7 +1,9 @@
 """محرك الذكاء الاصطناعي - تكامل مع Ollama المحلي"""
 import logging
+from pathlib import Path
 from typing import Optional
 from .config import Config
+from .sensitive_barrier import is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,10 @@ class AIEngine:
             return []
 
     def summarize_file(self, filepath: str) -> str:
-        """تلخيص محتوى ملف"""
+        """تلخيص محتوى ملف — الملفات الحساسة لا تُفتح ولا تُرسل حتى لنموذج محلي"""
+        if is_sensitive_path(filepath):
+            logger.warning("حاجز الحساسية: رفض تلخيص %s", Path(filepath).name)
+            return "محظور: ملف حساس — لا يُلخَّص محتواه"
         client = self._get_ollama()
         if not client:
             return "خطأ: Ollama غير متاح"
@@ -139,7 +144,10 @@ class AIEngine:
             return f"خطأ: {e}"
 
     def extract_keywords(self, filepath: str) -> list:
-        """استخراج كلمات مفتاحية من ملف"""
+        """استخراج كلمات مفتاحية من ملف — لا يُفتح الملف الحساس"""
+        if is_sensitive_path(filepath):
+            logger.warning("حاجز الحساسية: رفض استخراج كلمات من %s", Path(filepath).name)
+            return []
         client = self._get_ollama()
         if not client:
             return []
