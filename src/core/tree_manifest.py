@@ -17,7 +17,7 @@ import json
 import os
 import stat
 from pathlib import Path
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 __all__ = ["ManifestError", "snapshot", "verify"]
 
@@ -124,7 +124,7 @@ def snapshot(root: str | os.PathLike[str], out_path: str | os.PathLike[str], *,
         raise ManifestError(f"ملف اللقطة موجود مسبقاً ولن يُستبدل: {out_resolved}") from exc
     with out:
         header = {"type": "header", "version": _VERSION, "root": root_s,
-                  "created": datetime.now(UTC).isoformat(), "hash": hash_files}
+                  "created": datetime.now(timezone.utc).isoformat(), "hash": hash_files}
         out.write(json.dumps(header, ensure_ascii=False) + "\n")
         for rel, entry, exc in _walk(root_s):
             if exc is not None:
