@@ -24,30 +24,46 @@ jobs:
         # pyaudio لا ينشر عجلات لينكس على PyPI -> يحتاج portaudio.h للبناء من المصدر
         sudo apt-get update -qq && sudo apt-get install -y -qq portaudio19-dev
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install flake8 black pytest
+        pip install pytest pytest-asyncio httpx
 
-    # بوابة حاجزة: الأخطاء القاتلة (صياغة/أسماء غير معرّفة) تُفشل البناء.
-    - name: Lint (blocking subset)
-      run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    # fail-closed: غياب الاختبارات فشل — لا "No tests found" يخفيه
+    # ملاحظة: addopts يحوي -v فتأتي سطر الملخص محاطاً بحواف ==== —
+    # لذلك نطابق "N tests collected" في أي مكان، ونُظهر مخرجات الجمع
+    # بدل كتمها (2>/dev/null كان يخفي أخطاء الجمع نفسها)
+    - name: Guard — tests must exist
+      run: |
+        python -m pytest tests/ --collect-only -q 2>&1 | tail -3
+        COUNT=$(python -m pytest tests/ --collect-only -q 2>&1 | grep -oE '[0-9]+ tests? collected' | grep -oE '^[0-9]+' | head -1 || echo 0)
+        echo "collected tests: $COUNT"
+        if [ "$COUNT" -le 0 ]; then
+          echo "::error::لم يُعثر على أي اختبار في tests/ — فشل إجباري (fail-closed)"
+          exit 1
+        fi
 
-    # بوابة حاجزة: لا "|| echo" — الإخفاق إخفاق. الاختبارات المحجورة معلنة في
-    # tests/KNOWN_FAILURES.md ولكل منها سبب وشرط إخراج؛ لا يُضاف إليها دون مراجعة.
-    - name: Tests (blocking)
+    # fail-closed: فشل أي اختبار يفشل الـworkflow — لا fallback ولا || true.
+    # الاستثناء الوحيد: الحجر المعلن في tests/KNOWN_FAILURES.md (6 اختبارات
+    # مسرد — الملف data/medical_glossary.csv على جهاز المالك فقط) عبر
+    # --deselect صريحة؛ لا يُضاف إليها دون مراجعة وتحديث الملف.
+    - name: Run tests
       env:
         QT_QPA_PLATFORM: offscreen
       run: |
-        python -m pytest tests/unit tests/integration -q --tb=short \
+        python -m pytest tests/ -q --tb=short \
           --deselect tests/unit/test_glossary_and_export.py::test_bundled_glossary_loaded \
           --deselect tests/unit/test_glossary_and_export.py::test_suggest_arabic_prefix \
           --deselect tests/unit/test_glossary_and_export.py::test_suggest_english_prefix \
           --deselect tests/unit/test_glossary_and_export.py::test_suggest_exact_ranks_first \
           --deselect tests/unit/test_glossary_and_export.py::test_lookup_both_directions \
-          --deselect tests/integration/test_snippets_api.py::test_glossary_suggest_endpoint \
-          --deselect tests/integration/test_duplicate_detector.py::TestNearDuplicateDetection::test_three_similar_files_form_one_near_group \
-          --deselect tests/integration/test_duplicate_detector.py::TestNearDuplicateDetection::test_threshold_tuning \
-          --deselect tests/integration/test_duplicate_detector.py::TestNearDuplicateDetection::test_two_near_groups
+          --deselect tests/integration/test_snippets_api.py::test_glossary_suggest_endpoint
 
-    # استشاري فقط (لا يُفشل البناء): تنسيق black. اجعله حاجزًا بعد تطبيقه على الشجرة.
-    - name: Format check (advisory)
+    - name: Static analysis (serious error classes — blocking)
+      run: |
+        pip install flake8
+        # E9: syntax, F63: confusion, F7: syntax-ish, F82: undefined name
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: Formatting check (black — non-blocking، لإعادة التنسيق تدريجياً)
+      run: |
+        pip install black
+        black . --check --verbose
       continue-on-error: true
-      run: black . --check

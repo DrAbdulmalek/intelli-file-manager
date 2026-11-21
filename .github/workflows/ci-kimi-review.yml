@@ -1,4 +1,4 @@
-name: CI — intelli-file-manager (Lenient)
+name: CI — intelli-file-manager (fail-closed)
 
 on:
   push:
@@ -38,35 +38,62 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
 
-      - name: Install deps (lenient)
+      - name: Install deps
         run: |
           pip install --upgrade pip
-          pip install pytest pytest-cov pytest-asyncio httpx || true
-          pip install ruff mypy || true
-          pip install -r requirements.txt || true
+          pip install pytest pytest-cov pytest-asyncio httpx ruff mypy
+          pip install -r requirements.txt
 
-      - name: Lint (non-blocking)
-        run: ruff check src/ --output-format=github || true
+      # fail-closed على أخطاء الكود الجسيمة (syntax/undefined) دون فرض
+      # إعادة كتابة أنماط الكود كلها دفعة واحدة (UP/BLE ممنوعة مؤقتاً)
+      - name: Lint (serious error classes — blocking)
+        run: ruff check src/ --select E9,F63,F7,F82,F821 --output-format=github
+
+      - name: Type check (non-blocking — قائمة قصيرة تدريجية)
+        run: mypy src/ --ignore-missing-imports
         continue-on-error: true
 
-      - name: Type check (non-blocking)
-        run: mypy src/ --ignore-missing-imports || true
-        continue-on-error: true
-
-      - name: Run tests
-        run: pytest tests/ -v --tb=short || pytest test_fixes.py -v --tb=short || true
-
-      - name: Test API server startup (non-blocking)
+      # fail-closed: غياب الاختبارات فشل إجباري
+      # ملاحظة: addopts يحوي -v فتأتي سطر الملخص محاطاً بحواف ==== —
+      # لذلك نطابق "N tests collected" في أي مكان، ونُظهر مخرجات الجمع
+      # بدل كتمها (2>/dev/null كان يخفي أخطاء الجمع نفسها)
+      - name: Guard — tests must exist
         run: |
-          timeout 10 uvicorn src.api.server:app --host 127.0.0.1 --port 8421 &
-          sleep 3
-          curl -s http://localhost:8421/api/health || echo "API health check skipped"
-          kill %1 || true
-        continue-on-error: true
+          python -m pytest tests/ --collect-only -q 2>&1 | tail -3
+          COUNT=$(python -m pytest tests/ --collect-only -q 2>&1 | grep -oE '[0-9]+ tests? collected' | grep -oE '^[0-9]+' | head -1 || echo 0)
+          echo "collected tests: $COUNT"
+          if [ "$COUNT" -le 0 ]; then
+            echo "::error::لم يُعثر على أي اختبار في tests/ — فشل إجباري (fail-closed)"
+            exit 1
+          fi
+
+      # fail-closed: فشل أي اختبار يفشل الـworkflow — لا fallback ولا || true
+      - name: Run tests
+        run: |
+          QT_QPA_PLATFORM=offscreen pytest tests/ -q --tb=short
+
+      # fail-closed: خادم الـAPI يجب أن يعمل ويجيب /api/health بصيغة صحيحة
+      - name: Test API server startup (blocking)
+        run: |
+          set -e
+          INTELLIFILE_LIGHTWEIGHT=1 timeout 20 uvicorn src.api.server:app --host 127.0.0.1 --port 8421 &
+          SERVER_PID=$!
+          for i in $(seq 1 15); do
+            sleep 1
+            if curl -fsS http://localhost:8421/api/health | grep -q '"status" *: *"ok"'; then
+              echo "API health OK"
+              kill $SERVER_PID 2>/dev/null || true
+              exit 0
+            fi
+          done
+          echo "::error::خادم الـAPI لم يستجب /api/health"
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
 
   frontend:
     runs-on: ubuntu-latest
-    continue-on-error: true
+    continue-on-error: true  # عمل غير ممنع حالياً — لا يخفي أي اختبار أمني (الاختبارات في backend)
+    name: frontend (non-blocking)
     defaults:
       run:
         working-directory: web
@@ -82,10 +109,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install deps
-        run: npm ci || npm install || true
+        run: npm ci || npm install
 
       - name: Lint
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Build
-        run: npm run build || true
+        run: npm run build

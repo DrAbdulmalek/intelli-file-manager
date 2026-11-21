@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 from ..db.schemas import FileRecord
 
 if TYPE_CHECKING:
-    from .rule_schemas import Ruleset
+    from .rule_schemas import Ruleset  # يستخدم في تعليق النوع أدناه (F821)
 
 logger = logging.getLogger(__name__)
 

@@ -75,3 +75,9 @@ data/*
 *.bak
 *.swp
 *~
+
+# Generated artifacts (generate-context.yml builds these; keep untracked)
+project_context.txt
+project_context*.md
+project_context*.txt
+web/tsconfig.tsbuildinfo
