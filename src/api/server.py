@@ -28,6 +28,8 @@ from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
+from src import __version__
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -193,7 +195,7 @@ def create_app() -> FastAPI:
     _app = FastAPI(
         title="IntelliFile Manager API",
         description="إدارة ملفات ذكية — بحث هجين، وسوم ذكية، مساعد ملفات",
-        version="2.0.0",
+        version=__version__,
         docs_url="/api/docs",
         redoc_url="/api/redoc",
     )
@@ -326,7 +328,7 @@ def create_app() -> FastAPI:
                 engines["ollama"] = False
         engines["lightweight_mode"] = lightweight
 
-        return HealthResponse(status="ok", version="2.1.0", engines=engines)
+        return HealthResponse(status="ok", version=__version__, engines=engines)
 
     # -------------------------------------------------------------------
     # Lightweight-mode flag is exposed via /api/health engines dict

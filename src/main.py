@@ -29,12 +29,14 @@ def setup_logging(verbose: bool = False):
 
 def main():
     """نقطة الدخول الرئيسية"""
+    from src import __version__
+
     parser = argparse.ArgumentParser(
         prog="intellifile",
         description="IntelliFile - تطبيق تصنيف الملفات الذكي | Smart File Classifier",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="تفعيل السجلات التفصيلية")
-    parser.add_argument("--version", action="version", version="IntelliFile v2.0.0")
+    parser.add_argument("--version", action="version", version=f"IntelliFile v{__version__}")
     parser.add_argument("--no-gui", action="store_true", help="تشغيل بدون واجهة رسومية")
     parser.add_argument("--cli", action="store_true", help="تشغيل واجهة سطر الأوامر")
     parser.add_argument("--web", action="store_true", help="تشغيل خادم الويب فقط")
@@ -82,13 +84,14 @@ def main():
 
     args = parser.parse_args()
 
+    # إنشاء مجلد البيانات — يجب أن يسبق تهيئة التسجيل: setup_logging يفتح
+    # FileHandler على ~/.intellifile/app.log فينهار بـ FileNotFoundError في أول تشغيل.
+    data_dir = Path.home() / ".intellifile"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
     # تهيئة التسجيل
     setup_logging(args.verbose)
     logger = logging.getLogger("intellifile")
-
-    # إنشاء مجلد البيانات
-    data_dir = Path.home() / ".intellifile"
-    data_dir.mkdir(parents=True, exist_ok=True)
 
     # تحميل الإعدادات
     from src.core.config import Config
@@ -139,6 +142,7 @@ def _start_gui(config, logger):
     """بدء واجهة سطح المكتب الرسومية"""
     try:
         from PySide6.QtWidgets import QApplication
+        from src import __version__
         from src.gui.main_window import MainWindow
     except ImportError as e:
         logger.error(f"لا يمكن تشغيل الواجهة الرسومية: {e}")
@@ -146,7 +150,7 @@ def _start_gui(config, logger):
 
     app = QApplication(sys.argv)
     app.setApplicationName("IntelliFile")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion(__version__)
 
     window = MainWindow(config)
     window.show()
