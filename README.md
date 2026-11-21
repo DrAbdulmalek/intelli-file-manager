@@ -354,11 +354,10 @@ python -m src.main duplicates /path/to/folder
 | 18 | `POST` | `/api/process/video` | معالجة فيديو | Process video |
 | 19 | `POST` | `/api/process/document` | معالجة مستند | Process document |
 | 20 | `POST` | `/api/process/upload` | رفع ومعالجة ملف | Upload & process |
-| 21 | `POST` | `/api/ner/extract` | استخراج كيانات مسماة | Extract named entities |
-| 22 | `POST` | `/api/organize` | تنظيم ملفات | Auto-organize files |
-| 23 | `POST` | `/api/embed` | تضمينات متجهية | Generate embeddings |
-| 24 | `POST` | `/api/embed/similarity` | حساب التشابه | Compute similarity |
-| 25 | `GET` | `/api/stats` | إحصائيات | Stats |
+| 21 | `POST` | `/api/organize` | تنظيم ملفات | Auto-organize files |
+| 22 | `POST` | `/api/embed` | تضمينات متجهية | Generate embeddings |
+| 23 | `POST` | `/api/embed/similarity` | حساب التشابه | Compute similarity |
+| 24 | `GET` | `/api/stats` | إحصائيات | Stats |
 
 ### API Authentication
 
@@ -417,7 +416,6 @@ intelli-file-manager/
 │   │   ├── ai_engine.py        # Ollama integration
 │   │   ├── semantic_search.py  # Vector search
 │   │   ├── rag_engine.py       # RAG engine
-│   │   ├── medical_ner.py      # Named Entity Recognition
 │   │   ├── voice_controller.py # Voice control
 │   │   └── ...                 # Other modules
 │   ├── ai/                     # AI engine layer

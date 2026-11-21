@@ -115,6 +115,28 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 - No merge to main; PR opened for review only.
 
 
+### 2026-11-21 - Claude (P0 branch from Qwen review, verified by execution; sandbox, not pushed)
+- Proved by running: clean-HOME crash (FileNotFoundError), /api/ner/extract -> 500, WS connects without key
+  while INTELLIFILE_API_KEY is set. Fixed with real tests (subprocess/TestClient); each new test fails on old code.
+- Found while building the CI gate: flake8 fatal subset had 8 F821 (annotation-only; fixed via TYPE_CHECKING);
+  data/medical_glossary.csv was never committed (.gitignore `data/`); one glossary test is order-dependent.
+- Decision recorded: NER removed per PRODUCT_IDENTITY; Plugin API `register_ner_extractor` left (extension point).
+- Not done: PR #72 not rebased (conflicts with these commits on src/main.py; close it in favor of this branch);
+  web client has no API-key support at all (so enabling the key breaks the web UI regardless of the WS fix);
+  HF token in query string (server.py push_snippets_hf) untouched; branch cleanup (67) and docs/ARCHITECTURE case
+  collision untouched; Qt tests skipped here (no PySide6) and real CI not run.
+
+### 2026-11-21 - Claude (independent re-review of main a9415c0; sandbox patch, not pushed)
+- Re-verified main by probes (not by PR text): SafeMover no-replace (renameat2) and undo no-clobber now
+  hold; PR #63 was superseded and is not in main.
+- Found and fixed: secrets-by-filename regression in sensitive_barrier; the barrier opened files before
+  checking names; 7 unguarded content readers (ai_engine, multimodal_processor, file_copilot); stray
+  foreign-script fragments in 16 lines.
+- Evidence: 34 new tests, 4 reader tests fail without the reader fixes; full suite 779 passed with the same
+  8 failures as main (glossary/duplicate-detector data, environment). Qt tests and CI not run.
+- Known remaining: name-based barrier cannot see a generic-named patient image (IMG_0001.jpg) in a
+  neutral folder; `.key` also matches Keynote files (over-block); smart_tagger/ai_engine.suggest_category/
+  api/server not audited for content reads.
 ### 2026-11-21 - Claude (comprehensive sensitive-barrier hardening; branch only)
 - Branch `security/comprehensive-sensitive-barrier-hardening` from `main`
   (a9415c0). No direct writes to `main`; Draft PR only after tests.

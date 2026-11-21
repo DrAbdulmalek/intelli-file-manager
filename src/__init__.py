@@ -5,7 +5,6 @@ Features:
   - Smart Tagging (TagSpaces-compatible)
   - File Copilot (RAG chat with files)
   - Multimodal processing (OCR + Whisper + vision)
-  - Named Entity Recognition (NER)
   - RTL Arabic support
   - Offline-first, local-first
   - Desktop GUI (PySide6) — Phase C complete (unreleased, post-v2.1.0)

@@ -36,6 +36,7 @@ from __future__ import annotations
 import logging
 import os
 import stat
+import re
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
@@ -123,6 +124,8 @@ SECRET_NAME_EXACT = frozenset(
         "id_ed25519",
         "id_ed448",
         "identity",
+        "wallet.dat",
+        "authorized_keys",
     }
 )
 
@@ -253,6 +256,11 @@ SENSITIVE_FILENAME_PARTS = frozenset(
 )
 
 
+CREDENTIAL_WORD_PARTS = frozenset(
+    {"credentials", "credential", "secret", "secrets", "password", "passwd",
+     "private_key", "apikey", "api_key", "access_token"}
+)
+
 # ─── استثناءات ───────────────────────────────────────────────────────────────
 
 
@@ -316,6 +324,38 @@ def _realpath_no_strict(file_path: Path) -> Optional[Path]:
         return None
 
 
+SECRET_EXACT_NAMES = frozenset(
+    {
+        ".env", ".netrc", ".htpasswd", ".pgpass", ".npmrc", ".pypirc",
+        ".git-credentials", "authorized_keys", "credentials.json",
+        "secrets.json", "wallet.dat",
+    }
+)
+
+_SECRET_KEY_NAME = re.compile(r"^id_(?:rsa|dsa|ecdsa|ed25519)(?:[_.-][a-z0-9_.-]+)?$")
+_ENV_VARIANT = re.compile(r"^\.env\.[a-z0-9_.-]+$")
+_ENV_TEMPLATE_SUFFIXES = (".example", ".sample", ".template", ".dist")
+
+
+def is_secret_file(file_path: Union[str, Path]) -> bool:
+    """هل اسم/امتداد الملف يدل على سرّ (مفتاح خاص، بيانات اعتماد، خزنة كلمات مرور)؟
+
+    لا تُقرأ محتويات الملف إطلاقًا. المفتاح العام (``id_rsa.pub``) وقوالب
+    ``.env.example`` لا تُعدّ أسرارًا.
+
+    منقولة حرفيًا من مراجعة P0 (فرع fix/p0-review-2026-11-21) لتوحيد الواجهة
+    فوق حاجز #74 الحاكم.
+    """
+    name = Path(file_path).name.lower()
+    if name.endswith(".pub") or name.endswith(_ENV_TEMPLATE_SUFFIXES):
+        return False
+    if name in SECRET_EXACT_NAMES or _SECRET_KEY_NAME.match(name):
+        return True
+    if _ENV_VARIANT.match(name):
+        return True
+    return Path(name).suffix in SECRET_EXTENSIONS
+
+
 def _has_dicom_header(file_path: Path) -> bool:
     """يُعيد True لو كان الملف يبدأ بدليمة DICOM عند الإزاحة 128.
 
@@ -343,6 +383,25 @@ def _has_dicom_header(file_path: Path) -> bool:
         os.close(fd)
 
 
+MEDICAL_IMAGE_EXTENSIONS = frozenset(
+    {".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".webp"}
+)
+
+
+def _should_probe_dicom(ext: str) -> bool:
+    """DICOM بلا امتداد أو متنكّر بصورة عامة؛ لا نفتح غير المرشّحين.
+
+    منقولة من مراجعة P0: الملفات بامتداد غير مرشّح (csv/txt...) لا تُمس
+    إطلاقاً — لا مسح ضخم على ملفات عادية."""
+    return (
+        ext == ""
+        or ext.lstrip(".").isdigit()
+        or ext in MEDICAL_IMAGE_EXTENSIONS
+        or ext == ".pdf"  # حاوية مستندات قد تخفي دليمة (اختبار #74: DICOM خلف invoice.pdf)
+        or ext in MEDICAL_IMAGING_EXTENSIONS
+    )
+
+
 def _name_parts_lower(name: str) -> set[str]:
     """يُنفّذ word-boundary splitting على اسم الملف بدون الامتداد.
 
@@ -364,14 +423,21 @@ def _classify_by_name_and_path(path: Path) -> bool:
     parts = _path_parts_lower(path)
     name_no_ext_lower = full_name_lower.rsplit(".", 1)[0] if "." in full_name_lower else full_name_lower
 
+    # استثناءات الدقة (مراجعة P0): قوالب البيئة ومستندات السياسة.
+    # المفتاح العام .pub يبقى محجوباً احترازياً (عائلة المفاتيح كلها — قرار #74
+    # الموثق في اختباره test_public_key_blocked_too)؛ is_secret_file وحدهما
+    # يعدّه "ليس سراً بالاسم" للتمييز الدلالي، والحجب قرار الحاجز.
+    is_template = full_name_lower.endswith(_ENV_TEMPLATE_SUFFIXES)
+    doc_ext = ext in {".md", ".rst"}
+
     # 1. امتداد تصوير طبي مؤكد — دائمًا محظور
     if is_medical_imaging_extension(ext) or any(
         s in MEDICAL_IMAGING_EXTENSIONS for s in all_suffixes
     ):
         return True
 
-    # 1ب. امتداد أسرار/مفاتيح/شهادات — دائمًا محظور
-    if ext in SECRET_EXTENSIONS:
+    # 1ب. امتداد أسرار/مفاتيح/شهادات — دائمًا محظور (المفتاح العام مستثنى)
+    if ext in SECRET_EXTENSIONS and not is_template:
         return True
 
     # 1ج. اسم ملف أسرار بالاسم الصارم (.env، id_rsa، credentials.json...)
@@ -383,7 +449,13 @@ def _classify_by_name_and_path(path: Path) -> bool:
         return True
 
     # 1د. أسماء مفاتيح SSH بنمط شائع (id_rsa.old، id_ed25519@1440223141.tmp…)
-    if name_no_ext_lower in SECRET_NAME_EXACT:
+    if name_no_ext_lower in SECRET_NAME_EXACT and not is_template:
+        return True
+
+    # 1هـ. أنماط مفاتيح SSH المشتقة (id_ed25519_work) وبيئات متغيرة (.env.staging)
+    if not is_template and (
+        _SECRET_KEY_NAME.match(full_name_lower) or _ENV_VARIANT.match(full_name_lower)
+    ):
         return True
 
     # 2. أي جزء من المسار يشير إلى مجلد طبي/نظام/حساس (إلزامي — لا يتأثر
@@ -394,7 +466,11 @@ def _classify_by_name_and_path(path: Path) -> bool:
     # 3. أي جزء من اسم الملف يشير إلى محتوى طبي/حساس (word-boundary)
     name_parts = _name_parts_lower(full_name_lower)
     if name_parts & SENSITIVE_FILENAME_PARTS:
-        return True
+        hits = name_parts & SENSITIVE_FILENAME_PARTS
+        if doc_ext and "policy" in name_parts and hits <= CREDENTIAL_WORD_PARTS:
+            pass  # مستند سياسة يذكر الاعتماديات — وصف وليس سراً (مراجعة P0)
+        else:
+            return True
 
     # 4. امتدادات التقارير/الصور العامة — تُحسم عند وجود مؤشر مسار/اسم
     #    (فُحص أعلاه)؛ هنا نُرجع False.
@@ -448,12 +524,14 @@ def is_sensitive_path(
     real = os.path.realpath(abspath)
     if real != abspath:
         real_path = Path(real)
-        if _classify_by_name_and_path(real_path) or _has_dicom_header(real_path):
+        if _classify_by_name_and_path(real_path) or (
+            _should_probe_dicom(real_path.suffix.lower()) and _has_dicom_header(real_path)
+        ):
             return True
 
-    # الطبقة 2: دليمة DICOM عند الإزاحة 128 — حتى لو الامتداد عام
-    # (يُقرأ فقط 4 بايتات عبر O_NOFOLLOW — مستوى header-based الموثّق)
-    if _has_dicom_header(path):
+    # الطبقة 2: دليمة DICOM عند الإزاحة 128 — للمرشّحين فقط (بلا امتداد،
+    # امتداد رقمي، صورة عامة، أو تصوير طبي). المرشّح غير المعتاد (.csv) لا يُمس.
+    if _should_probe_dicom(path.suffix.lower()) and _has_dicom_header(path):
         return True
 
     return False
@@ -621,7 +699,7 @@ def classify_sensitivity(file_path: Union[str, Path]) -> dict:
             layers.append("symlink_target")
             is_sensitive = True
 
-    if not is_sensitive and _has_dicom_header(path):
+    if not is_sensitive and _should_probe_dicom(path.suffix.lower()) and _has_dicom_header(path):
         reason = "دليمة DICOM عند الإزاحة 128 (ملف طبي حتى لو امتداده عام)"
         layers.append("header_dicom")
         is_sensitive = True

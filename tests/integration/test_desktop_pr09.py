@@ -104,7 +104,7 @@ class TestIFMSettings:
         assert changed is True
         assert s.dark_mode is False
         assert s.rtl is False
-        # update بأ收支same values لا يُحدث تغييرًا
+        # update بنفس القيم لا يُحدث تغييرًا
         changed2 = s.update(dark_mode=False, rtl=False)
         assert changed2 is False
 

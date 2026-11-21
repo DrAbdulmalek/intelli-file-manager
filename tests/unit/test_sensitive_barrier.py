@@ -134,7 +134,7 @@ def test_safe_ocr_image_allows_regular():
 def test_sensitive_path_with_skip_dirs():
     """تجاوز مجلدات محددة في skip_dirs"""
     # .ssh عادة حساس، لكن لو أضفناه إلى skip_dirs لا يُتجاوز (إنه جزء من الحساسية)
-    #这里的 skip_dirs يُستخدم لاستبعاد أجزاء من المسار من الحساسية، وليس للتخطي من المسح
+    # هنا skip_dirs يُستخدم لاستبعاد أجزاء من المسار من الحساسية، وليس للتخطي من المسح
     assert is_sensitive_path("/home/user/.ssh/id_rsa") is True
 
 
