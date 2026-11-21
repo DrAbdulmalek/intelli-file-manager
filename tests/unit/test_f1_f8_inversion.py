@@ -115,7 +115,7 @@ class TestF2_F6_SafeMover:
             with patch("src.core.safe_mover._atomic_move", side_effect=boom):
                 result = mover.move(str(src), str(dst))
 
-            assert result.success is False, "الاستثناء غير OSError يجب أن يُ捕获 ويُرجع فشلاً"
+            assert result.success is False, "الاستثناء غير OSError يجب أن يُلتقط ويُرجع فشلاً"
             assert src.exists(), "المصدر يجب أن يظل موجوداً بعد الاستثناء"
             assert dst.read_text() == "البيانات الموجودة", "الوجهة يجب أن تحتفظ بمحتواها"
 

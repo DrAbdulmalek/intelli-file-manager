@@ -13,8 +13,8 @@
 | A4 | `external_send_allowed` للملفات الحساسة | كود ميت (يعيد True دائمًا) | يعيد False للملفات الحساسة | **FIXED-VERIFIED** | `test_external_send_allowed_blocks_sensitive` |
 | P1 | استبدال ملف الحجز داخل النافذة (TOCTOU) | success=True مع إتلاف بيانات | يُرفض الاستبدال، المصدر سليم | **FIXED-VERIFIED** | `test_P1_no_silent_overwrite_on_existing_destination` |
 | P2 | نسخة `.bak` متروكة تُمحى بصمت | تُمحى عند overwrite جديد | لا bak تُمسح بصمت؛ rename فقط | **FIXED-VERIFIED** | (مغطى بـ P1/P5) |
-| P3 | استثناء غير OSError أثناء النقل | ينتشر دون تنظيف، مصدر مفقود | يُ捕获، المصدر محفوظ | **FIXED-VERIFIED** | `test_P3_non_oserror_exception_caught_source_preserved` |
-| P4 | `KeyboardInterrupt` أثناء النقل | placeholder فارغ، `dst_1.txt` صامت | يُ捕获، المصدر محفوظ | **FIXED-VERIFIED** | `test_P4_keyboard_interrupt_source_preserved` |
+| P3 | استثناء غير OSError أثناء النقل | ينتشر دون تنظيف، مصدر مفقود | يُلتقط، المصدر محفوظ | **FIXED-VERIFIED** | `test_P3_non_oserror_exception_caught_source_preserved` |
+| P4 | `KeyboardInterrupt` أثناء النقل | placeholder فارغ، `dst_1.txt` صامت | يُلتقط، المصدر محفوظ | **FIXED-VERIFIED** | `test_P4_keyboard_interrupt_source_preserved` |
 | P5 | `overwrite=True` فوق مجلد | النجاح، المجلد يُخفي في `.bak` | رفض صريح، المصدر محفوظ | **FIXED-VERIFIED** | `test_P5_refuse_overwrite_true_on_directory` |
 | U | التراجع يستبدل الملف الجديد بصمت | الملف الجديد يُدمر | الملف الجديد يُحفظ (لا استبدال) | **FIXED-VERIFIED** | `test_undo_preserves_new_file_created_after_move` |
 | F8 | تناقض `renameat2` وثيقة/كود | غير منفذ (صفر ظهور) | منفذ عبر ctypes مع fallback os.link | **FIXED-VERIFIED** | `test_renameat2_is_importable_and_usable` |

@@ -43,8 +43,8 @@
 | A3 | DICOM header على امتداد عام → يُكتشف | FIXED-VERIFIED |
 | A4 | external_send_allowed يُمنع الحساس | FIXED-VERIFIED |
 | P1 | TOCTOU يُرفض الاستبدال | FIXED-VERIFIED |
-| P3 | غير OSError يُ捕获، المصدر محفوظ | FIXED-VERIFIED |
-| P4 | KeyboardInterrupt يُ捕获، المصدر محفوظ | FIXED-VERIFIED |
+| P3 | غير OSError يُلتقط، المصدر محفوظ | FIXED-VERIFIED |
+| P4 | KeyboardInterrupt يُلتقط، المصدر محفوظ | FIXED-VERIFIED |
 | P5 | overwrite على مجلد → رفض صريح | FIXED-VERIFIED |
 | U | التراجع لا يدمر الملف الجديد | FIXED-VERIFIED |
 | F8 | renameat2 منفذ وموثق | FIXED-VERIFIED |

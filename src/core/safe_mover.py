@@ -567,7 +567,7 @@ class SafeMover:
         # حل التضارب (ممنوع overwrite — يُضاف لاحقة تلقائيًا)
         try:
             if do_overwrite:
-                # ओवर写 محظور — لا يُنفذ أبدًا
+                # الكتابة فوق الموجود محظورة — لا يُنفذ أبدًا
                 raise OverwriteForbiddenError(
                     f"ممنوع الكتابة فوق الملف الموجود: {dst}"
                 )

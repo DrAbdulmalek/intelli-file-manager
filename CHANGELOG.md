@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — AlphaCode local MCP bridge
 
+### أُصلح (مراجعة مستقلة 2026-11-21)
+- **الحاجز يحجب الأسرار بالاسم/الامتداد** (`.env`، `id_rsa`، `*.pem`، `*.p12`، `*.kdbx`…) في أي مجلد،
+  لا في `.ssh` وحده؛ مطابقة تامة فلا يُحجب `tokenizer.py` ولا `id_rsa.pub` ولا `.env.example`.
+- **الحاجز لا يفتح ما حُسم بالاسم/المسار**: كانت ترويسة DICOM تُقرأ قبل فحص الاسم، فيُفتح الملف
+  الحساس أصلاً. صار فحص الترويسة آخر خطوة ولملفات بلا امتداد أو بصور عامة فقط (لا فتح لكل ملف في مسح ضخم).
+- **قرّاء محتوى كانوا بلا حاجز**: `AIEngine.summarize_file/extract_keywords`،
+  `MultimodalProcessor.extract_text_from_*` و`process_image`، `FileCopilot.summarize_file/index_files`.
+- تنظيف 16 سطراً فيها شظايا حروف غريبة (صينية/روسية/هندية/إيطالية) في الشيفرة والوثائق والاختبارات.
+
 ### أُضيف
 - جسر MCP محلي عبر stdio لربط AlphaCode بـ IntelliFile دون خادم شبكي أو اتصال خارجي.
 - أدوات محدودة للوكيل: حالة الاتصال، جرد بيانات وصفية فقط، والتحقق التجريبي من خطة التنظيم.

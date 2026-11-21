@@ -13,6 +13,7 @@ import logging
 from pathlib import Path
 
 from .metadata_extractor import extract_image_metadata, extract_av_metadata
+from .sensitive_barrier import is_sensitive_path
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,10 @@ class MultimodalProcessor:
         """
         path = Path(filepath)
         result = {"path": str(path), "type": "image"}
+        if is_sensitive_path(path):
+            # لا EXIF ولا OCR ولا وصف AI: الملف لا يُفتح أصلاً
+            result.update({"sensitive": True, "review_required": True})
+            return result
 
         # الميتاداتا الأساسية موكَّلة إلى metadata_extractor
         basic = extract_image_metadata(filepath)
@@ -123,21 +128,33 @@ class MultimodalProcessor:
         return result
 
     def extract_text_from_pdf(self, filepath: str) -> str:
+        if is_sensitive_path(filepath):
+            logger.warning("حاجز الحساسية: رفض استخراج نص من %s", Path(filepath).name)
+            return ""
         """استخراج نص من PDF — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
         from .file_inventory import _extract_pdf_text
         return _extract_pdf_text(Path(filepath))
 
     def extract_text_from_docx(self, filepath: str) -> str:
+        if is_sensitive_path(filepath):
+            logger.warning("حاجز الحساسية: رفض استخراج نص من %s", Path(filepath).name)
+            return ""
         """استخراج نص من DOCX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
         from .file_inventory import _extract_docx_text
         return _extract_docx_text(Path(filepath))
 
     def extract_text_from_xlsx(self, filepath: str) -> str:
+        if is_sensitive_path(filepath):
+            logger.warning("حاجز الحساسية: رفض استخراج نص من %s", Path(filepath).name)
+            return ""
         """استخراج نص من XLSX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
         from .file_inventory import _extract_xlsx_text
         return _extract_xlsx_text(Path(filepath))
 
     def extract_text_from_pptx(self, filepath: str) -> str:
+        if is_sensitive_path(filepath):
+            logger.warning("حاجز الحساسية: رفض استخراج نص من %s", Path(filepath).name)
+            return ""
         """استخراج نص من PPTX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
         from .file_inventory import _extract_pptx_text
         return _extract_pptx_text(Path(filepath))
