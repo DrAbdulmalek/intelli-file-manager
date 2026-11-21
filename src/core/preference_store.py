@@ -291,31 +291,72 @@ class PreferenceStore:
                     "المخزن في SAFE READ-ONLY — الحفظ فوق الملف الأصلي ممنوع. "
                     f"الأخطاء: {self._load_errors}"
                 )
-            errors = self.validate_document(self._document)
-            if errors:
-                raise InvalidRuleError(f"المستند لا يجتاز التحقق: {errors}")
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps(self._document, ensure_ascii=False, indent=1) + "\n"
             with self._file_lock():
-                if self.path.exists():
-                    backup_bytes = self.path.read_bytes()
-                    self.backup_path.write_bytes(backup_bytes)
-                    self.backup_hash_path.write_text(
-                        _sha256_bytes(backup_bytes) + "\n", encoding="utf-8"
-                    )
-                fd, tmp_name = tempfile.mkstemp(
-                    prefix=self.path.name + ".tmp-", dir=str(self.path.parent)
+                self._save_locked()
+
+    def _save_locked(self) -> None:
+        """الكتابة الفعلية (يفترض أن قفل الملف ممسك من المستدعي)."""
+        errors = self.validate_document(self._document)
+        if errors:
+            raise InvalidRuleError(f"المستند لا يجتاز التحقق: {errors}")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(self._document, ensure_ascii=False, indent=1) + "\n"
+        if self.path.exists():
+            backup_bytes = self.path.read_bytes()
+            self.backup_path.write_bytes(backup_bytes)
+            self.backup_hash_path.write_text(
+                _sha256_bytes(backup_bytes) + "\n", encoding="utf-8"
+            )
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=self.path.name + ".tmp-", dir=str(self.path.parent)
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as tmp_fh:
+                tmp_fh.write(payload)
+                tmp_fh.flush()
+                os.fsync(tmp_fh.fileno())
+            os.replace(tmp_name, self.path)
+        finally:
+            if os.path.exists(tmp_name):  # فشل الاستبدال — لا بقايا
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp_name)
+
+    def _reload_under_lock(self) -> None:
+        """إعادة تحميل من القرص — تُستدعى داخل قفل الملف فقط.
+
+        أساس منع فقد التحديث: كل تعديل يبدأ بأحدث حالة مكتوبة لا بلقطة
+        قديمة من الذاكرة.
+        """
+        if not self.path.exists():
+            return
+        raw = self.path.read_bytes()
+        document = json.loads(raw.decode("utf-8"))
+        migrated, _ = self.migrate(document)
+        errors = self.validate_document(migrated)
+        if errors:
+            # تغيّر الملف على القرص لحالة غير صالحة — لا نكتب فوقها
+            raise StoreReadOnlyError(f"المستند على القرص غير صالح: {errors}")
+        self._document = migrated
+
+    @contextlib.contextmanager
+    def _mutation(self):
+        """دورة قراءة-تعديل-كتابة كاملة تحت قفل الملف (لا فقد تحديث).
+
+        الاستخدام:
+            with store._mutation() as doc:
+                doc["preferences"]["rules"].append(...)
+        عند استثناء داخل الجسم لا تُكتب القرص إطلاقًا.
+        """
+        with self._thread_lock:
+            if self._read_only or self._document is None:
+                raise StoreReadOnlyError(
+                    "المخزن في SAFE READ-ONLY — التعديل ممنوع. "
+                    f"الأخطاء: {self._load_errors}"
                 )
-                try:
-                    with os.fdopen(fd, "w", encoding="utf-8") as tmp_fh:
-                        tmp_fh.write(payload)
-                        tmp_fh.flush()
-                        os.fsync(tmp_fh.fileno())
-                    os.replace(tmp_name, self.path)
-                finally:
-                    if os.path.exists(tmp_name):  # فشل الاستبدال — لا بقايا
-                        with contextlib.suppress(OSError):
-                            os.unlink(tmp_name)
+            with self._file_lock():
+                self._reload_under_lock()
+                yield self._document
+                self._save_locked()
 
     # ─── النسخ الاحتياطي والاستعادة ────────────────────────────────────────
 
@@ -384,21 +425,20 @@ class PreferenceStore:
 
     def add_rule(self, rule: Dict[str, Any]) -> Dict[str, Any]:
         """يضيف قاعدة جديدة متحقَّق منها (نسخة عميقة تُخزَّن)."""
-        doc = self._require_writable()
         rule = copy.deepcopy(rule)
         if not rule.get("rule_id"):
             rule["rule_id"] = new_rule_id()
         errors = validate_rule(rule)
         if errors:
             raise InvalidRuleError(f"قاعدة غير صالحة: {errors}")
-        if any(r["rule_id"] == rule["rule_id"] for r in doc["preferences"]["rules"]):
-            raise InvalidRuleError(f"rule_id مكرر: {rule['rule_id']}")
         rule.setdefault("history", []).append(
             {"ts": _now_iso(), "event": "created", "details": ""}
         )
-        doc["preferences"]["rules"].append(rule)
-        self._append_change("rule_created", {"rule_id": rule["rule_id"]})
-        self.save()
+        with self._mutation() as doc:
+            if any(r["rule_id"] == rule["rule_id"] for r in doc["preferences"]["rules"]):
+                raise InvalidRuleError(f"rule_id مكرر: {rule['rule_id']}")
+            doc["preferences"]["rules"].append(copy.deepcopy(rule))
+            self._append_change("rule_created", {"rule_id": rule["rule_id"]})
         return copy.deepcopy(rule)
 
     def update_rule(
@@ -408,20 +448,20 @@ class PreferenceStore:
         """يطبّق mutator على نسخة من القاعدة ثم يتحقق ويحفظ مع لقطة «قبل».
 
         اللقطة القديمة تُخزَّن في change_log — أساس revert_last_change.
+        أي استثناء داخل mutator يمنع الكتابة كليًا (لا حالة نصف معدلة).
         """
-        doc = self._require_writable()
-        index = self._find_index(rule_id)
-        before = copy.deepcopy(doc["preferences"]["rules"][index])
-        updated = copy.deepcopy(before)
-        mutator(updated)
-        updated["rule_id"] = rule_id  # لا سرقة هوية
-        updated["updated_at"] = _now_iso()
-        errors = validate_rule(updated)
-        if errors:
-            raise InvalidRuleError(f"التعديل يخالف المخطط: {errors}")
-        doc["preferences"]["rules"][index] = updated
-        self._append_change(change_action, {"rule_id": rule_id, "before": before})
-        self.save()
+        with self._mutation() as doc:
+            index = self._find_index(rule_id)
+            before = copy.deepcopy(doc["preferences"]["rules"][index])
+            updated = copy.deepcopy(before)
+            mutator(updated)
+            updated["rule_id"] = rule_id  # لا سرقة هوية
+            updated["updated_at"] = _now_iso()
+            errors = validate_rule(updated)
+            if errors:
+                raise InvalidRuleError(f"التعديل يخالف المخطط: {errors}")
+            doc["preferences"]["rules"][index] = updated
+            self._append_change(change_action, {"rule_id": rule_id, "before": before})
         return copy.deepcopy(updated)
 
     def _find_index(self, rule_id: str) -> int:
@@ -450,33 +490,42 @@ class PreferenceStore:
     def revert_last_change(self) -> Optional[Dict[str, Any]]:
         """يرجع آخر تعديل قاعدة من لقطة «قبل» في change_log.
 
+        يشمل كل أفعال القواعد (تحديث/تأكيد/ترقية/تعطيل/تفعيل/حذف) —
         كل إدخال مستعاد سابقًا يُعلَّم ``reverted=True`` فلا يُستعاد منه
-        مرتين (مع بقائه للسجل التتبعي). لا يسترجع الإنشاء (لا حالة سابقة
-        له) — يُرجع None عندها.
+        مرتين (مع بقائه للسجل التتبعي). إنشاء القاعدة ليس له حالة سابقة
+        — إن كان آخر حدث غير مستعاد هو الإنشاء يُرجع None.
         """
-        doc = self._require_writable()
-        log = doc.get("change_log", [])
-        for entry in reversed(log):
-            if entry.get("action") not in ("rule_created", "rule_updated"):
-                continue
-            if entry.get("reverted"):
-                continue
-            rule_id = entry["details"].get("rule_id")
-            before = entry["details"].get("before")
-            if before is None:  # إنشاء — لا حالة سابقة للاستعادة
+        with self._thread_lock:
+            if self._read_only or self._document is None:
+                raise StoreReadOnlyError(
+                    f"المخزن في SAFE READ-ONLY — الأخطاء: {self._load_errors}"
+                )
+            with self._file_lock():
+                self._reload_under_lock()
+                doc = self._document
+                log = doc.get("change_log", [])
+                for entry in reversed(log):
+                    action = entry.get("action", "")
+                    if not action.startswith("rule_") or action == "rule_reverted":
+                        continue
+                    if entry.get("reverted"):
+                        continue
+                    rule_id = entry["details"].get("rule_id")
+                    before = entry["details"].get("before")
+                    if before is None:  # إنشاء — لا حالة سابقة للاستعادة
+                        return None
+                    try:
+                        index = self._find_index(rule_id)
+                    except InvalidRuleError:
+                        return None
+                    restored = copy.deepcopy(before)
+                    restored["updated_at"] = _now_iso()
+                    errors = validate_rule(restored)
+                    if errors:
+                        raise InvalidRuleError(f"اللقطة المخزنة تالفة: {errors}")
+                    doc["preferences"]["rules"][index] = restored
+                    entry["reverted"] = True
+                    self._append_change("rule_reverted", {"rule_id": rule_id})
+                    self._save_locked()
+                    return copy.deepcopy(restored)
                 return None
-            try:
-                index = self._find_index(rule_id)
-            except InvalidRuleError:
-                return None
-            restored = copy.deepcopy(before)
-            restored["updated_at"] = _now_iso()
-            errors = validate_rule(restored)
-            if errors:
-                raise InvalidRuleError(f"اللقطة المخزنة تالفة: {errors}")
-            doc["preferences"]["rules"][index] = restored
-            entry["reverted"] = True
-            self._append_change("rule_reverted", {"rule_id": rule_id})
-            self.save()
-            return copy.deepcopy(restored)
-        return None
