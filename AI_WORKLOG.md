@@ -6,6 +6,14 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ---
 
+## 2026-11-21 — AlphaCode closed-loop integration (sync / ingest / approval-gated apply)
+
+- Built the missing half of the AlphaCode loop on top of the existing MCP bridge: `docs/alphacode-integration.md` is the protocol reference (closed loop, roles, disk layout, security rails, quick start).
+- `scripts/alphacode_sync.py`: outbox → sensitive-barrier scan (real `is_sensitive_path` name/content rules, rejects land in `rejected/` with reason logs) → orphan branch `alphacode/artifacts` via dedicated worktree → normal push only (no force, ff-only retry), caps 4MB/file, 300 files/batch, 64MB/batch; token from env only (`ALPHACODE_GH_TOKEN` / `GITHUB_TOKEN`), then hands accepted files to `inbox/` and empties the outbox.
+- `scripts/alphacode_ingest.py`: IntelliFile consumes AlphaCode artifacts — immutable archive names (`<UTC>__<sha256-8>__name`), append-only `manifest.jsonl`, classification via `SmartFileClassifier` with graceful degradation, evidence registered in `FeedbackEngine` as **pending** (never activates a preference rule without user confirmation), and a `summary.md` dashboard.
+- `scripts/alphacode_apply.py`: the mandatory approval gate — AlphaCode proposals are patches under `proposals/<id>/`; nothing is applied without either an interactive consent (recorded with full sha256) or an `approvals.jsonl` entry whose sha256 matches the current patch byte-for-byte (post-approval tampering is rejected); target paths validated inside repo root with sensitive patterns blocked; backup before apply; pytest after apply; failure ⇒ automatic byte-exact rollback; manual `--rollback <id>` always available.
+- 14 unit tests in `tests/unit/test_alphacode_toolkit.py` covering barrier rejection (names, symlinks, caps), orphan-branch batch commits, immutable ingest archive, and every gate refusal path (no approval, sha mismatch, rejected decision, escaping/sensitive targets) plus auto-rollback.
+
 ## 2026-11-20 — AlphaCode local MCP bridge (feature branch)
 
 - Implemented `src/integrations/alphacode_mcp_server.py`: local stdio MCP server using the 2025-11-25 lifecycle; no TCP/HTTP listener and no network client.
