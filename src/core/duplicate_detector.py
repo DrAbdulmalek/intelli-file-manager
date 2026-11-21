@@ -22,9 +22,12 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 
 from ..db.schemas import FileRecord
+
+if TYPE_CHECKING:
+    from .rule_schemas import Ruleset  # يستخدم في تعليق النوع أدناه (F821)
 
 logger = logging.getLogger(__name__)
 

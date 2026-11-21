@@ -13,6 +13,7 @@ import logging
 from pathlib import Path
 
 from .metadata_extractor import extract_image_metadata, extract_av_metadata
+from .sensitive_barrier import block_if_sensitive
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,12 @@ class MultimodalProcessor:
 
         الميتاداتا الأساسية (width/height/format/mode/exif) تُستخرَج عبر
         extract_image_metadata الموحّد (PR-03). وصف AI يُضاف إن توفّر ollama.
+
+        الحاجز أولاً: الصورة الحساسة لا تُفتح — لا ميتاداتا ولا EXIF ولا OCR
+        ولا إرسال للنموذج.
         """
+        # حاجز الحساسية قبل أي فتح للملف (ميتاداتا/EXIF/OCR/AI)
+        block_if_sensitive(filepath, operation="معالجة الصورة")
         path = Path(filepath)
         result = {"path": str(path), "type": "image"}
 
@@ -83,7 +89,12 @@ class MultimodalProcessor:
         return result
 
     def process_audio(self, filepath: str) -> dict:
-        """تحليل ملف صوتي واستخراج النص"""
+        """تحليل ملف صوتي واستخراج النص
+
+        الحاجز أولاً: الملف الصوتي الحساس لا يُفتح ولا يُنسخ نصه خارجياً.
+        """
+        # حاجز الحساسية قبل أي فتح للملف
+        block_if_sensitive(filepath, operation="معالجة الصوت")
         path = Path(filepath)
         result = {"path": str(path), "type": "audio"}
 
@@ -108,7 +119,11 @@ class MultimodalProcessor:
 
         الميتاداتا (المدة، الترميز، الأبعاد، معدل البت) تُستخرَج عبر
         extract_av_metadata الموحّد (PR-03) الذي يستخدم ffprobe.
+
+        الحاجز أولاً: ملف الفيديو الحساس لا يُفتح حتى بالميتاداتا.
         """
+        # حاجز الحساسية قبل أي فتح للملف (حتى ffprobe قراءة خارجية)
+        block_if_sensitive(filepath, operation="معالجة الفيديو")
         path = Path(filepath)
         result = {"path": str(path), "type": "video", "name": path.name}
 
@@ -123,21 +138,37 @@ class MultimodalProcessor:
         return result
 
     def extract_text_from_pdf(self, filepath: str) -> str:
-        """استخراج نص من PDF — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
+        """استخراج نص من PDF — يُوكَّل إلى FileInventory (PR-03 توحيد)
+
+        الحاجز أولاً: الملف الحساس لا يُفتح محتواه.
+        """
+        block_if_sensitive(filepath, operation="استخراج نص PDF")
         from .file_inventory import _extract_pdf_text
         return _extract_pdf_text(Path(filepath))
 
     def extract_text_from_docx(self, filepath: str) -> str:
-        """استخراج نص من DOCX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
+        """استخراج نص من DOCX — يُوكَّل إلى FileInventory (PR-03 توحيد)
+
+        الحاجز أولاً: الملف الحساس لا يُفتح محتواه.
+        """
+        block_if_sensitive(filepath, operation="استخراج نص DOCX")
         from .file_inventory import _extract_docx_text
         return _extract_docx_text(Path(filepath))
 
     def extract_text_from_xlsx(self, filepath: str) -> str:
-        """استخراج نص من XLSX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
+        """استخراج نص من XLSX — يُوكَّل إلى FileInventory (PR-03 توحيد)
+
+        الحاجز أولاً: الملف الحساس لا يُفتح محتواه.
+        """
+        block_if_sensitive(filepath, operation="استخراج نص XLSX")
         from .file_inventory import _extract_xlsx_text
         return _extract_xlsx_text(Path(filepath))
 
     def extract_text_from_pptx(self, filepath: str) -> str:
-        """استخراج نص من PPTX — يُوكَّل إلى FileInventory (PR-03 توحيد)"""
+        """استخراج نص من PPTX — يُوكَّل إلى FileInventory (PR-03 توحيد)
+
+        الحاجز أولاً: الملف الحساس لا يُفتح محتواه.
+        """
+        block_if_sensitive(filepath, operation="استخراج نص PPTX")
         from .file_inventory import _extract_pptx_text
         return _extract_pptx_text(Path(filepath))

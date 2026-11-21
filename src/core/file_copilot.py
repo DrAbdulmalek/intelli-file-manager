@@ -20,6 +20,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from .path_policy import iter_files
+from .sensitive_barrier import block_if_sensitive, is_sensitive_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -132,6 +135,13 @@ class FileCopilot:
     def index_files(self, filepaths: list[str]) -> int:
         """Index files for the copilot to reference.
 
+        الأمان لكل ملف على حدة (قاعدة الحاجز الموحّد):
+          - المجلدات تُوسَّع عبر iter_files (لا يتبع symlinks) وكل ملف داخلها
+            يُفحص بالحاجز قبل وصوله إلى RAG — لا يمر مجلد كامل دون فحص كل
+            ملف سيُقرأ منه.
+          - الملفات المحظورة لا تُفتح ولا تُفهرس ولا تُمرَّر لمحرك RAG.
+          - لا يُمرَّر مسار مجلد خاماً إلى RAG إطلاقاً.
+
         Args:
             filepaths: List of file paths to index
 
@@ -143,25 +153,50 @@ class FileCopilot:
 
         total = 0
 
-        # Index into hybrid search
+        # توسّع المجلدات وفحص كل ملف بالحاجز قبل أي استخدام
+        allowed_files: list[str] = []
+        for fp in filepaths:
+            try:
+                path = Path(fp)
+                if path.is_dir():
+                    # iter_files لا يتبع symlinks ولا يعبر نقاط التركيب؛
+                    # الحاجز يُطبق لكل ملف قبل قبوله
+                    for item in iter_files(path):
+                        if is_sensitive_path(item):
+                            logger.warning(f"محظور: ملف حساس مستثنى من فهرسة Copilot: {item}")
+                            continue
+                        allowed_files.append(str(item))
+                    # الفهرسة إلى محرك hybrid تبقى عبر index_files الذي يفحص
+                    # كل ملف بالحاجز داخل _extract_text (عقد PR #63)
+                    if self._hybrid_search:
+                        try:
+                            total += self._hybrid_search.index_files(fp)
+                        except Exception as exc:
+                            logger.debug(f"خطأ في فهرسة المجلد {fp}: {exc}")
+                elif path.is_file():
+                    if is_sensitive_path(path):
+                        logger.warning(f"محظور: ملف حساس مستثنى من فهرسة Copilot: {fp}")
+                        continue
+                    allowed_files.append(fp)
+                else:
+                    logger.debug(f"مسار غير موجود أو غير مدعوم للفهرسة: {fp}")
+            except Exception as exc:
+                logger.debug(f"خطأ في فهرسة {fp}: {exc}")
+
+        # الملفات المفردة إلى hybrid (الحاجز داخل _extract_text أيضاً)
         if self._hybrid_search:
-            for fp in filepaths:
+            for fp in allowed_files:
                 try:
-                    path = Path(fp)
-                    if path.is_dir():
-                        count = self._hybrid_search.index_files(fp)
-                        total += count
-                    elif path.is_file():
-                        text = self._hybrid_search._extract_text(fp)
-                        if text.strip():
-                            total += 1
+                    text = self._hybrid_search._extract_text(fp)
+                    if text.strip():
+                        total += 1
                 except Exception as exc:
                     logger.debug(f"خطأ في فهرسة {fp}: {exc}")
 
-        # Index into RAG engine
+        # Index into RAG engine — ملفات فقط (مجلدات موسّعة أعلاه) وبعد الحاجز
         if self._rag_engine:
             try:
-                rag_count = self._rag_engine.index_documents(filepaths)
+                rag_count = self._rag_engine.index_documents(allowed_files)
                 logger.info(f"تم فهرسة {rag_count} مقطع في RAGEngine")
             except Exception as exc:
                 logger.debug(f"خطأ في فهرسة RAG: {exc}")
@@ -347,8 +382,13 @@ class FileCopilot:
         return False
 
     def summarize_file(self, filepath: str) -> str:
-        """Generate a summary of a file's content."""
+        """Generate a summary of a file's content.
+
+        الحاجز أولاً: الملف الحساس لا يُفتح محتواه ولا يُرسل للنموذج.
+        """
         try:
+            # حاجز الحساسية قبل أي قراءة — الملفات الطبية/الأسرار لا تُفتح
+            block_if_sensitive(filepath, operation="تلخيص Copilot")
             text = ""
             path = Path(filepath)
             ext = path.suffix.lower()

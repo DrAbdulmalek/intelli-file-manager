@@ -16,7 +16,15 @@ from src.db.snippet_db import SnippetDB
 # ----------------------------------------------------------------------
 @pytest.fixture(scope="module")
 def bundled_glossary():
-    return GlossaryService()  # uses the bundled data/medical_glossary.csv
+    # المسرد المنسّق data/medical_glossary.csv (741 زوجاً) غير متتبَّع في
+    # المستودع (قاعدة data/ في .gitignore) — يغيب عن أي استنساخ نظيف/CI،
+    # فنتخطى بصراحة بدل فشل زائف؛ يكفي توفير الملف من جهاز التحرير ليعود
+    # هذه الاختبارات إلزامية.
+    svc = GlossaryService()  # uses the bundled data/medical_glossary.csv
+    if svc.size < 700:
+        pytest.skip("المسرد المنسّق data/medical_glossary.csv غير متوفر في هذا "
+                    f"الاستنساخ (غير متتبَّع؛ الحجم الحالي {svc.size})")
+    return svc
 
 
 def test_bundled_glossary_loaded(bundled_glossary):

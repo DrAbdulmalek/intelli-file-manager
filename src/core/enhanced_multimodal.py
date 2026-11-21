@@ -31,7 +31,13 @@ class EnhancedMultimodalProcessor:
         # محفوظ للتوافق الخلفي: المحرك الفعلي يُدار داخل ocr_service
         self.ocr_engine = None
 
-    def process_image(self, filepath: str | Path) -> Dict[str, Any]:
+    def process_image(self, filepath: str | Path, fix_scan: bool = True) -> Dict[str, Any]:
+        """OCR صورة عبر الخدمة المركزية.
+
+        ملاحظة توافق: المعامل ``fix_scan`` محفوظ للتوافق مع عقد API القديم
+        (/api/process/image)؛ التحسين المسبق أصبح داخل المحركات المركزية
+        فلا يُنفَّذ منفصلًا هنا.
+        """
         path = Path(filepath)
         result: Dict[str, Any] = {"path": str(path), "type": "image", "success": False}
 
@@ -71,5 +77,49 @@ class EnhancedMultimodalProcessor:
         except Exception as e:
             logger.error(f"فشل معالجة الملف {path.name}: {e}")
             result["error"] = str(e)
+
+        return result
+
+    # ------------------------------------------------------------------
+    # الصوت/الفيديو/المستندات: كانت endpoints الـAPI تستدعيها على هذا
+    # الصنف بينما لم تكن معرّفة هنا (AttributeError → 500). الآن تُوكَّل
+    # إلى MultimodalProcessor الذي يطبق الحاجز الحساسي قبل أي قراءة.
+    # ------------------------------------------------------------------
+
+    def process_audio(self, filepath: str | Path) -> Dict[str, Any]:
+        """تحليل ملف صوتي (نسخ نص) عبر MultimodalProcessor — الحاجز أولاً."""
+        from .multimodal_processor import MultimodalProcessor
+        return MultimodalProcessor().process_audio(str(filepath))
+
+    def process_video(self, filepath: str | Path) -> Dict[str, Any]:
+        """استخراج ميتاداتا فيديو عبر MultimodalProcessor — الحاجز أولاً."""
+        from .multimodal_processor import MultimodalProcessor
+        return MultimodalProcessor().process_video(str(filepath))
+
+    def process_document(self, filepath: str | Path) -> Dict[str, Any]:
+        """استخراج نص مستند (pdf/docx/xlsx/pptx/txt) — الحاجز أولاً.
+
+        يستخدم FileInventory (الاستخراج الموحّد PR-03) بعد فحص الحاجز؛
+        الملف الحساس لا يُفتح محتواه إطلاقاً.
+        """
+        from .file_inventory import FileInventory
+        from .sensitive_barrier import block_if_sensitive
+
+        path = Path(filepath)
+        result: Dict[str, Any] = {"path": str(path), "type": "document"}
+
+        # حاجز الحساسية قبل أي قراءة محتوى
+        block_if_sensitive(str(path), operation="معالجة المستند")
+
+        inventory = FileInventory(include_content=True, max_file_size=10 * 1024 * 1024)
+        text = inventory._extract_content(path, path.suffix.lower())
+        if text.strip():
+            result["extracted_text"] = text
+            result["success"] = True
+        else:
+            result["extracted_text"] = ""
+            result["success"] = False
+            result["error"] = "لم يُستخرج نص من المستند (نوع غير مدعوم أو محتوى فارغ)"
+        return result
 
         return result
