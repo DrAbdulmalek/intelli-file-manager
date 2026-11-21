@@ -99,10 +99,6 @@ class APIClient:
         data, _ = self._request("POST", "/api/classify", json={"path": path})
         return data
 
-    def ner_extract(self, text: str) -> dict:
-        data, _ = self._request("POST", "/api/ner/extract", json={"text": text})
-        return data
-
     def stats(self) -> dict:
         data, _ = self._request("GET", "/api/stats")
         return data
@@ -259,7 +255,6 @@ class MainScreen(Screen):
         for label, callback in [
             ("تصنيف", self.do_classify),
             ("وسوم", self.do_tags),
-            ("NER طبي", self.do_ner),
             ("إحصائيات", self.do_stats),
             ("صحة", self.do_health),
         ]:
@@ -359,29 +354,6 @@ class MainScreen(Screen):
                 else:
                     lines = [str(tags)]
                 self.result_panel.set_text("\n".join(lines))
-            else:
-                self.result_panel.set_text(str(result))
-        except Exception as e:
-            self.result_panel.set_text(f"خطأ: {e}")
-
-    def do_ner(self):
-        sample = "المريض أحمد يعاني من مرض السكري ويأخذ الميتفورمين 500 ملغ"
-        self.result_panel.set_text("جاري استخراج الكيانات الطبية...")
-        try:
-            result = self.api.ner_extract(sample)
-            if "error" in result:
-                self.result_panel.set_text(f"خطأ: {result['error']}")
-            elif "entities" in result:
-                entities = result["entities"]
-                if not entities:
-                    self.result_panel.set_text("لا توجد كيانات مستخرجة")
-                else:
-                    lines = []
-                    for ent in entities:
-                        etype = ent.get("entity_type", ent.get("type", "?"))
-                        text_val = ent.get("text", "?")
-                        lines.append(f"[{etype}] {text_val}")
-                    self.result_panel.set_text("\n".join(lines))
             else:
                 self.result_panel.set_text(str(result))
         except Exception as e:
