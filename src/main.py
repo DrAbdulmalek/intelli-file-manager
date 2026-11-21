@@ -12,7 +12,11 @@ from pathlib import Path
 
 
 def setup_logging(verbose: bool = False):
-    """تهيئة نظام التسجيل"""
+    """تهيئة نظام التسجيل
+
+    ملاحظة: لا تنشئ هذه الدالة مجلد البيانات — يجب ضمان وجود ~/.intellifile
+    (أي data_dir.mkdir) قبل استدعائها، وإلا فشل FileHandler في أول تشغيل.
+    """
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
