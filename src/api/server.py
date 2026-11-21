@@ -15,6 +15,7 @@ Privacy-first: all processing is local, no data leaves the device.
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import re
@@ -50,12 +51,30 @@ _API_KEY = os.environ.get("INTELLIFILE_API_KEY", "")
 _api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
+def _ws_authorized(websocket: WebSocket) -> tuple[bool, Optional[str]]:
+    """مصادقة WebSocket بنفس سياسة المفتاح: ترويسة X-API-Key، أو بروتوكول فرعي ``ifm-key.<key>``
+    (المتصفح لا يضيف ترويسات مخصصة). المفتاح لا يوضع في الـquery حتى لا يدخل سجلات الوصول.
+    عند عدم ضبط INTELLIFILE_API_KEY تُتخطى المصادقة (استخدام localhost فقط) كبقية الـendpoints."""
+    if not _API_KEY:
+        return True, None
+    supplied = websocket.headers.get("x-api-key", "")
+    subprotocol: Optional[str] = None
+    if not supplied:
+        for proto in websocket.headers.get("sec-websocket-protocol", "").split(","):
+            proto = proto.strip()
+            if proto.startswith("ifm-key."):
+                supplied, subprotocol = proto[len("ifm-key."):], proto
+                break
+    ok = bool(supplied) and hmac.compare_digest(supplied.encode(), _API_KEY.encode())
+    return ok, (subprotocol if ok else None)
+
+
 async def _verify_api_key(api_key: str = Security(_api_key_scheme)) -> str:
     """Dependency that enforces API key when INTELLIFILE_API_KEY is configured."""
     if not _API_KEY:
         # No API key configured — skip auth (localhost-only is the default)
         return "anonymous"
-    if api_key == _API_KEY:
+    if api_key and hmac.compare_digest(api_key.encode(), _API_KEY.encode()):
         return api_key[:4] + "..."
     raise HTTPException(
         status_code=401,
@@ -565,7 +584,13 @@ def create_app() -> FastAPI:
             await websocket.close(code=4003, reason="Origin not allowed")
             return
 
-        await websocket.accept()
+        # Security: نفس سياسة المفتاح لبقية الـendpoints (كانت تُتجاوز هنا)
+        authorized, subprotocol = _ws_authorized(websocket)
+        if not authorized:
+            await websocket.close(code=4401, reason="API key required")
+            return
+
+        await websocket.accept(subprotocol=subprotocol)
         copilot = _get_engine("copilot")
         try:
             while True:
