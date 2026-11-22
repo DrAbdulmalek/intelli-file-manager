@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — Independent Review Round 2 (F8–F13 — PR #78)
+
+### أُصلح
+- **F8 — TOCTOU كامل** (`src/core/medical_db.py`): تحقق الهوية في
+  `_sha256_with_identity_check` صار شاملاً (st_dev/st_ino/st_size/st_mtime_ns/
+  st_ctime_ns) قبل القراءة وبعدها، مع **قراءة مزدوجة ومقارنة بصمة المحتوى**
+  (كشف حتمي لتغيّر المحتوى بحجم وinode ثابتين — مستقل عن دقة الطوابع الزمنية
+  الخشنة)، وlstat بعد الإغلاق مع فحص S_ISREG (رفض استبدال المسار برابط رمزي
+  حتى إلى نفس الهدف). حدود الإثبات موثقة في docstring.
+- **F9 — تعويض داخل الإجراء متعدد الخطوات** (`src/core/undo_log.py`): فشل
+  نقل/hذف sidecar بعد نجاح الخطوة الأولى لم يعد يترك تراجعاً نصفاً — تعويض
+  داخلي فوري يعيد حالة ما بعد الدفعة، ورسائل Recovery صريحة قابلة للاستكمال،
+  ولا تدّعية استعادة عند تعذر التعويض. كما لم يعد `rollback_last` يفقد سجل
+  التراجع عند الفشل.
+- **F10 — دقة تعويض COPY** (`src/core/undo_log.py`): التعويض يستعيد النسخة
+  من نسخة احتياطية staging مُتحققة البصمة (تبقى حتى نجاح الاستعادة **والتحقق**)،
+  أو من المصدر فقط بإثبات تطابق بصمته مع checksum_after — وإلا fail-closed:
+  لا استرجاع نسخة بمحتوى خاطئ من مصدر معدّل، ولا تُضح ببيانات المستخدم.
+- **F11 — إثبات already-rolled-back لـ MOVE** (`src/core/undo_log.py` +
+  `src/core/rule_engine.py`): تصنيف «التراجع مكتمل سابقاً» يتطلب تطابق بصمة
+  الملف الموجود مع checksum_after المسجل؛ ملف بديل أو معدّل أو سجل بلا هوية →
+  رفض fail-closed بلا حذف سجل. `_exec_move` يسجل checksum_after للنقل الناجح.
+- **F12 — المحافظة على الوسوم السابقة** (`src/core/rule_engine.py` +
+  `src/core/rule_schemas.py` + `src/core/undo_log.py`): `tags_added` تسجل ما
+  أُضيف فعلاً فقط؛ حقل جديد `tags_already_present` يميز الموجود مسبقاً (توافق
+  خلفي كامل)؛ التراجع لا يزال وسم لم تضفه العملية — بالمرجع نفسه UNTAG و
+  DELETE_FLAG، والسجلات القديمة بسلوكها الموثق.
+- **F13 — إصلاح مصاحب** (`src/core/undo_log.py`): سجلات الإخفاق داخل الدفعة
+  لم تعد تُجهض preflight التراجع (لم تُنفّذ أصلاً فلا شيء لعكسه) — تُعلَّم
+  no-op في `skipped_failed` ويُحتفظ بسجلها أثراً تدقيقياً؛ وإلا فإن وصول
+  batch_id إلى سجلات الفشل كان يمنع التراجع عن الدفعة كاملة.
+
+### أُضيف
+- اختبارات المراجعة المستقلة الجديدة: `test_register_file_toctou.py` (5 اختبارات
+  F8 إضافية)، `test_f9_intra_action_compensation.py` (5)،
+  `test_f10_copy_compensation.py` (5)، `test_f11_move_identity.py` (6)،
+  `test_f12_tag_preservation.py` (6 عبر RuleEngine.execute الحقيقي)،
+  `test_f13_batch_id_e2e.py` (اختبار تكامل end-to-end من execute حتى export_csv
+  يشمل السجلات الناجحة والفاشلة + قابلية التراجع الكاملة للدفعة).
+
 ## [Unreleased] — AlphaCode closed-loop integration (تكامل الحلقة المغلقة)
 
 ### أُضيف
