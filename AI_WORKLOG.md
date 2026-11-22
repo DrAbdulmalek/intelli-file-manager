@@ -863,3 +863,12 @@ PR #78 يبقى Draft، لا skip/xfail/إضعاف، بيانات اصطناعي
 - Code changes and tests added in branch `fix/undo-log-retry-semantics-2026-11-22`.
 - Local execution is not available in this GitHub-only editing pass; test results remain **UNPROVEN** until CI runs on the resulting branch/PR head.
 - No changes to main; no merge; PR #78 remains Draft.
+
+
+---
+
+## 2026-11-22 — Independent review F17: preserve initial register_file identity
+
+- **F17 — baseline identity reset:** `register_file` captured `st` for metadata, then called `p.stat()` again after sensitivity classification to create the hash baseline. A replacement between those calls could make the hash refer to a new inode while size/mtime metadata still came from the first inode.
+- **Remediation:** pass the original `st` to `_sha256_with_identity_check`; add a regression test that replaces the file after the initial stat and before hashing, requiring `sha256=None`.
+- **Evidence:** source and test committed to the PR #78 branch; CI pending on the new head. No local test execution claimed.
