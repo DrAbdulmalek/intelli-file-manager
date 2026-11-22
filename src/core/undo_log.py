@@ -166,10 +166,12 @@ class UndoLog:
     def _preflight_rollback(self, entry: UndoEntry) -> None:
         """فحص تعارض مبدئي قبل أي تعديل على القرص (قراءة فقط — fail-closed).
 
-        دلالات غياب الملف المستهدف (مراجعة مستقلة Finding 5):
-          - MOVE: الوجهة مفقودة + المسار الأصلي موجود → مؤشر قوي على أن
-            التراجع اكتمل سابقاً (إصدار قديم/جلسة سابقة): يُعلَّم السجل
-            already_rolled_back ولا يُعاد عكسه ولا يُحذف.
+        دلالات غياب الملف المستهدف (مراجعة مستقلة Finding 5 + F11):
+          - MOVE: الوجهة مفقودة + المسار الأصلي موجود → يُعامل كتراجع
+            مكتمل سابقاً **فقط بإثبات هوية (F11)**: بصمة الملف الموجود
+            تطابق checksum_after المسجل — يُعلَّم السجل already_rolled_back
+            ولا يُعاد عكسه ولا يُحذف. بلا هوية موثوقة، أو مع ملف بديل/
+            معدّل: رفض fail-closed (لا تصنيف، لا حذف سجل).
           - MOVE: الوجهة والأصل مفقودان معاً → غياب غير مفسَّر → رفض يُجهض
             الدفعة كاملة.
           - COPY: النسخة مفقودة لا يمكن تمييزها عدلياً عن حذف خارجي
@@ -181,10 +183,10 @@ class UndoLog:
         """
         at = entry.action_type
         if at in (ActionType.MOVE.value, ActionType.COPY.value):
+            from .safe_mover import compute_sha256
             target = Path(entry.file_path_after) if entry.file_path_after else None
             if target is not None and target.exists():
                 if entry.checksum_after:
-                    from .safe_mover import compute_sha256
                     current = compute_sha256(target)
                     if current != entry.checksum_after:
                         raise RuntimeError(
@@ -198,6 +200,34 @@ class UndoLog:
                 )
             orig = Path(entry.file_path)
             if at == ActionType.MOVE.value and orig.exists():
+                # F11: وجود ملف في المسار الأصلي لا يثبت أنه الملف الأصلي
+                # نفسه — يلزم إثبات هوية: بصمة الملف الموجود يجب أن تطابق
+                # checksum_after (بصمة الملف عند الوجهة بعد النقل الأصلي؛
+                # MOVE لا يغيّر المحتوى). ملف بديل أو معدّل لا يُصنَّف
+                # أصلياً — رفض fail-closed ولا يُحذف سجل Undo عند غياب
+                # الدليل.
+                recorded = getattr(entry, "checksum_after", None)
+                if not recorded:
+                    raise RuntimeError(
+                        "MOVE: ملف في المسار الأصلي بلا هوية موثوقة في "
+                        "السجل (لا checksum_after) — لا يمكن إثبات أنه "
+                        "الملف الأصلي المُعاد نفسه — رفض fail-closed، لا "
+                        f"تصنيف already-rolled-back، والسجل محفوظ: {orig}"
+                    )
+                try:
+                    current = compute_sha256(orig)
+                except OSError as e:
+                    raise RuntimeError(
+                        f"MOVE: تعذر التحقق من هوية الملف في المسار الأصلي: "
+                        f"{orig} — {e} — رفض fail-closed والسجل محفوظ"
+                    )
+                if current != recorded:
+                    raise RuntimeError(
+                        "MOVE: الملف في المسار الأصلي لا يطابق بصمة الملف "
+                        "المنقول (ملف بديل أو معدّل بعد التراجع) — لا يُصنَّف "
+                        "الملف البديل أصلياً — رفض fail-closed والسجل محفوظ: "
+                        f"{orig}"
+                    )
                 entry._ifm_already_rolled_back = True
                 return
             raise RuntimeError(

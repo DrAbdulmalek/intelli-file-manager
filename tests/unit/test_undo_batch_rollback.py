@@ -154,6 +154,9 @@ def test_move_missing_target_source_present_marks_already(tmp_path, log):
         action_type=ActionType.MOVE.value, file_path=str(src),
         file_path_after=str(gone), rule_name="test", timestamp="t",
         batch_id="BM",
+        # F11: هوية موثوقة — بصمة الملف الموجود في المسار الأصلي تطابق
+        # بصمة الملف بعد النقل الأصلي (MOVE لا يغيّر المحتوى)
+        checksum_after=compute_sha256(src),
     ))
     out = log.rollback_batch("BM")
     assert out["already_rolled_back"] == ["move"]
