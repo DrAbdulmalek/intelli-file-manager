@@ -31,10 +31,16 @@ import json
 import logging
 import os
 import sqlite3
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from .sensitive_barrier import classify_sensitivity
+from .sensitive_barrier import (
+    SensitiveFileBlockedError,
+    classify_sensitivity,
+    open_checked,
+    verify_open_identity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +92,10 @@ CREATE INDEX IF NOT EXISTS idx_files_patient ON files(patient_id);
 
 def _now() -> str:
     return _dt.datetime.now().isoformat(timespec="seconds")
+
+
+class ExportError(RuntimeError):
+    """خطأ تصدير آمن: تطابق مسار المصدر/الوجهة، أو No-Clobber، أو سباق نشر."""
 
 
 class MedicalDB:
@@ -224,11 +234,26 @@ class MedicalDB:
         readable = bool(info.get("readable_in_current_mode"))
         sha = None
         if readable and p.is_file():
-            h = hashlib.sha256()
-            with open(p, "rb") as f:
-                for chunk in iter(lambda: f.read(1 << 20), b""):
-                    h.update(chunk)
-            sha = h.hexdigest()
+            # قراءة آمنة عبر الحاجز (P1): block_if_sensitive + O_NOFOLLOW +
+            # فحص ملف عادي، ثم إعادة التحقق من الهوية (st_dev/st_ino) بعد
+            # القراءة — إن اُستبدل الملف بآخر أثناء القراءة تُرفض البصمة
+            # كلياً ولا يُسجَّل باسم ملف آخر (مضاد TOCTOU).
+            expected_stat = p.stat()
+            try:
+                h = hashlib.sha256()
+                with open_checked(p, "rb", operation="حساب بصمة تسجيل الملف") as f:
+                    for chunk in iter(lambda: f.read(1 << 20), b""):
+                        h.update(chunk)
+                    if not verify_open_identity(f, expected_stat):
+                        raise RuntimeError(
+                            f"تغيّر/اُستبدل الملف أثناء حساب البصمة: {p}"
+                        )
+                sha = h.hexdigest()
+            except (SensitiveFileBlockedError, OSError, RuntimeError) as e:
+                logger.warning(
+                    "تعذّرت القراءة الآمنة — تسجيل وصفي بلا بصمة: %s (%s)", p, e
+                )
+                sha = None
         elif not readable:
             logger.warning(
                 "ملف محجوب عن القراءة في الوضع الحالي — تسجيل وصفي بلا بصمة: %s", p
@@ -271,36 +296,100 @@ class MedicalDB:
         return [dict(r) for r in self._conn.execute(q, args).fetchall()]
 
     # ─── التصدير المجرّد (للنشر العام لاحقاً) ─────────────────────────────
-    def export_deidentified(self, out_path: str | Path) -> dict:
+    def export_deidentified(
+        self,
+        out_path: str | Path,
+        *,
+        overwrite: bool = False,
+    ) -> dict:
         """ينشئ نسخة نشر بلا أي حقل شخصي أو مسار قد يحوي هوية.
 
-        يُحذف: الاسم والعمر والجنس والملاحظات من المرضى، ومسار الملف الأصلي
-        من السجلات، وجدول الملفات بالكامل (المسارات/Bloom الهويات).
-        يبقى: المعرّف المستعار، تاريخ السجل، نوعه، الملخص، والنتائج المنظمة.
+        يُجرَّد من patients: الاسم والعمر والجنس والملاحظات. ومن records:
+        المسار الأصلي والبصمة. وجدول files يُحذف كلياً (مسارات/هويات).
+
+        سياسة الوجهة (P1 — أولوية قصوى):
+          - No-Clobber افتراضياً: يُرفض التصدير إن وُجلت الوجهة مسبقاً
+            (لا حذف ولا استبدال صامت)؛ الاستبدال يتطلب overwrite=True صراحةً.
+          - يُمنع تطابق المصدر والوجهة بعد حل الروابط الرمزية والمسارات النسبية.
+          - تُبنى النسخة في ملف مؤقت ثم تُنشر ذرياً: os.link ذري no-clobber،
+            أو os.replace فقط عند overwrite صريح. قاعدة المصدر لا تُمس إطلاقاً،
+            وفشل أي خطوة لا يمس الوجهة الموجودة مسبقاً.
+
+        حدود تنقية النصوص الحرة (موثقة، لا تُخفى):
+          - الحقول المنظمة تُصفّر (انظر أعلاه)؛ أما حقول summary/findings
+            الحرة فتُنسخ نصياً (free_text_policy="verbatim") وقد تحوي
+            معرّفات ضمن النص. أي نشر عام للنسخة الناتجة يتطلب مراجعة
+            بشرية موثقة — لا تنقية نصية مدمرة تلقائية.
         """
-        out = Path(out_path)
-        if out.exists():
-            out.unlink()
-        with MedicalDB(out) as dst:
-            dst.init()
-            for pid_row in self.list_patients():
-                dst._conn.execute(
-                    "INSERT INTO patients (id, name, age, sex, notes, created_at)"
-                    " VALUES (?,?,?,?,?,?)",
-                    (pid_row["id"], None, None, None, None, pid_row["created_at"]),
-                )
-            n_rec = 0
-            for r in self.list_records():
-                dst._conn.execute(
-                    "INSERT INTO records (patient_id, date, record_type, source_path,"
-                    " sha256, summary, findings, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                    (r["patient_id"], r["date"], r["record_type"], None, None,
-                     r["summary"], r["findings"], r["created_at"]),
-                )
-                n_rec += 1
-            dst._conn.commit()
+        out = Path(out_path).expanduser().resolve()
+        src_resolved = self.path.expanduser().resolve()
+        if out == src_resolved:
+            raise ExportError(
+                "مسار الوجهة يطابق قاعدة المصدر بعد حل الروابط الرمزية"
+                f" والمسارات النسبية: {out}"
+            )
+        if out.exists() and out.is_dir():
+            raise ExportError(f"الوجهة مجلد وليست ملفاً: {out}")
+        if out.exists() and not overwrite:
+            raise ExportError(
+                f"الوجهة موجودة (No-Clobber) ولن تُستبدل: {out} — "
+                "مرر overwrite=True صراحةً إن أردت الاستبدال."
+            )
+
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".ifm_export_{out.name}_", suffix=".part", dir=str(out.parent)
+        )
+        os.close(fd)
+        tmp_file = Path(tmp_name)
+        published = False
+        try:
+            with MedicalDB(tmp_file) as dst:
+                dst.init()
+                for pid_row in self.list_patients():
+                    dst._conn.execute(
+                        "INSERT INTO patients (id, name, age, sex, notes, created_at)"
+                        " VALUES (?,?,?,?,?,?)",
+                        (pid_row["id"], None, None, None, None, pid_row["created_at"]),
+                    )
+                n_rec = 0
+                for r in self.list_records():
+                    dst._conn.execute(
+                        "INSERT INTO records (patient_id, date, record_type, source_path,"
+                        " sha256, summary, findings, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                        (r["patient_id"], r["date"], r["record_type"], None, None,
+                         r["summary"], r["findings"], r["created_at"]),
+                    )
+                    n_rec += 1
+                dst._conn.commit()
+            # تدفق النسخة المكتملة على القرص قبل النشر الذري
+            with open(tmp_file, "rb") as f:
+                os.fsync(f.fileno())
+            if overwrite and out.exists():
+                os.replace(tmp_file, out)
+            else:
+                # نشر ذري no-clobber: os.link يفشل إن شُغلت الوجهة في سباق
+                # متزامن — يُرفض، ولا استبدال ولا حذف لأي شيء
+                try:
+                    os.link(tmp_file, out)
+                except FileExistsError as e:
+                    raise ExportError(
+                        f"شُغلت الوجهة أثناء التصدير (سباق) — رُفض النشر: {out}"
+                    ) from e
+            published = True
+        finally:
+            if not published and tmp_file.exists():
+                try:
+                    tmp_file.unlink()
+                except OSError as e:
+                    logger.warning("تعذر إزالة الملف المؤقت %s: %s", tmp_file, e)
         self.log("export_deidentified", detail=str(out))
-        return {"out": str(out), "patients": len(self.list_patients()), "records": n_rec}
+        return {
+            "out": str(out),
+            "patients": len(self.list_patients()),
+            "records": n_rec,
+            "free_text_policy": "verbatim",
+        }
 
     # ─── السجل والإحصاء ───────────────────────────────────────────────────
     def log(self, action: str, path: Optional[str] = None, detail: Optional[str] = None) -> None:
