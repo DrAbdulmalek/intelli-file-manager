@@ -45,6 +45,39 @@ logger = logging.getLogger(__name__)
 PathLike = Union[str, Path]
 
 # دليمة DICOM عند الإزاحة 128 (البايتات 128-131) وفق معيار DICOM
+# ─── وضع العيادة المحلية (2026-11-22 — بقرار المالك) ────────────────────────
+# "strict" (الافتراضي): المحتوى الطبي محجوب عن القراءة كما في التصلّد.
+# "local"  (وضع العيادة): قراءة المحتوى الطبي ومعالجته محلياً مسموحة — قواعد
+#           الأسرار/الاعتماديات/مجلدات النظام تبقى محجوبة دائماً في كل الأوضاع،
+#           والإرسال الخارجي يبقى محكوماً بالحكم الصارم (is_sensitive_strict)
+#           فلا يغادر أي محتوى طبي الجهاز مهما كان الوضع.
+_MEDICAL_MODES = ("strict", "local")
+MEDICAL_MODE: str = os.environ.get("INTELLIFILE_MEDICAL_MODE", "strict").strip().lower()
+if MEDICAL_MODE not in _MEDICAL_MODES:
+    logger.warning("INTELLIFILE_MEDICAL_MODE غير معروف: %r — استخدام strict", MEDICAL_MODE)
+    MEDICAL_MODE = "strict"
+
+
+def medical_mode() -> str:
+    """الوضع الحالي لمعاملة المحتوى الطبي: strict أو local."""
+    return MEDICAL_MODE
+
+
+def set_medical_mode(mode: str) -> None:
+    """تغيير الوضع وقت التشغيل (إعدادات التطبيق/الاختبارات). القيم: strict | local."""
+    global MEDICAL_MODE
+    m = (mode or "").strip().lower()
+    if m not in _MEDICAL_MODES:
+        raise ValueError(f"وضع غير معروف: {mode!r} — المتاح: {_MEDICAL_MODES}")
+    MEDICAL_MODE = m
+    logger.info("وضع المحتوى الطبي الآن: %s", MEDICAL_MODE)
+
+
+def medical_reads_unlocked() -> bool:
+    """True في وضع العيادة المحلية — قراءة المحتوى الطبي مسموحة محلياً."""
+    return MEDICAL_MODE == "local"
+
+
 _DICOM_MAGIC = b"DICM"
 _DICOM_MAGIC_OFFSET = 128
 _DICOM_MAGIC_LEN = 4
@@ -209,6 +242,44 @@ SENSITIVE_PATH_PARTS = frozenset(
     }
 )
 
+# الأجزاء الطبية وحدها — هي وحدها التي يفتحها وضع العيادة المحلية
+MEDICAL_PATH_PARTS = frozenset(
+    {
+        "mri",
+        "dicom",
+        "medical",
+        "patient",
+        "patients",
+        "medical_records",
+        "hospital_records",
+        "clinical",
+        "radiology",
+        "prescriptions",
+        "laboratory",
+        "lab_results",
+        "مرضى",
+        "المرضى",
+        "مريض",
+        "سجل طبي",
+        "سجلات طبية",
+        "تقرير طبي",
+        "تقرير_طبي",
+        "أشعة",
+        "وصفة",
+        "وصفات",
+        "تحاليل",
+        "مختبر",
+        "clinics",
+        "clinic",
+        "hospital",
+        "hospitals",
+        "مستشفى",
+        "عيادة",
+    }
+)
+# مجلدات النظام والاعتماديات — لا يفتحها أي وضع أبداً
+SECRET_SYSTEM_PATH_PARTS = SENSITIVE_PATH_PARTS - MEDICAL_PATH_PARTS
+
 # أجزاء اسم الملف التي تشير إلى محتوى طبي أو حساس
 SENSITIVE_FILENAME_PARTS = frozenset(
     {
@@ -255,11 +326,49 @@ SENSITIVE_FILENAME_PARTS = frozenset(
     }
 )
 
+# الأجزاء الطبية في اسم الملف (تُفتح للقراءة في الوضع المحلي فقط)
+MEDICAL_FILENAME_PARTS = frozenset(
+    {
+        "mri",
+        "dicom",
+        "ct_scan",
+        "ct_scan_",
+        "scan",
+        "scan_",
+        "xray",
+        "x_ray",
+        "ultrasound",
+        "patient",
+        "medical_records",
+        "hospital_records",
+        "clinical",
+        "radiology",
+        "prescription",
+        "prescriptions",
+        "laboratory",
+        "lab_result",
+        "مرضى",
+        "تقرير طبي",
+        "تقرير_طبي",
+        "ملف مريض",
+        "ملف_مريض",
+        "chest",
+        "صدر",
+        "brain",
+        "دماغ",
+        "spine",
+        "عمود",
+    }
+)
+# أجزاء الأسرار في اسم الملف — لا يفتحها أي وضع أبداً (تطابق CREDENTIAL_WORD_PARTS)
+SECRET_FILENAME_PARTS = SENSITIVE_FILENAME_PARTS - MEDICAL_FILENAME_PARTS
+
 
 CREDENTIAL_WORD_PARTS = frozenset(
     {"credentials", "credential", "secret", "secrets", "password", "passwd",
      "private_key", "apikey", "api_key", "access_token"}
 )
+assert SECRET_FILENAME_PARTS == CREDENTIAL_WORD_PARTS
 
 # ─── استثناءات ───────────────────────────────────────────────────────────────
 
@@ -415,7 +524,7 @@ def _name_parts_lower(name: str) -> set[str]:
     return {p.lower() for p in parts if p}
 
 
-def _classify_by_name_and_path(path: Path) -> bool:
+def _classify_by_name_and_path(path: Path, *, check_medical: bool = True) -> bool:
     """الطبقة الأولى (Path/name-based): اسم الملف والمسار فقط — بلا فتح."""
     ext = path.suffix.lower()
     all_suffixes = [s.lower() for s in path.suffixes]
@@ -430,9 +539,10 @@ def _classify_by_name_and_path(path: Path) -> bool:
     is_template = full_name_lower.endswith(_ENV_TEMPLATE_SUFFIXES)
     doc_ext = ext in {".md", ".rst"}
 
-    # 1. امتداد تصوير طبي مؤكد — دائمًا محظور
-    if is_medical_imaging_extension(ext) or any(
-        s in MEDICAL_IMAGING_EXTENSIONS for s in all_suffixes
+    # 1. امتداد تصوير طبي مؤكد — دائمًا محظور (يُفتح في وضع العيادة المحلية فقط)
+    if check_medical and (
+        is_medical_imaging_extension(ext)
+        or any(s in MEDICAL_IMAGING_EXTENSIONS for s in all_suffixes)
     ):
         return True
 
@@ -459,14 +569,17 @@ def _classify_by_name_and_path(path: Path) -> bool:
         return True
 
     # 2. أي جزء من المسار يشير إلى مجلد طبي/نظام/حساس (إلزامي — لا يتأثر
-    #    بأي إعداد مستخدم مثل skip_dirs)
-    if set(parts) & SENSITIVE_PATH_PARTS:
+    #    بأي إعداد مستخدم مثل skip_dirs). في وضع العيادة المحلية تُفتح الأجزاء
+    #    الطبية للقراءة ويبقى النظامي/الاعتماديات محجوباً دائماً.
+    sensitive_parts = SENSITIVE_PATH_PARTS if check_medical else SECRET_SYSTEM_PATH_PARTS
+    if set(parts) & sensitive_parts:
         return True
 
     # 3. أي جزء من اسم الملف يشير إلى محتوى طبي/حساس (word-boundary)
     name_parts = _name_parts_lower(full_name_lower)
-    if name_parts & SENSITIVE_FILENAME_PARTS:
-        hits = name_parts & SENSITIVE_FILENAME_PARTS
+    filename_parts_hit = SENSITIVE_FILENAME_PARTS if check_medical else CREDENTIAL_WORD_PARTS
+    if name_parts & filename_parts_hit:
+        hits = name_parts & filename_parts_hit
         if doc_ext and "policy" in name_parts and hits <= CREDENTIAL_WORD_PARTS:
             pass  # مستند سياسة يذكر الاعتماديات — وصف وليس سراً (مراجعة P0)
         else:
@@ -481,6 +594,36 @@ def is_sensitive_path(
     file_path: Union[str, Path],
     *,
     skip_dirs: Optional[Iterable[str]] = None,
+) -> bool:
+    """حكم القراءة الحالي: يتبع وضع العيادة المحلية إن كان مفعّلاً.
+
+    في الوضع الافتراضي (strict) مطابق تماماً للحكم الصارم. في وضع العيادة
+    المحلية (local) تُفتح قواعد المحتوى الطبي للقراءة وتبقى قواعد الأسرار
+    ومجلدات النظام محجوبة.
+    """
+    return _is_sensitive_path_impl(
+        file_path, skip_dirs=skip_dirs, check_medical=not medical_reads_unlocked()
+    )
+
+
+def is_sensitive_strict(
+    file_path: Union[str, Path],
+    *,
+    skip_dirs: Optional[Iterable[str]] = None,
+) -> bool:
+    """الحكم الصارم دائماً — بغضّ النظر عن وضع القراءة.
+
+    يُستخدم للإرسال الخارجي وأي مسار يخرج فيه المحتوى من الجهاز: المحتوى
+    الطبي لا يُرسل خارجياً حتى في وضع العيادة المحلية.
+    """
+    return _is_sensitive_path_impl(file_path, skip_dirs=skip_dirs, check_medical=True)
+
+
+def _is_sensitive_path_impl(
+    file_path: Union[str, Path],
+    *,
+    skip_dirs: Optional[Iterable[str]] = None,
+    check_medical: bool = True,
 ) -> bool:
     """يُعيد True إذا كان الملف يُصنّف على أنه حساس ولا يُسمح بقراءة محتواه.
 
@@ -514,7 +657,7 @@ def is_sensitive_path(
     path = Path(file_path)
 
     # الطبقة 1: الاسم والمسار (الرابط + الهدف إن كان رابطاً)
-    if _classify_by_name_and_path(path):
+    if _classify_by_name_and_path(path, check_medical=check_medical):
         return True
 
     # الطبقة 1-روابط: رابط رمزي نهائي أو مكوّن وسيط → يُصنّف المسار الفعلي
@@ -524,14 +667,14 @@ def is_sensitive_path(
     real = os.path.realpath(abspath)
     if real != abspath:
         real_path = Path(real)
-        if _classify_by_name_and_path(real_path) or (
+        if _classify_by_name_and_path(real_path, check_medical=check_medical) or (
             _should_probe_dicom(real_path.suffix.lower()) and _has_dicom_header(real_path)
         ):
             return True
 
     # الطبقة 2: دليمة DICOM عند الإزاحة 128 — للمرشّحين فقط (بلا امتداد،
     # امتداد رقمي، صورة عامة، أو تصوير طبي). المرشّح غير المعتاد (.csv) لا يُمس.
-    if _should_probe_dicom(path.suffix.lower()) and _has_dicom_header(path):
+    if check_medical and _should_probe_dicom(path.suffix.lower()) and _has_dicom_header(path):
         return True
 
     return False
@@ -707,12 +850,28 @@ def classify_sensitivity(file_path: Union[str, Path]) -> dict:
     if not is_sensitive:
         reason = "غير حساس"
 
+    # كشف المحتوى الطبي دائمًا (للعرض والتسجيل) — بغضّ النظر عن وضع القراءة
+    medical_content = bool(
+        is_medical_imaging_extension(ext)
+        or any(s in MEDICAL_IMAGING_EXTENSIONS for s in path.suffixes)
+        or (set(parts) & MEDICAL_PATH_PARTS)
+        or (name_parts & MEDICAL_FILENAME_PARTS)
+        or ("header_dicom" in layers)
+    )
+    unlocked = medical_reads_unlocked()
+    readable_in_current_mode = not _is_sensitive_path_impl(
+        path, check_medical=not unlocked
+    )
+
     return {
         "is_sensitive": is_sensitive,
         "reason": reason,
         "extension": ext,
         "path_parts": parts,
         "detection_layers": layers,
+        "medical_mode": medical_mode(),
+        "medical_content": medical_content,
+        "readable_in_current_mode": readable_in_current_mode,
     }
 
 
@@ -785,7 +944,7 @@ def external_send_allowed(
     """يُعيد True إذا يُسمح بإرسال الملف إلى خدمة خارجية.
 
     تُمنع إرسال أي ملف حساس (طبي، نظامي، اعتماد) إلى أي خدمة خارجية per
-    تعليمات المستخدم. هذه الدالة تُستدعى قبل أي عملية إرسال خارجي.
+    تعليمات المستخدم. هذه الدالة تُستدعى قبل أي عملية إرسال خارجي، والحكم هنا صارم دائماً: وضع العيادة المحلية يفتح القراءة المحلية فقط ولا يخفّض حماية الإرسال.
 
     Args:
         file_path: المسار المراد التحقق منه.
@@ -794,7 +953,7 @@ def external_send_allowed(
     Returns:
         True إذا يُسمح بالإرسال، False إذا كان الملف حساسًا ويُمنع إرساله.
     """
-    if is_sensitive_path(file_path):
+    if is_sensitive_strict(file_path):
         path = Path(file_path)
         logger.warning(
             f"محظور: إرسال ملف حساس إلى خدمة خارجية '{service_name}' — "

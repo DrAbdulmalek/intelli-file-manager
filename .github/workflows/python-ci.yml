@@ -41,20 +41,12 @@ jobs:
         fi
 
     # fail-closed: فشل أي اختبار يفشل الـworkflow — لا fallback ولا || true.
-    # الاستثناء الوحيد: الحجر المعلن في tests/KNOWN_FAILURES.md (6 اختبارات
-    # مسرد — الملف data/medical_glossary.csv على جهاز المالك فقط) عبر
-    # --deselect صريحة؛ لا يُضاف إليها دون مراجعة وتحديث الملف.
+    # الحجر فارغ حالياً (سجل الخروج في tests/KNOWN_FAILURES.md) — لا deselects.
     - name: Run tests
       env:
         QT_QPA_PLATFORM: offscreen
       run: |
-        python -m pytest tests/ -q --tb=short \
-          --deselect tests/unit/test_glossary_and_export.py::test_bundled_glossary_loaded \
-          --deselect tests/unit/test_glossary_and_export.py::test_suggest_arabic_prefix \
-          --deselect tests/unit/test_glossary_and_export.py::test_suggest_english_prefix \
-          --deselect tests/unit/test_glossary_and_export.py::test_suggest_exact_ranks_first \
-          --deselect tests/unit/test_glossary_and_export.py::test_lookup_both_directions \
-          --deselect tests/integration/test_snippets_api.py::test_glossary_suggest_endpoint
+        python -m pytest tests/ -q --tb=short
 
     - name: Static analysis (serious error classes — blocking)
       run: |
