@@ -393,6 +393,11 @@ class UndoEntry:
     new_category: str = ""
     tags_added: List[str] = field(default_factory=list)
     tags_removed: List[str] = field(default_factory=list)
+    # F12: الوسوم المطلوبة التي كانت موجودة مسبقاً فلم تُضف فعلياً —
+    # التمييز بين «أُضيف» و«كان موجوداً» حتى لا يزيل rollback وسماً لم
+    # تضفه العملية. فارغ للسجلات القديمة؛ توافق خلفي كامل: from_dict
+    # يفلتر المفاتيح ويستخدم القيمة الافتراضية [].
+    tags_already_present: List[str] = field(default_factory=list)
     timestamp: str = ""
     success: bool = True
     error_message: str = ""
