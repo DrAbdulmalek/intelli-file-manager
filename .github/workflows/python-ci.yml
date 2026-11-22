@@ -47,6 +47,13 @@ jobs:
         QT_QPA_PLATFORM: offscreen
       run: |
         python -m pytest tests/ -q --tb=short
+    - name: Diagnostics — failed test summary (non-blocking)
+      if: failure()
+      run: |
+        if [ -f .pytest_cache/v/cache/lastfailed ]; then
+          echo "### Last-failed tests (persist cache)" >> "$GITHUB_STEP_SUMMARY"
+          cat .pytest_cache/v/cache/lastfailed >> "$GITHUB_STEP_SUMMARY"
+        fi
 
     - name: Static analysis (serious error classes — blocking)
       run: |
