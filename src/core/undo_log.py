@@ -727,7 +727,16 @@ class UndoLog:
         _save_sidecar(entry.file_path, sidecar)
 
     def _rollback_delete_flag(self, entry: UndoEntry) -> None:
-        """عكس وسم الحذف: إزالة وسم to_delete"""
+        """عكس وسم الحذف: إزالة وسم to_delete
+
+        F12: يُزال فقط إذا أضافته العملية نفسها (tags_added غير فارغ).
+        السجلات الجديدة من _exec_delete_flag تترك tags_added فارغاً إن
+        كان الوسم موجوداً مسبقاً فلا يمس التراجع بيانات سابقة. السجلات
+        القديمة تسجل ['to_delete'] دائماً — سلوكها كما كان، وحدّها الموثق:
+        لا إمكان لإثبات الحالة السابقة من السجل القديم وحده.
+        """
+        if not entry.tags_added:
+            return
         from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
         tags = _load_sidecar_tags(entry.file_path)
         if "to_delete" in tags:

@@ -435,7 +435,11 @@ class RuleEngine:
 
         # تحميل الوسوم الحالية من ملف جانبي
         tags = _load_sidecar_tags(planned.file_path)
-        if tag not in tags:
+        # F12: التمييز بين «أُضيف فعلياً» و«كان موجوداً» — tags_added
+        # لا تسجل إلا ما أُضيف فعلاً حتى لا يزيل rollback وسماً لم تضفه
+        # العملية (الوسم الموجود مسبقاً لا يُمس عند التراجع).
+        already_present = tag in tags
+        if not already_present:
             tags.append(tag)
             _save_sidecar_tags(planned.file_path, tags)
 
@@ -443,7 +447,8 @@ class RuleEngine:
             action_type=ActionType.TAG.value,
             file_path=planned.file_path,
             rule_name=planned.rule_name,
-            tags_added=[tag],
+            tags_added=[] if already_present else [tag],
+            tags_already_present=[tag] if already_present else [],
             timestamp=timestamp,
             success=True,
         )
@@ -509,9 +514,15 @@ class RuleEngine:
     def _exec_delete_flag(
         self, planned: PlannedAction, undo_log: "UndoLog", timestamp: str
     ) -> UndoEntry:
-        """يضع وسم 'to_delete' (لا حذف فعلي)"""
+        """يضع وسم 'to_delete' (لا حذف فعلي)
+
+        F12: إن كان الوسم موجوداً مسبقاً فلا يُضاف ولا يُسجَّل في
+        tags_added — التراجع عن إجراء لم يغيّر شيئاً يجب أن يبقى بلا أثر
+        (لا يزيل وسم delete لم تضفه العملية نفسها).
+        """
         tags = _load_sidecar_tags(planned.file_path)
-        if "to_delete" not in tags:
+        already_present = "to_delete" in tags
+        if not already_present:
             tags.append("to_delete")
             _save_sidecar_tags(planned.file_path, tags)
 
@@ -519,7 +530,8 @@ class RuleEngine:
             action_type=ActionType.DELETE_FLAG.value,
             file_path=planned.file_path,
             rule_name=planned.rule_name,
-            tags_added=["to_delete"],
+            tags_added=[] if already_present else ["to_delete"],
+            tags_already_present=["to_delete"] if already_present else [],
             timestamp=timestamp,
             success=True,
         )
