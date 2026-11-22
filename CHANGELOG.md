@@ -469,3 +469,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - دلالات MOVE/COPY المفقود + preflight sidecar + happy path للأنواع الدلالية.
 - مصفوفة TOCTOU: 5 سيناريوهات + اختبار تحكم إيجابي للبصمة.
 - ممنوع skip/xfail — لا تعديل اختبارات لإضعاف الحماية.
+
+## [Unreleased] — UndoLog retry semantics follow-up (2026-11-22)
+
+### أُصلح
+- فصل خطأ محاولة التراجع `rollback_error_message` عن `success/error_message` اللذين يصفان الإجراء الأصلي؛ فشل rollback_last لا يحوّل إجراءً ناجحاً إلى سجل فاشل يتخطاه rollback_batch.
+- إيقاف rollback_all وrollback_n عند أول فشل مع الاحتفاظ بالسجل، لمنع الدوران اللانهائي أو إعادة محاولة السجل نفسه مراراً داخل الاستدعاء الواحد.
+- تصفير علامات preflight المؤقتة قبل كل محاولة، لمنع بقاء `already_rolled_back` قديمة بعد تغير حالة الوجهة.
+- أضيفت اختبارات إعادة المحاولة والفشل في rollback_all/rollback_n وعلامة MOVE المؤقتة.
