@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — Review Follow-up (F19 متابعة ٢ — PR #78)
+
+### أُصلح
+- **F19 متابعة — إبلاغ فشل التراجع بدقة** (`216d2c3`):
+  - `ifm_controller.undo_last/undo_all`: النجاح يُعلن فقط إذا استُهلك السجل فعلاً؛ السجل المحفوظ يُكتب بـ`success=False` مع سبب الفشل، ويُصدر `undo_finished(success=False)` + `error` — «يتطلب استرداداً يدوياً» للملتبس، «فشل التراجع» للعادي.
+  - MCP `_tool_undo_last`: `success` = عكس ناجح استهلك السجل فعلاً، مفتاح `recovery_required` جديد، وعرض `rollback_error_message` بدل `error_message` الأصلي.
+  - توثيق عقد F19: الرفع **داخلي** في `_rollback_entry`، والعقد إرجاعي عبر `requires_recovery` — صُحّح في `AI_WORKLOG.md` وجسم PR عند الموضعين الأصليين.
+  - اختبارات +4 (MCP × 2، Controller × 2) تثبت أن الفشل لا يُعرض نجاحاً.
+
 ## [Unreleased] — Review Follow-up (F19 — PR #78)
 
 ### أُصلح
