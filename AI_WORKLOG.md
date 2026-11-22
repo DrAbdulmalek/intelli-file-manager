@@ -787,3 +787,27 @@ Python 3.11: 1 failed, 1051 passed, 175 skipped؛ Python 3.10: نفس النتي
 - الترتيب: fix(medical_db) → fix(undo_log) → feat(batch_id reach) → test(findings) → docs.
 - لا skip/xfail ولا إضعاف معايير؛ الاختبار المعدَّل فقط هو فحص المصدر الفعلي بدل الادعاء.
 - قيد تلويحي: تشغيل Python محلياً غير متاح في بيئة التنفيذ — الإثبات الصحي عبر CI (3.10 + 3.11).
+
+
+---
+
+# Verification Outcome — Independent Review Findings — PR #78 Remediation (2026-11-22)
+
+نتيجة CI النهائية على رأس الإصلاح (بعد مصفوفة التشخيصات عبر annotations — `REMEDIATION-DIAG`
+حددت الاختبار الفاشل: `test_undo_batch_rollback.py::test_sidecar_ops_rollback_happy_path`
+بل: خلل إعداد في الاختبار نفسه (وضعان الوسم في سجل Undo دون تطبيقه على sidecar) — أُصلح
+بمواءمة الحالة الفعلية مع دلالات `_exec_tag`/`_exec_set_category`، دون أي إضعاف):
+
+| الفحص | Run | النتيجة |
+|---|---|---|
+| backend (Python 3.10) — CI fail-closed | #157 / run 45014081151 | ✅ success (1m13s) |
+| backend (Python 3.11) — CI fail-closed | #157 / run 45014081151 | ✅ success (1m13s) |
+| test (Python 3.10) — Python CI | #196 / run 45014081147 | ✅ success (1m23s) |
+| diagnostics failed-test summary | غير حاجب (if: failure) | أُظهر الاختبار الفاشل في دورتين سابقتين ودون تغيير أي قاعدة نجاح/فشل |
+
+ملخص الإصلاحات: F1 (لا كتابة بالمصدر) ✅ حاجز CI؛ F2 (تنظيف المؤقت) ✅ حاجز CI؛
+F3 (تسلسل fsync، بلا تدعية متانة) ✅؛ F4 (تعويض منتصف الدفعة) ✅ حاجز CI؛
+F5 (دلالات المفقود fail-closed) ✅ حاجز CI؛ F6 (preflight sidecar) ✅ حاجز CI؛
+F7 (TOCTOU ثلاثي) ✅ حاجز CI؛ المرحلة 4 (ختم batch_id موحد + CSV) ✅ حاجز CI.
+قيود متبقية: متانة ما بعد انقطاع الطاقة UNPROVEN؛ حارس محتوى sidecar غير متاح؛
+وصول batch_id النشط مثبت بالبنية دون اختبار وصول نشط.
