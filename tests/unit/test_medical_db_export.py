@@ -23,7 +23,8 @@ def clinic(tmp_path):
                   sha256="a" * 64,
                   summary="ملخص اصطناعي عام",
                   findings={"hemoglobin": "13"})
-    db.register_file(str(tmp_path / "plain.txt") if False else __import__("pathlib").Path(__file__).as_posix())
+    plain = tmp_path / "plain.txt"; plain.write_text("عادي", encoding="utf-8")
+    db.register_file(str(plain))
     yield db
     db.close()
 
