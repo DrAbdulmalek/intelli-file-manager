@@ -368,6 +368,9 @@ class RuleEngine:
             rule_name=planned.rule_name,
             timestamp=timestamp,
             success=True,
+            # F11: بصمة الملف بعد النقل — أساس إثبات الهوية في preflight
+            # (تمييز الملف الأصلي المُعاد عن ملف بديل عند already-rolled-back)
+            checksum_after=result.checksum_after,
         )
         undo_log.append(entry)
         return entry
