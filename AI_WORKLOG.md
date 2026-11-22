@@ -760,3 +760,30 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 - PROVEN (كود + اختبارات مكتوبة، تنتظر تشغيل CI): آلية rollback_batch وأمان التصدير ومضاد TOCTOU.
 - PARTIALLY PROVEN: جدول أوضاع الحاجز — مطابق لتطبيق sensitive_barrier من القراءة، بلا اختبارات جديدة مخصصة لهذا PR.
 - UNPROVEN: نجاح تشغيل CI الفعلي حتى تاريخ هذا الإدخال.
+
+
+---
+
+# Independent Review Findings — PR #78 Remediation (2026-11-22)
+
+المراجعة المستقلة رفضت P0+P1 مبدئياً: CI فاشل فعلياً
+(CI — intelli-file-manager #141: FAILURE؛ Python CI #180: FAILURE؛
+Python 3.11: 1 failed, 1051 passed, 175 skipped؛ Python 3.10: نفس النتيجة).
+الاختبار الفاشل: `tests/unit/test_medical_db_export.py::test_export_success_and_source_untouched`.
+
+| Finding | السبب | التعديل العلاجي | الاختبار المثبت | النتيجة الفعلية | قيود متبقية |
+|---|---|---|---|---|---|
+| F1 — المصدر يتغير أثناء التصدير | `export_deidentified` كان يكتب `self.log(...)` في `processing_log` بالمصدر | حذف الكتابة كلياً؛ التتبع عبر القيمة المرجعة (+`logged_in_source_db: False`) وتوثيق ActionLog الخارجي | `test_export_success_source_untouched`: مقارنة بايت المصدر + عدد processing_log قبل/بعد — الحالة الفعلية لا ادعاء التوثيق | PROVEN (بالكود؛ نجاح CI النهائي مطلوب للتأكيد) | لا |
+| F2 — بقاء مؤقت بعد os.link | `published=True` كان يقفز فوق التنظيف | التنظيف في `finally` بلا شرط النشر؛ أخطاء التنظيف تُسجَّل ولا تحجب نتيجة التصدير؛ الوجهة لا تُمس | 4 اختبارات حقن فشل (mkstemp/كتابة/fsync/سباق نشر) + فحص `_parts(tmp)` فارغ دائماً + سلامة الوجهة الموجودة | PROVEN (بالكود؛ ينتظر CI) | تحقق متانة ما بعد انقطاع الطاقة خارج النطاق (F3) |
+| F3 — تسلسل fsync/نشر | fsync سليم ترتيبياً لكن غير موثق القيود | كتابة مستخرجة؛ fsync قبل النشر بعد إغلاق SQLite؛ fsync مجلد جهدي؛ توثيق صريح: لا تدّعية متانة بعد انقطاع الطاقة | مراقبة كودية + اختبارات تسلسل الفشل | PARTIALLY PROVEN (متانة الطاقة UNPROVEN — معلن) | يتطلب نظام ملفات مُختبَر لإثبات متانة |
+| F4 — تراجع جزئي بمنتصف الدفعة | حذف سجلات العمليات المتراجَع عنها لحظة نجاح كل واحدة قبل اكتمال الدفعة | استرداد تعويضي (Transactional Recovery): إعادة تطبيق ما عُكس بالترتيب العكسي عبر SafeMover، لا حذف سجلات إلا بعد نجاح الدفعة كلها | `test_mid_batch_failure_compensates_and_keeps_records`: دفعة 5 إجراءات، أول عكسين ينجحان، الثالث يفشل بحقن، نتحقق: لا حذف سجلات + الحالة معادَة + إعادة المحاولة بعد إزالة الحقن تُتم التراجع كاملاً | PROVEN (بالكود؛ ينتظر CI) | |
+| F5 — الملفات المفقودة | preflight لم يرفض المستهدف الغائب؛ rollback_move/copy بدون استثناء ثم حذف السجل | دلالات لكل نوع — MOVE مكتمل-مسبقاً يحتفظ بالسجل؛ غير مفسَّر/COPY مفقودة = أجهض fail-closed | `test_move_missing_target_source_present_marks_already`، `test_move_missing_target_and_source_aborts`، `test_copy_missing_target_aborts` | PROVEN (بالكود؛ ينتظر CI) | |
+| F6 — تغطية كل الأنواع | preflight كان يمر أنواع sidecar صامتة | شرط وجود الملف الأساسي لأنواع sidecar؛ قيد حارس المحتوى موثق | `test_sidecar_op_missing_file_aborts` + `test_sidecar_ops_rollback_happy_path` (tag/set_category) | PARTIALLY PROVEN (tag/untag/set_category/delete_flag: happy + missing؛ DELETE_FLAG التراجع السلبي مغطى ضمن القائمة نفسها) | حارس محتوى sidecar غير متاح (لا checksum_after) |
+| F7 — TOCTOU في register_file | التحقق الوحيد كان بعد القراءة وبعدد حالة stat مسار واحدة | `_sha256_with_identity_check`: fstat قبل/أثناء القراءة + stat المسار بعد الإغلاق — أي فشل = لا بصمة (fail-closed، لا بصمة بلا هوية مثبتة) | `test_register_file_toctou.py`: 5 سيناريوهات (استبدال قبل الفتح، أثناء القراءة، تزييف محتوى بنفس inode، حذف بعد القراءة، تحوّل المسار symlink) + تحكم إيجابي للبصمة الصحيحة | PROVEN (بالكود؛ ينتظر CI) | |
+| المرحلة 4 — وصول batch_id فعلياً | RuleEngine كان ينشئ UndoEntry بلا batch_id (الحقل فقط بلا وصول) | ختم موحّد في `_execute_single` + ختم مسار الاستثناء؛ CSV ActionLog يستقبل عمود batch_id؛ ``log_from_undo_entry`` مُتمم | ختم مطابق: كل منفّذي _exec_* يمر عبر _execute_single؛ الفحص بالقراءة — اختبار مخصص بلا حاجة بالكود (الختم شرطي على البنية) | PARTIALLY PROVEN (الوصول مثبت بالبنية؛ اختبار وصول نشط لم يُكتب) | إضافة اختبار وصول نشط يحفظ السجلات ويقرأها للتحقق |
+
+## ضوابط التزام (Remediation Manifest)
+- الفرع فقط؛ لا main؛ لا force-push/reset/amend؛ لا دمج PR #78 (يبقى Draft).
+- الترتيب: fix(medical_db) → fix(undo_log) → feat(batch_id reach) → test(findings) → docs.
+- لا skip/xfail ولا إضعاف معايير؛ الاختبار المعدَّل فقط هو فحص المصدر الفعلي بدل الادعاء.
+- قيد تلويحي: تشغيل Python محلياً غير متاح في بيئة التنفيذ — الإثبات الصحي عبر CI (3.10 + 3.11).
