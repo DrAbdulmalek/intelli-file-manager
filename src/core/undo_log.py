@@ -154,6 +154,97 @@ class UndoLog:
                 rolled_back.append(entry)
         return rolled_back
 
+    # ─── التراجع عن دفعة كاملة (P1) ──────────────────────────────────────
+
+    def _preflight_rollback(self, entry: UndoEntry) -> None:
+        """فحص تعارض مبدئي قبل أي تعديل على القرص (P1 — قراءة فقط).
+
+        يرفض التراجع إن تغيّر/اُستبدل الملف بعد العملية الأصلية
+        (عند توفر checksum_after المسجل). لا يعدّل شيئاً.
+        """
+        target: Optional[Path] = None
+        if entry.action_type in (ActionType.MOVE.value, ActionType.COPY.value)\
+                and entry.file_path_after:
+            target = Path(entry.file_path_after)
+        if target is None:
+            return
+        if target.exists() and entry.checksum_after:
+            from .safe_mover import compute_sha256
+            try:
+                current = compute_sha256(target)
+            except OSError as e:
+                raise RuntimeError(
+                    f"تعذر التحقق من الملف قبل التراجع: {target} — {e}"
+                )
+            if current != entry.checksum_after:
+                raise RuntimeError(
+                    "رفض التراجع: عُدّل الملف بعد العملية الأصلية — "
+                    f"حماية من فقد تعديلات المستخدم: {target}"
+                )
+
+    def rollback_batch(self, batch_id: str) -> dict:
+        """يتراجع عن كل إجراءات دفعة واحدة (أحدث إجراء أولاً) — P1.
+
+        السلوك:
+          1. فحص مبدئي (preflight) لكل الإجراءات قبل أي تعديل — أي تعارض
+             (ملف عُدّل بعد العملية) يُجهض الدفعة كاملة دون أي تغيير.
+          2. تنفيذ التراجع بترتيب عكسي عبر SafeMover فقط (لا shutil مباشر)؛
+             النقل العكسي لا يستبدل ملفاً موجوداً — التضارب يأخذ لاحقة
+             بسياسة SafeMover القائمة.
+          3. السجلات الناجحة تُحذف من السجل بعد نجاح عكسها فقط؛ عند أول
+             فشل يتوقف التنفيذ وتُبقى الإجراءات المتبقية (لا يُفقد أي سجل).
+
+        Returns:
+            {"batch_id", "rolled_back": [أنواع الإجراءات], "remaining": n}
+
+        Raises:
+            ValueError: batch_id فارغ أو لا توجد إجراءات له.
+            RuntimeError: فشل الفحص المبدئي (لم يُعدّل أي ملف) أو فشل
+                التراجع في منتصف الدفعة (السجلات المحققة حُذفت،
+                والمتبقي بقي في السجل وإعادة المحاولة آمنة جزئياً).
+        """
+        if not batch_id:
+            raise ValueError("batch_id مطلوب")
+        idx = [i for i, e in enumerate(self.entries) if e.batch_id == batch_id]
+        if not idx:
+            raise ValueError(f"لا توجد إجراءات للدفعة: {batch_id}")
+        preflight_errors = []
+        for i in reversed(idx):
+            try:
+                self._preflight_rollback(self.entries[i])
+            except Exception as exc:
+                preflight_errors.append(
+                    f"[{self.entries[i].action_type}] {exc}"
+                )
+        if preflight_errors:
+            raise RuntimeError(
+                "أُجهض التراجع عن الدفعة كاملة (فحص مبدئي فاشل — "
+                "لم يُعدّل أي ملف): " + " | ".join(preflight_errors)
+            )
+        rolled_back: List[str] = []
+        for i in reversed(idx):
+            entry = self.entries[i]
+            try:
+                self._rollback_entry(entry)
+            except Exception as e:
+                logger.error(
+                    f"فشل التراجع عن {entry.action_type} ({entry.file_path}): {e}"
+                )
+                entry.success = False
+                entry.error_message = str(e)[:200]
+                if self.path:
+                    self.save()
+                raise
+            self.entries.pop(i)
+            rolled_back.append(entry.action_type)
+        if self.path:
+            self.save()
+        return {
+            "batch_id": batch_id,
+            "rolled_back": rolled_back,
+            "remaining": len(self.entries),
+        }
+
     # ─── منطق التراجع لكل نوع ────────────────────────────────────────────
 
     def _rollback_entry(self, entry: UndoEntry) -> None:
