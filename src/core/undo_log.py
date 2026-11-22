@@ -182,6 +182,13 @@ class UndoLog:
             AI_WORKLOG — لا checksum_after لهذه الأنواع).
         """
         at = entry.action_type
+        # F13: سجل إخفاق (success=False) لا يمثل إجراءً مكتملاً — لا شيء
+        # لعكسه؛ معاملته كخطأ في preflight كانت تُجهض التراجع عن الدفعة
+        # كاملة بسبب سجل فشل لا أكثر. تُعلَّم no-op ويُحتفظ بسجلها (أثر
+        # تدقيقي) وتُذكر في نتيجة التراجع.
+        if not entry.success:
+            entry._ifm_noop_failed = True
+            return
         if at in (ActionType.MOVE.value, ActionType.COPY.value):
             from .safe_mover import compute_sha256
             target = Path(entry.file_path_after) if entry.file_path_after else None
@@ -389,7 +396,9 @@ class UndoLog:
 
         Returns:
             {"batch_id", "rolled_back": [types], "already_rolled_back": [types],
-             "remaining": n}
+             "skipped_failed": [types], "remaining": n}
+             — skipped_failed (F13): سجلات إخفاق في الدفعة؛ لم تُنفّذ
+             أصلاً فلا شيء لعكسه، ويبقى سجلها أثراً تدقيقياً.
 
         Raises:
             ValueError: batch_id فارغ أو لا توجد إجراءات له.
@@ -414,6 +423,7 @@ class UndoLog:
             )
         rolled_back: List[str] = []
         already: List[str] = []
+        skipped_failed: List[str] = []  # F13: سجلات إخفاق — لا شيء لعكسه
         completed: List[tuple] = []  # (index, entry, post_state)
         failure: Optional[Exception] = None
         failureEntry: Optional[UndoEntry] = None
@@ -421,6 +431,9 @@ class UndoLog:
             entry = self.entries[i]
             if getattr(entry, "_ifm_already_rolled_back", False):
                 already.append(entry.action_type)
+                continue
+            if getattr(entry, "_ifm_noop_failed", False):
+                skipped_failed.append(entry.action_type)
                 continue
             try:
                 post_state = self._capture_post_state(entry)
@@ -462,6 +475,7 @@ class UndoLog:
             "batch_id": batch_id,
             "rolled_back": rolled_back,
             "already_rolled_back": already,
+            "skipped_failed": skipped_failed,
             "remaining": len(self.entries),
         }
 
