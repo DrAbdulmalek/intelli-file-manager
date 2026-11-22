@@ -209,9 +209,12 @@ def test_sidecar_ops_rollback_happy_path(tmp_path, log):
     B = "BS"
     log.append(UndoEntry(action_type=ActionType.TAG.value, file_path=str(f),
                          timestamp="t", batch_id=B, tags_added=["t-new"]))
+    # الحالة الفعلية بعد الدفعة تُطبَّق على sidecar كما يفعل المنفّذ (_exec_tag)
+    _save_sidecar_tags(str(f), ["t-new"])
     log.append(UndoEntry(action_type=ActionType.SET_CATEGORY.value, file_path=str(f),
                          timestamp="t", batch_id=B, old_category="old",
                          new_category="new"))
+    _save_sidecar(str(f), {"tags": ["t-new"], "category": "new"})
     # الحالة بعد الدفعة
     assert _load_sidecar_tags(str(f)) == ["t-new"]
     assert _load_sidecar(str(f))["category"] == "new"
