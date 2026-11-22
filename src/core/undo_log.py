@@ -495,12 +495,23 @@ class UndoLog:
     # ─── منطق التراجع لكل نوع ────────────────────────────────────────────
 
     def _rollback_entry(self, entry: UndoEntry) -> None:
-        """ينفّذ العملية العكسية لإجراء واحد"""
+        """ينفّذ العملية العكسية لإجراء واحد
+
+        F18: سجل الإخفاق (success=False) لم يُنفّذ أصلاً — لا شيء لعكسه.
+        محاولة العكس كانت توقف rollback_all/rollback_n عند آخر سجل (فشل
+        MOVE بلا file_path_after يرفع ValueError) أو تعيد كتابة sidecar
+        لملف قد لا يكون موجوداً (سجل TAG/UNTAG فاشل). يُعامل no-op ويُستهلك
+        من السجل هنا (أثره يبقى في ActionLog) — اتساقاً مع دلالات
+        rollback_batch نفسها (F13: skipped_failed). تحفظ موثق: سجلات قديمة
+        حُفظت قبل فصل نتيجة التراجع (F14) قد تحمل success=False لإجراء
+        ناجح فشل تراجعه — وrollback_batch يعاملها بنفس الدلالة منذ F13.
+        """
         if not entry.success:
-            logger.warning(
-                f"محاولة التراجع عن إجراء فاشل أصلاً ({entry.action_type} على "
-                f"{entry.file_path}) — قد لا يكون آمنًا"
+            logger.info(
+                f"تخطّي التراجع عن إجراء فاشل أصلاً ({entry.action_type} على "
+                f"{entry.file_path}) — لم يُنفّذ فلا شيء لعكسه (F18)"
             )
+            return
 
         action_type = entry.action_type
 
