@@ -74,9 +74,13 @@ jobs:
       - name: Diagnostics — failed test summary (non-blocking)
         if: failure()
         run: |
-          for f in .pytest_cache/v/cache/lastfailed; do
-            [ -f "$f" ] && { echo "### Last-failed tests (persist cache)" >> "$GITHUB_STEP_SUMMARY"; cat "$f" >> "$GITHUB_STEP_SUMMARY"; }
-          done
+          if [ -f .pytest_cache/v/cache/lastfailed ]; then
+            echo "### Last-failed tests (persist cache)" >> "$GITHUB_STEP_SUMMARY"
+            cat .pytest_cache/v/cache/lastfailed >> "$GITHUB_STEP_SUMMARY"
+           while IFS= read -r line; do
+             echo "::error::REMEDIATION-DIAG $line"
+           done < .pytest_cache/v/cache/lastfailed || true
+          fi
 
       # fail-closed: خادم الـAPI يجب أن يعمل ويجيب /api/health بصيغة صحيحة
       - name: Test API server startup (blocking)
