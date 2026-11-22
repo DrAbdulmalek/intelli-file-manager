@@ -124,15 +124,16 @@ class UndoLog:
         if not self.entries:
             return None
         entry = self.entries.pop()
+        entry.rollback_error_message = ""
         try:
             self._rollback_entry(entry)
         except Exception as e:
             logger.error(f"فشل التراجع عن {entry.action_type} على {entry.file_path}: {e}")
-            entry.success = False
-            entry.error_message = str(e)[:200]
-            # F9: فشل التراجع لا يفقد السجل — يُعاد إلى قائمة السجلات
-            # (كان يُحذف بفقدانه عند pop قبل الإصلاح) وتبقى سجلات Undo
-            # كاملة؛ الحالة موثقة في error_message ولا تُدّعى استعادة.
+            # F9: لا نغيّر success/error_message؛ فهما يصفان نتيجة
+            # الإجراء الأصلي لا محاولة التراجع. فصل خطأ التراجع يمنع
+            # تحويل إجراء ناجح إلى سجل فاشل ثم تخطيه في rollback_batch.
+            entry.rollback_error_message = str(e)[:200]
+            # يبقى سجل Undo الأصلي كاملاً وقابلاً لإعادة المحاولة.
             self.entries.append(entry)
         # حفظ تلقائي لو path محدد
         if self.path:
@@ -150,6 +151,10 @@ class UndoLog:
             entry = self.rollback_last()
             if entry is not None:
                 rolled_back.append(entry)
+                # فشل التراجع يُبقي السجل في القائمة؛ التوقف يمنع
+                # الدوران اللانهائي على السجل نفسه.
+                if entry.rollback_error_message:
+                    break
         return rolled_back
 
     def rollback_n(self, n: int) -> List[UndoEntry]:
@@ -159,6 +164,9 @@ class UndoLog:
             entry = self.rollback_last()
             if entry is not None:
                 rolled_back.append(entry)
+                # لا نعيد محاولة السجل الفاشل ضمن نفس استدعاء rollback_n.
+                if entry.rollback_error_message:
+                    break
         return rolled_back
 
     # ─── التراجع عن دفعة كاملة (P1 — مُقوّى بعد المراجعة المستقلة) ──────
@@ -181,6 +189,11 @@ class UndoLog:
             الملف الأساسي؛ حارس محتوى sidecar غير متاح (قيد موثق في
             AI_WORKLOG — لا checksum_after لهذه الأنواع).
         """
+        # العلامات المؤقتة تخص محاولة preflight واحدة فقط؛ لا يجوز أن
+        # تبقى علامة already_rolled_back من محاولة سابقة إذا تغيرت حالة
+        # الوجهة قبل إعادة المحاولة.
+        entry.__dict__.pop("_ifm_already_rolled_back", None)
+        entry.__dict__.pop("_ifm_noop_failed", None)
         at = entry.action_type
         # F13: سجل إخفاق (success=False) لا يمثل إجراءً مكتملاً — لا شيء
         # لعكسه؛ معاملته كخطأ في preflight كانت تُجهض التراجع عن الدفعة
