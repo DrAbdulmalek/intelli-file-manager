@@ -154,94 +154,202 @@ class UndoLog:
                 rolled_back.append(entry)
         return rolled_back
 
-    # ─── التراجع عن دفعة كاملة (P1) ──────────────────────────────────────
+    # ─── التراجع عن دفعة كاملة (P1 — مُقوّى بعد المراجعة المستقلة) ──────
 
     def _preflight_rollback(self, entry: UndoEntry) -> None:
-        """فحص تعارض مبدئي قبل أي تعديل على القرص (P1 — قراءة فقط).
+        """فحص تعارض مبدئي قبل أي تعديل على القرص (قراءة فقط — fail-closed).
 
-        يرفض التراجع إن تغيّر/اُستبدل الملف بعد العملية الأصلية
-        (عند توفر checksum_after المسجل). لا يعدّل شيئاً.
+        دلالات غياب الملف المستهدف (مراجعة مستقلة Finding 5):
+          - MOVE: الوجهة مفقودة + المسار الأصلي موجود → مؤشر قوي على أن
+            التراجع اكتمل سابقاً (إصدار قديم/جلسة سابقة): يُعلَّم السجل
+            already_rolled_back ولا يُعاد عكسه ولا يُحذف.
+          - MOVE: الوجهة والأصل مفقودان معاً → غياب غير مفسَّر → رفض يُجهض
+            الدفعة كاملة.
+          - COPY: النسخة مفقودة لا يمكن تمييزها عدلياً عن حذف خارجي
+            (سجلاتنا الناجحة تُحذف فقط بعد عكس ناجح) → رفع خطأ يُجهض
+            الدفعة كاملة دون أي تعديل.
+          - أنواع sidecar (tag/untag/set_category/delete_flag): يجب وجود
+            الملف الأساسي؛ حارس محتوى sidecar غير متاح (قيد موثق في
+            AI_WORKLOG — لا checksum_after لهذه الأنواع).
         """
-        target: Optional[Path] = None
-        if entry.action_type in (ActionType.MOVE.value, ActionType.COPY.value)\
-                and entry.file_path_after:
-            target = Path(entry.file_path_after)
-        if target is None:
-            return
-        if target.exists() and entry.checksum_after:
-            from .safe_mover import compute_sha256
-            try:
-                current = compute_sha256(target)
-            except OSError as e:
+        at = entry.action_type
+        if at in (ActionType.MOVE.value, ActionType.COPY.value):
+            target = Path(entry.file_path_after) if entry.file_path_after else None
+            if target is not None and target.exists():
+                if entry.checksum_after:
+                    from .safe_mover import compute_sha256
+                    current = compute_sha256(target)
+                    if current != entry.checksum_after:
+                        raise RuntimeError(
+                            "رفض التراجع: عُدّل الملف بعد العملية الأصلية — "
+                            f"حماية من فقد تعديلات المستخدم: {target}"
+                        )
+                return
+            if target is None:
                 raise RuntimeError(
-                    f"تعذر التحقق من الملف قبل التراجع: {target} — {e}"
+                    f"بيانات التراجع ناقصة ({at}): file_path_after مفقود"
                 )
-            if current != entry.checksum_after:
-                raise RuntimeError(
-                    "رفض التراجع: عُدّل الملف بعد العملية الأصلية — "
-                    f"حماية من فقد تعديلات المستخدم: {target}"
-                )
+            orig = Path(entry.file_path)
+            if at == ActionType.MOVE.value and orig.exists():
+                entry._ifm_already_rolled_back = True
+                return
+            raise RuntimeError(
+                f"الملف المستهدف مفقود بلا تفسير ({at}): {target} — "
+                "أُجهض الدفعة (fail-closed)"
+            )
+        # أنواع sidecar: الملف الأساسي شرط
+        if not Path(entry.file_path).exists():
+            raise RuntimeError(
+                f"الملف الأساسي مفقود لعملية sidecar ({at}): {entry.file_path}"
+            )
+
+    def _capture_post_state(self, entry: UndoEntry):
+        """يلتقط حالة ما بعد الدفعة قبل عكس الإجراء (للتعويض عند الفشل)."""
+        if entry.action_type == ActionType.SET_CATEGORY.value:
+            from .rule_engine import _load_sidecar
+            return _load_sidecar(entry.file_path).get("category", "")
+        return None
+
+    def _reapply_entry(self, entry: UndoEntry, post_state) -> None:
+        """تعويض آمن: إعادة تطبيق الإجراء الأصلي (عكس التراجع المتوقف).
+
+        SafeMover فقط للنقل/النسخ — لا shutil ولا unlink غير محمي؛
+        النسخة المتعوَّضة تُسترجع من المصدر عبر safe_mover.copy.
+        """
+        at = entry.action_type
+        if at == ActionType.MOVE.value:
+            if not entry.file_path_after:
+                raise RuntimeError("تعويض move ناقص البيانات")
+            res = self.safe_mover.move(entry.file_path_after, entry.file_path)
+            if not res.success:
+                raise RuntimeError(f"فشل تعويض النقل: {res.error}")
+        elif at == ActionType.COPY.value:
+            if not entry.file_path_after:
+                raise RuntimeError("تعويض copy ناقص البيانات")
+            res = self.safe_mover.copy(entry.file_path, entry.file_path_after)
+            if not res.success:
+                raise RuntimeError(f"فشل تعويض النسخ: {res.error}")
+        elif at == ActionType.TAG.value:
+            from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
+            tags = _load_sidecar_tags(entry.file_path)
+            for tag in entry.tags_added:
+                if tag not in tags:
+                    tags.append(tag)
+            _save_sidecar_tags(entry.file_path, tags)
+        elif at == ActionType.UNTAG.value:
+            from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
+            tags = _load_sidecar_tags(entry.file_path)
+            removed_set = set(entry.tags_removed)
+            tags = [t for t in tags if t not in removed_set]
+            _save_sidecar_tags(entry.file_path, tags)
+        elif at == ActionType.SET_CATEGORY.value:
+            from .rule_engine import _load_sidecar, _save_sidecar
+            sc = _load_sidecar(entry.file_path)
+            if post_state:
+                sc["category"] = post_state
+            else:
+                sc.pop("category", None)
+            _save_sidecar(entry.file_path, sc)
+        elif at == ActionType.DELETE_FLAG.value:
+            from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
+            tags = _load_sidecar_tags(entry.file_path)
+            if "to_delete" not in tags:
+                tags.append("to_delete")
+            _save_sidecar_tags(entry.file_path, tags)
+        else:
+            raise RuntimeError(f"لا يمكن تعويض نوع إجراء: {at}")
 
     def rollback_batch(self, batch_id: str) -> dict:
-        """يتراجع عن كل إجراءات دفعة واحدة (أحدث إجراء أولاً) — P1.
+        """يتراجع عن كل إجراءات دفعة واحدة (أحدث إجراء أولاً) — P1 مُقوّى.
 
-        السلوك:
+        النموذج (مراجعة مستقلة Finding 4):
           1. فحص مبدئي (preflight) لكل الإجراءات قبل أي تعديل — أي تعارض
-             (ملف عُدّل بعد العملية) يُجهض الدفعة كاملة دون أي تغيير.
-          2. تنفيذ التراجع بترتيب عكسي عبر SafeMover فقط (لا shutil مباشر)؛
-             النقل العكسي لا يستبدل ملفاً موجوداً — التضارب يأخذ لاحقة
-             بسياسة SafeMover القائمة.
-          3. السجلات الناجحة تُحذف من السجل بعد نجاح عكسها فقط؛ عند أول
-             فشل يتوقف التنفيذ وتُبقى الإجراءات المتبقية (لا يُفقد أي سجل).
+             أو غياب غير مفسَّر يُجهض الدفعة كاملة دون أي تغيير.
+          2. عكس بترتيب عكسي عبر SafeMover فقط (لا shutil مباشر).
+          3. عند فشل منتصف الدفعة: استرداد تعويضي (Transactional Recovery)
+             — كل إجراء عُكس بالفعل يُعاد تطبيقه (بعكس عكسه) بالترتيب
+             العكسي، فتُستعاد حالة ما قبل محاولة التراجع تماماً؛ ثم تبقى
+             **كل** السجلات في السجل (لا حذف إطلاقاً عند الفشل) ويُرفع
+             خطأ يوثّق نتيجة التعويض.
+          4. السجلات تُحذف فقط بعد نجاح عكس **كل** الدفعة.
+            عملية MOVE مكتملة مسبقاً (دليل: الأصل موجود والوجهة مفقودة)
+            تُعلَّم already_rolled_back ويُحتفظ بسجلها ويُذكر في النتيجة.
 
         Returns:
-            {"batch_id", "rolled_back": [أنواع الإجراءات], "remaining": n}
+            {"batch_id", "rolled_back": [types], "already_rolled_back": [types],
+             "remaining": n}
 
         Raises:
             ValueError: batch_id فارغ أو لا توجد إجراءات له.
-            RuntimeError: فشل الفحص المبدئي (لم يُعدّل أي ملف) أو فشل
-                التراجع في منتصف الدفعة (السجلات المحققة حُذفت،
-                والمتبقي بقي في السجل وإعادة المحاولة آمنة جزئياً).
+            RuntimeError: فشل الفحص المبدئي (لم يُعدّل أي ملف)، أو فشل
+                في منتصف الدفعة (عُوّض ما عُكس ولم يُحذف أي سجل).
         """
         if not batch_id:
             raise ValueError("batch_id مطلوب")
         idx = [i for i, e in enumerate(self.entries) if e.batch_id == batch_id]
         if not idx:
             raise ValueError(f"لا توجد إجراءات للدفعة: {batch_id}")
-        preflight_errors = []
+        preflight_errors: List[str] = []
         for i in reversed(idx):
             try:
                 self._preflight_rollback(self.entries[i])
             except Exception as exc:
-                preflight_errors.append(
-                    f"[{self.entries[i].action_type}] {exc}"
-                )
+                preflight_errors.append(f"[{self.entries[i].action_type}] {exc}")
         if preflight_errors:
             raise RuntimeError(
                 "أُجهض التراجع عن الدفعة كاملة (فحص مبدئي فاشل — "
                 "لم يُعدّل أي ملف): " + " | ".join(preflight_errors)
             )
         rolled_back: List[str] = []
+        already: List[str] = []
+        completed: List[tuple] = []  # (index, entry, post_state)
+        failure: Optional[Exception] = None
+        failureEntry: Optional[UndoEntry] = None
         for i in reversed(idx):
             entry = self.entries[i]
+            if getattr(entry, "_ifm_already_rolled_back", False):
+                already.append(entry.action_type)
+                continue
             try:
+                post_state = self._capture_post_state(entry)
                 self._rollback_entry(entry)
             except Exception as e:
-                logger.error(
-                    f"فشل التراجع عن {entry.action_type} ({entry.file_path}): {e}"
-                )
-                entry.success = False
-                entry.error_message = str(e)[:200]
-                if self.path:
-                    self.save()
-                raise
-            self.entries.pop(i)
+                failure = e
+                failureEntry = entry
+                break
+            completed.append((i, entry, post_state))
             rolled_back.append(entry.action_type)
+        if failure is not None or failureEntry is not None:
+            comp_errors: List[str] = []
+            for (ci, centry, cpost) in reversed(completed):
+                try:
+                    self._reapply_entry(centry, cpost)
+                except Exception as e2:
+                    comp_errors.append(f"[{centry.action_type}] {e2}")
+            if self.path:
+                self.save()
+            msg = (
+                f"فشل التراجع في منتصف الدفعة عن {failureEntry.action_type} "
+                f"({failureEntry.file_path}): {failure}. "
+                f"عُكس بالفعل {len(completed)} إجراء و"
+                + ("عُوِّضت كلها بنجاح — "
+                   if not comp_errors else "فشل تعويض بعضها — ")
+                + "استُعيدت حالة ما قبل محاولة التراجع، ولم يُحذف أي سجل "
+                "(استرداد تعويضي — Transactional Recovery)."
+            )
+            if comp_errors:
+                msg += " أخطاء التعويض: " + " | ".join(comp_errors)
+            raise RuntimeError(msg)
+        # نجاح الدفعة كاملة الآن — حذف السجلات المتراجَع عنها فعلاً
+        # (بترتيب فهرسي تنازلي لإبقاء الفهارس صالحة)
+        for (ci, centry, cpost) in completed:
+            self.entries.pop(ci)
         if self.path:
             self.save()
         return {
             "batch_id": batch_id,
             "rolled_back": rolled_back,
+            "already_rolled_back": already,
             "remaining": len(self.entries),
         }
 
