@@ -22,26 +22,6 @@ def files(tmp_path):
     return tmp_path, src1, dst1, f1, f2
 
 
-def _real_move(log: UndoLog, src, dst) -> UndoEntry:
-    """نقل حقيقي عبر SafeMover + تسجيل UndoEntry (move)."""
-    from src.core.safe_mover import SafeMover, compute_sha256
-    mover = SafeMover(verify_checksum=True, move_sidecar=False)
-    before = compute_sha256(src)
-    result = mover.move(str(src), str(dst / src.name))
-    assert result.success, result.error
-    entry = UndoEntry(
-        action_type="move",
-        file_path=str(src),
-        file_path_after=result.final_path,
-        rule_name="test",
-        timestamp="2026-11-22T00:00:00",
-        batch_id="B1",
-        checksum_after=result.checksum_after or compute_sha256(result["final_path"] if isinstance(result, dict) else __import__("pathlib").Path(expected := dst / src.name)),
-    )
-    log.append(entry)
-    return entry
-
-
 def test_rollback_batch_reverses_move(tmp_path):
     log = UndoLog()
     src = tmp_path / "a.txt"
