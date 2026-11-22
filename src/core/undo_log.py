@@ -47,6 +47,9 @@ class UndoLog:
         self.path = Path(path) if path else None
         self.entries: List[UndoEntry] = []
         self._safe_mover = None  # SafeMover إلزامي للتراجع (لا shutil مباشر)
+        # F10: النسخ الاحتياطية (staging) المعلقة — المفتاح file_path_after
+        # والقيمة مسار النسخة الاحتياطية على القرص؛ تُحذف فقط بعد تعويض مُتحقق
+        self._pending_staging: dict[str, str] = {}
         if self.path and self.path.exists():
             self.load()
 
@@ -127,6 +130,10 @@ class UndoLog:
             logger.error(f"فشل التراجع عن {entry.action_type} على {entry.file_path}: {e}")
             entry.success = False
             entry.error_message = str(e)[:200]
+            # F9: فشل التراجع لا يفقد السجل — يُعاد إلى قائمة السجلات
+            # (كان يُحذف بفقدانه عند pop قبل الإصلاح) وتبقى سجلات Undo
+            # كاملة؛ الحالة موثقة في error_message ولا تُدّعى استعادة.
+            self.entries.append(entry)
         # حفظ تلقائي لو path محدد
         if self.path:
             self.save()
@@ -381,7 +388,14 @@ class UndoLog:
             raise ValueError(f"لا يمكن التراجع عن نوع إجراء: {action_type}")
 
     def _rollback_move(self, entry: UndoEntry) -> None:
-        """عكس النقل: نقل الملف من الوجهة إلى المصدر (مع sidecar)"""
+        """عكس النقل: نقل الملف من الوجهة إلى المصدر (مع sidecar)
+
+        F9 (إجراء متعدد الخطوات): فشل نقل الـsidecar بعد نجاح نقل الملف
+        الأساسي لا يُترك نصفاً — تعويض داخلي فوري: يُعاد الملف الأساسي
+        إلى الوجهة (حالة ما بعد الدفعة) ثم يُرفع خطأ Recovery واضح.
+        إن تعذر التعويض نفسه، تُوثّق الحالة الجزئية كما هي دون أي
+        تدّعية باستعادة الحالة الأصلية، وتبقى سجلات Undo كاملة.
+        """
         if not entry.file_path_after:
             raise ValueError("file_path_after مفقود لعملية move")
         src = Path(entry.file_path_after)
@@ -401,12 +415,28 @@ class UndoLog:
             raise RuntimeError(f"فشل التراجع عن النقل عبر SafeMover: {result.error}")
         if src_sidecar.exists():
             dst_sidecar = _sidecar_path(str(dst))
-            # لا حذف صامت لشاغل الـsidecar (جولة DeepSeek 11 — كان
-            # dst_sidecar.unlink() يمسح بيانات شاغل): عقد «اللاحقة لا
-            # الاستبدال» يُطبق هنا أيضاً — SafeMover يتضارب باللاحقة
             result_sc = self.safe_mover.move(str(src_sidecar), str(dst_sidecar))
             if not result_sc.success:
-                raise RuntimeError(f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error}")
+                # F9: فشل داخل الإجراء — الملف الأساسي في الأصل والـsidecar
+                # في الوجهة. تعويض داخلي: إعادة الملف الأساسي إلى الوجهة.
+                back = self.safe_mover.move(str(dst), str(src))
+                if back.success:
+                    raise RuntimeError(
+                        f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error} — "
+                        "عُوّض داخل الإجراء: أُعيد الملف الأساسي إلى الوجهة "
+                        "(حالة ما بعد الدفعة مستعادة) — الحالة: Recovery، "
+                        "سجل التراجع محفوظ كاملاً وقابل للاستكمال بعد رفع "
+                        "سبب فشل الـsidecar. لم يُحذف ولم يُستبدل أي "
+                        "sidecar موجود مسبقاً (تضارب SafeMover باللاحقة)."
+                    )
+                raise RuntimeError(
+                    f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error}، "
+                    f"وتعذر التعويض الداخلي أيضاً ({back.error}) — الحالة "
+                    f"الجزئية الموثقة: الملف الأساسي في {dst} والـsidecar في "
+                    f"{src_sidecar} — لا تدّعية استعادة الحالة الأصلية؛ "
+                    "الحالة: Recovery، سجل التراجع محفوظ كاملاً "
+                    "(قابل للاستكمال يدوياً بعد رفع السببين)."
+                )
 
     def _rollback_copy(self, entry: UndoEntry) -> None:
         """عكس النسخ: حذف النسخة المنشأة (مع sidecar)
@@ -416,10 +446,22 @@ class UndoLog:
         قليلة مضت — لا بيانات سابقة على القرص تُمس بهذا الحذف. الحارس:
         إن عُدّل الملف بعد نسخه (checksum يخالف المسجل في القيد) يُرفض
         التراجع صراحةً حمايةً لتعديلات المستخدم اللاحقة.
+
+        F10: قبل أي حذف تُنشأ نسخة احتياطية (staging) من النسخة — لا
+        يُحذف الملف الأصلي إلا بعد نجاح النسخ الاحتياطي والتحقق من
+        بصمته؛ النسخة الاحتياطية تبقى على القرص حتى نجاح تعويض مُتحقق
+        (لا تُحذف قبل التحقق)، فلا تُضحّ ببيانات المستخدم إذا فشل
+        التعويض لاحقاً.
+
+        F9 (إجراء متعدد الخطوات): فشل حذف الـsidecar بعد نجاح حذف
+        النسخة لا يُترك نصفاً — تعويض داخلي فوري: تُعاد النسخة من
+        النسخة الاحتياطية بمحتواها الأصلي المُتحقق، ثم يُرفع خطأ
+        Recovery واضح وتبقى سجلات Undo كاملة.
         """
         if not entry.file_path_after:
             raise ValueError("file_path_after مفقود لعملية copy")
         copied = Path(entry.file_path_after)
+        stage: Optional[Path] = None
         if not copied.exists():
             logger.warning(f"النسخة المنسوخة غير موجودة: {copied}")
         else:
@@ -436,13 +478,115 @@ class UndoLog:
                         "رفض التراجع عن النسخ: عُدّل الملف بعد إنشائه — "
                         f"حماية من فقد تعديلات المستخدم: {copied}"
                     )
+            # F10: النسخ الاحتياطي قبل أي حذف — فشله يُجهض التراجع قبل
+            # أي تغيير على القرص
+            stage = self._create_staging_backup(entry, copied)
             copied.unlink()
         # حذف sidecar المنسوخ إن وُجد (جزء من النسخة المنشأة نفسها —
         # يخضع لنفس الاستثناء المعتمد أعلاه)
         from .rule_engine import _sidecar_path
         copied_sidecar = _sidecar_path(str(copied))
         if copied_sidecar.exists():
-            copied_sidecar.unlink()
+            try:
+                copied_sidecar.unlink()
+            except OSError as e:
+                # F9: فشل داخل الإجراء بعد حذف النسخة — تعويض داخلي:
+                # إعادة النسخة من النسخة الاحتياطية (إن وُجدت)
+                if stage is not None and stage.exists():
+                    self._restore_from_staging(entry, copied, stage)
+                    raise RuntimeError(
+                        f"فشل حذف sidecar النسخة المنسوخة: {e} — عُوّض "
+                        "داخل الإجراء: أُعيدت النسخة بمحتواها الأصلي "
+                        "المُتحقق من النسخة الاحتياطية (حالة ما قبل "
+                        "التراجع مستعادة) — الحالة: Recovery، سجل "
+                        "التراجع محفوظ كاملاً وقابل للاستكمال بعد رفع "
+                        "سبب فشل الـsidecar."
+                    ) from e
+                # لا نسخة احتياطية متاحة (النسخة لم تكن موجودة أصلاً —
+                # لم يُحذف شيء): الحالة دون تغيير فعلي
+                raise RuntimeError(
+                    f"فشل حذف sidecar النسخة المنسوخة: {e} — لم يُحذف "
+                    "الملف الأساسي (لم يكن موجوداً) فالحالة الفعلية "
+                    "دون تغيير؛ الحالة: Recovery، سجل التراجع محفوظ."
+                ) from e
+
+    # ─── النسخ الاحتياطي (staging) لعكس النسخ — F9/F10 ───────────────────
+
+    def _create_staging_backup(self, entry: UndoEntry, copied: Path) -> Path:
+        """ينشئ نسخة احتياطية (staging) من النسخة قبل حذفها — F10.
+
+        - عبر SafeMover.copy فقط (لا حذف ولا استبدال صامت؛ التضارب
+          باللاحقة).
+        - يُتحقق من بصمة النسخة الاحتياطية مقابل checksum_after المسجل
+          قبل السماح بأي حذف — عدم التطابق يُجهض التراجع قبل أي تغيير.
+        - لا تُحذف النسخة الاحتياطية قبل التحقق من نجاح التعويض.
+        """
+        from .safe_mover import compute_sha256
+        recorded = getattr(entry, "checksum_after", None)
+        ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")
+        stage = copied.parent / f".{copied.name}.ifm_undo_stage_{ts}.part"
+        res = self.safe_mover.copy(str(copied), str(stage))
+        if not res.success:
+            raise RuntimeError(
+                "فشل إنشاء النسخة الاحتياطية للتراجع — أُجهض عكس النسخة "
+                f"قبل أي حذف (fail-closed): {res.error}"
+            )
+        stage_path = Path(res.final_path)
+        if recorded:
+            try:
+                actual = compute_sha256(stage_path)
+            except OSError as e:
+                self._discard_staging_safely(stage_path)
+                raise RuntimeError(
+                    f"تعذر التحقق من بصمة النسخة الاحتياطية: {e} — أُجهض "
+                    "عكس النسخة قبل أي حذف (fail-closed)"
+                )
+            if actual != recorded:
+                self._discard_staging_safely(stage_path)
+                raise RuntimeError(
+                    "النسخة الاحتياطية لا تطابق البصمة المسجلة — أُجهض "
+                    "عكس النسخة قبل أي حذف (fail-closed)"
+                )
+        self._pending_staging[entry.file_path_after] = str(stage_path)
+        return stage_path
+
+    def _restore_from_staging(self, entry: UndoEntry, copied: Path,
+                              stage: Path) -> None:
+        """يعيد النسخة من النسخة الاحتياطية مع تحقق البصمة — F10.
+
+        النسخة الاحتياطية تُحذف فقط بعد نجاح الاستعادة **والتحقق** منها؛
+        أي فشل يتركها على القرص (حالة Recovery قابلة للاستكمال).
+        """
+        from .safe_mover import compute_sha256
+        res = self.safe_mover.copy(str(stage), str(copied))
+        if not res.success:
+            raise RuntimeError(
+                f"فشل إعادة النسخة من النسخة الاحتياطية: {res.error} — "
+                f"النسخة الاحتياطية محفوظة في {stage} (لا تُضح ببيانات "
+                "المستخدم) — الحالة: Recovery"
+            )
+        recorded = getattr(entry, "checksum_after", None)
+        if recorded:
+            actual = compute_sha256(copied)
+            if actual != recorded:
+                raise RuntimeError(
+                    "النسخة المعادة من النسخة الاحتياطية لا تطابق البصمة "
+                    f"المسجلة — النسخة الاحتياطية محفوظة في {stage} — "
+                    "الحالة: Recovery"
+                )
+        # نجاح مُتحقق — الآن فقط تُحذف النسخة الاحتياطية (ملف staging
+        # أنشأه هذا الإجراء؛ الحذف المباشر للنسخة الاحتياطية نفسها مقبول
+        # بموجب الاستثناء الموثق أعلاه)
+        self._discard_staging_safely(stage)
+        self._pending_staging.pop(entry.file_path_after, None)
+
+    @staticmethod
+    def _discard_staging_safely(stage: Path) -> None:
+        """يحذف ملف staging أنشأه الإجراء نفسه؛ فشل الحذف يُسجَّل ولا يُخفي الخطأ الأصلي"""
+        try:
+            stage.unlink()
+        except OSError as e:
+            logger.warning("تعذر إزالة النسخة الاحتياطية %s: %s", stage, e)
 
     def _rollback_tag(self, entry: UndoEntry) -> None:
         """عكس إضافة وسم: إزالة الوسم"""
