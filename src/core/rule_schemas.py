@@ -401,6 +401,9 @@ class UndoEntry:
     timestamp: str = ""
     success: bool = True
     error_message: str = ""
+    # خطأ محاولة التراجع منفصل عن نتيجة الإجراء الأصلي؛ لا يغيّر success.
+    # فارغ للسجلات القديمة، ومتوافق خلفياً عبر from_dict.
+    rollback_error_message: str = ""
     # checksum للنسخة المنشأة في عمليات copy (يحمي التراجع: إن عُدّل
     # الملف بعد النسخ يُرفض حذفه — جولة DeepSeek 11). متوافق خلفياً:
     # from_dict يفلتر المفاتيح، والقيم القديمة تُترك None
