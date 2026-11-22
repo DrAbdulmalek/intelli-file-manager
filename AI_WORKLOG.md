@@ -842,3 +842,24 @@ PR #78 يبقى Draft، لا skip/xfail/إضعاف، بيانات اصطناعي
 - الإثبات المحلي: المجموعة الكاملة 1081 ناجحاً / 169 متخطى / 23 فشلاً بيئياً مسبقاً
   (مطابقة تامة لخط الأساس قبل التغييرات) + ruff الحاجب نظيف. تأكيد CI على 3.10/3.11
   على رأس HEAD النهائي مطلوب لتحويل «PROVEN بCI» إلى نتيجة نهائية موثقة.
+
+
+---
+
+## 2026-11-22 — Independent follow-up review: UndoLog retry semantics
+
+### Findings
+- **F14 — rollback_last corrupts original outcome:** عند فشل التراجع كان `rollback_last` يغيّر `entry.success=False` ويمحو معنى نتيجة الإجراء الأصلي. بعد ذلك يتعامل `rollback_batch` مع السجل بوصفه إخفاق تنفيذ ويضعه في `skipped_failed`، فلا يمكن إعادة محاولة التراجع فعلياً.
+- **F15 — rollback_all can loop forever:** بعد F9 أصبح `rollback_last` يعيد السجل الفاشل إلى القائمة؛ حلقة `while self.entries` لا تتقدم عند فشل آخر سجل، فتكرر المحاولة بلا نهاية. `rollback_n` كان يعيد محاولة السجل نفسه حتى استنفاد العدد.
+- **F16 — stale preflight marker:** علامة `_ifm_already_rolled_back` كانت تبقى على كائن UndoEntry بين الاستدعاءات. إذا تغيرت حالة الوجهة بعد محاولة preflight سابقة، قد تُستخدم العلامة القديمة لتجاوز rollback رغم أن الوجهة عادت موجودة.
+
+### Remediation
+- إضافة `rollback_error_message` منفصل ومتوافق خلفياً؛ لا تتغير `success` أو `error_message` اللتان تصفان الإجراء الأصلي.
+- إيقاف `rollback_all` و`rollback_n` بعد أول فشل مع إبقاء السجل وإتاحة إعادة المحاولة باستدعاء لاحق.
+- إعادة ضبط علامات preflight المؤقتة في بداية كل فحص.
+- إضافة اختبارات انحدار في `test_f9_intra_action_compensation.py` و`test_f11_move_identity.py`.
+
+### Evidence ledger
+- Code changes and tests added in branch `fix/undo-log-retry-semantics-2026-11-22`.
+- Local execution is not available in this GitHub-only editing pass; test results remain **UNPROVEN** until CI runs on the resulting branch/PR head.
+- No changes to main; no merge; PR #78 remains Draft.
