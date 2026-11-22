@@ -1,0 +1,710 @@
+en,ar
+heart,القلب
+lung,الرئة
+lungs,الرئتان
+liver,الكبد
+kidney,الكلية
+kidneys,الكليتان
+spleen,الطحال
+pancreas,البنكرياس
+stomach,المعدة
+intestine,الأمعاء
+small intestine,الأمعاء الدقيقة
+large intestine,الأمعاء الغليظة
+colon,القولون
+rectum,المستقيم
+anus,الشرج
+esophagus,المريء
+gallbladder,المرارة
+bile duct,القناة الصفراوية
+bladder,المثانة
+ureter,الحالب
+urethra,الإحليل
+brain,الدماغ
+cerebellum,المخيخ
+brain stem,جذع الدماغ
+spinal cord,النخاع الشوكي
+skull,الجمجمة
+spine,العمود الفقري
+vertebra,الفقرة
+intervertebral disc,القرص بين الفقرات
+rib,الضلع
+sternum,القص
+clavicle,الترقوة
+scapula,لوح الكتف
+humerus,عظم العضد
+radius,الكعبرة
+ulna,الزند
+femur,عظم الفخذ
+patella,الرضفة
+tibia,الظنبوب
+fibula,الشظية
+pelvis,الحوض
+hip joint,مفصل الورك
+sacrum,العجز
+coccyx,العصعص
+mandible,الفك السفلي
+maxilla,الفك العلوي
+joint,المفصل
+cartilage,الغضروف
+muscle,العضلة
+tendon,الوتر
+ligament,الرابط
+skin,الجلد
+epidermis,البشرة
+dermis,الأدمة
+subcutaneous tissue,النسيج تحت الجلد
+blood,الدم
+plasma,البلازما
+serum,المصل
+bone marrow,نقي العظم
+lymph node,العقدة اللمفاوية
+thymus gland,الغدة الصعترية
+artery,الشريان
+vein,الوريد
+capillary,الشعيرة الدموية
+aorta,الأبهر
+pulmonary artery,الشريان الرئوي
+vena cava,الوريد الأجوف
+coronary artery,الشريان التاجي
+carotid artery,الشريان السباتي
+jugular vein,الوريد الوداجي
+femoral artery,الشريان الفخذي
+portal vein,الوريد البابي
+nerve,العصب
+vagus nerve,العصب المبهم
+optic nerve,العصب البصري
+sciatic nerve,العصب الوركي
+trigeminal nerve,العصب ثلاثي التوائم
+facial nerve,العصب الوجهي
+larynx,الحنجرة
+pharynx,البلعوم
+trachea,القصبة الهوائية
+bronchus,القصبة
+bronchiole,القصيبة
+alveoli,الحويصلات الهوائية
+pleura,الغشاء الجنب
+diaphragm,الحجاب الحاجز
+mediastinum,المنصف
+pericardium,التامور
+myocardium,عضلة القلب
+atrium,أذين القلب
+ventricle,بطين القلب
+heart valve,صمام القلب
+mitral valve,الصمام التاجي
+aortic valve,الصمام الأبهري
+thyroid gland,الغدة الدرقية
+parathyroid gland,الغدة جار الدرقية
+adrenal gland,الغدة الكظرية
+pituitary gland,الغدة النخامية
+hypothalamus,الوطاء
+appendix,الزائدة الدودية
+duodenum,الاثنا عشر
+jejunum,الصائم
+ileum,اللفائفي
+cecum,الأعور
+sigmoid colon,القولون السيني
+prostate,البروستاتا
+testis,الخصية
+ovary,المبيض
+uterus,الرحم
+cervix,عنق الرحم
+fallopian tube,القناة الفالوبية
+vagina,المهبل
+breast,الثدي
+placenta,المشيمة
+umbilical cord,الحبل السري
+eye,العين
+retina,الشبكية
+cornea,القرنية
+lens,عدسة العين
+iris,القزحية
+pupil,البؤبؤ
+ear,الأذن
+eardrum,طبلة الأذن
+cochlea,القوقعة
+nose,الأنف
+paranasal sinus,الجيب الأنفي
+tongue,اللسان
+tooth,السن
+salivary gland,الغدة اللعابية
+tonsil,اللوزة
+X-ray,الأشعة السينية
+radiography,التصوير الشعاعي
+chest X-ray,أشعة الصدر
+CT scan,التصوير المقطعي المحوسب
+MRI,التصوير بالرنين المغناطيسي
+ultrasound,الموجات فوق الصوتية
+Doppler ultrasound,دوبلر
+echocardiography,تخطيط صدى القلب
+PET scan,التصوير بالإصدار البوزيتروني
+mammography,تصوير الثدي الشعاعي
+fluoroscopy,التنظير الشعاعي
+angiography,تصوير الأوعية
+CT angiography,تصوير الأوعية المقطعي
+contrast material,مادة التباين
+radiologist,طبيب الأشعة
+radiology report,تقرير الأشعة
+radiology,الأشعة
+Hounsfield unit,وحدة هاونسفيلد
+T1 weighted image,صورة موزونة T1
+T2 weighted image,صورة موزونة T2
+diffusion weighted imaging,التصوير الموزون بالانتشار
+bone scan,مسح العظام
+thyroid scan,مسح الغدة الدرقية
+bone densitometry,قياس كثافة العظام
+PACS,نظام أرشفة الصور الطبية
+DICOM,معيار الصور الطبية
+imaging modality,نمط التصوير
+radiation dose,جرعة الأشعة
+slice thickness,سماكة المقطع
+ECG,تخطيط القلب الكهربائي
+EEG,تخطيط الدماغ الكهربائي
+EMG,تخطيط العضلات الكهربائي
+stress test,اختبار الجهد
+Holter monitor,جهاز هولتر
+radiopaque,معتم شعاعياً
+radiolucent,شفاف شعاعياً
+complete blood count,صورة الدم الكاملة
+hemoglobin,الهيموغلوبين
+hematocrit,الهيماتوكريت
+red blood cell,كرية الدم الحمراء
+white blood cell,كرية الدم البيضاء
+platelet,الصفيحة الدموية
+ESR,سرعة الترسيب
+CRP,البروتين التفاعلي C
+blood glucose,سكر الدم
+HbA1c,السكر التراكمي
+fasting blood sugar,سكر الدم الصائم
+random blood sugar,سكر الدم العشوائي
+creatinine,الكرياتينين
+urea,اليوريا
+BUN,نيتروجين اليوريا في الدم
+uric acid,حمض اليوريك
+electrolytes,الأملاح
+sodium,الصوديوم
+potassium,البوتاسيوم
+chloride,الكلورايد
+calcium,الكالسيوم
+magnesium,المغنيسيوم
+phosphate,الفوسفات
+liver function tests,اختبارات وظائف الكبد
+ALT,إنزيم ALT
+AST,إنزيم AST
+ALP,الفوسفاتاز القلوي
+GGT,إنزيم GGT
+bilirubin,البيليروبين
+albumin,الألبومين
+total protein,البروتين الكلي
+coagulation profile,ملف التخثر
+PT,زمن البروثرومبين
+INR,النسبة المعيارية الدولية
+aPTT,زمن الثرومبوبلاستين الجزئي
+D-dimer,د-دايمر
+troponin,التروبونين
+lipid profile,ملف الدسم
+cholesterol,الكوليسترول
+LDL,الكوليسترول الضار
+HDL,الكوليسترول النافع
+triglycerides,الدهون الثلاثية
+thyroid function tests,اختبارات وظائف الغدة الدرقية
+TSH,الهرمون المنبه للدرقية
+T3,هرمون T3
+T4,هرمون T4
+cortisol,الكورتيزول
+ferritin,الفيريتين
+serum iron,حديد الدم
+vitamin D,فيتامين د
+vitamin B12,فيتامين ب12
+folate,الفولات
+urinalysis,تحليل البول
+urine culture,مزرعة البول
+stool analysis,تحليل البراز
+occult blood,الدم الخفي
+sputum culture,مزرعة البلغم
+blood culture,مزرعة الدم
+throat swab,مسحة الحلق
+PCR,تفاعل البلمرة المتسلسل
+antibody,الجسم المضاد
+antigen,المستضد
+biopsy,الخزعة
+histopathology,علم الأنسجة المرضية
+cytology,علم الخلايا
+blood typing,تحديد فصيلة الدم
+blood group,فصيلة الدم
+cross matching,الترقيب المطابق
+arterial blood gas,غازات الدم الشريانية
+lactate,اللاكتات
+amylase,الأميليز
+lipase,الليباز
+CK,إنزيم الكرياتين كيناز
+PSA,المستضد البروستاتي النوعي
+pregnancy test,اختبار الحمل
+fever,الحمى
+headache,الصداع
+dizziness,الدوخة
+vertigo,الدوار
+fatigue,التعب
+malaise,التوعك
+weight loss,فقدان الوزن
+weight gain,زيادة الوزن
+nausea,الغثيان
+vomiting,القيء
+diarrhea,الإسهال
+constipation,الإمساك
+abdominal pain,ألم بطني
+chest pain,ألم صدري
+back pain,ألم الظهر
+low back pain,ألم أسفل الظهر
+joint pain,ألم المفاصل
+muscle pain,ألم العضلات
+sore throat,التهاب الحلق
+cough,الكحة
+dry cough,كحة جافة
+productive cough,كحة منتجاة
+shortness of breath,ضيق النفس
+wheezing,الأزيز
+hemoptysis,نفث الدم
+palpitations,الخفقان
+edema,الوذمة
+swelling,التورم
+rash,الطفح الجلدي
+itching,الحكة
+jaundice,اليرقان
+pallor,الشحوب
+cyanosis,الزرقة
+night sweats,التعرق الليلي
+chills,القشعريرة
+loss of appetite,فقدان الشهية
+heartburn,الحرقة
+dysphagia,عسر البلع
+bloating,الانتفاخ
+hematemesis,قيء الدم
+melena,البراز الأسود
+rectal bleeding,نزيف شرجي
+dysuria,عسر التبول
+polyuria,كثرة التبول
+hematuria,البول الدموي
+urinary retention,احتباس البول
+insomnia,الأرق
+anxiety,القلق
+confusion,التشوش الذهني
+seizure,التشنج
+numbness,التنميل
+tingling,الوخز
+muscle weakness,ضعف العضلات
+paralysis,الشلل
+tremor,الرجفان
+hearing loss,فقدان السمع
+tinnitus,طنين الأذن
+blurred vision,تشوش الرؤية
+double vision,ازدواج الرؤية
+epistaxis,الرعاف
+heavy menstrual bleeding,غزارة الطمث
+amenorrhea,انقطاع الطمث
+dysmenorrhea,عسر الطمث
+syncope,الإغماء
+diabetes mellitus,داء السكري
+type 1 diabetes,السكري من النوع الأول
+type 2 diabetes,السكري من النوع الثاني
+gestational diabetes,سكري الحمل
+hypoglycemia,انخفاض سكر الدم
+hyperglycemia,ارتفاع سكر الدم
+hypertension,ارتفاع ضغط الدم
+hypotension,انخفاض ضغط الدم
+atherosclerosis,تصلب الشرايين
+myocardial infarction,احتشاء عضلة القلب
+angina pectoris,الذبحة الصدرية
+heart failure,قصور القلب
+atrial fibrillation,الرجفان الأذيني
+arrhythmia,اضطراب نظم القلب
+tachycardia,تسرع القلب
+bradycardia,بطء القلب
+mitral stenosis,تضيق الصمام التاجي
+mitral regurgitation,قلس الصمام التاجي
+endocarditis,التهاب الشغاف
+myocarditis,التهاب عضلة القلب
+pericarditis,التهاب التامور
+cardiomyopathy,اعتلال عضلة القلب
+stroke,السكتة الدماغية
+transient ischemic attack,نوبة نقص التروية العابرة
+aneurysm,توسع الأوعية الدموية
+deep vein thrombosis,الخثار الوريدي العميق
+pulmonary embolism,الصمة الرئوية
+anemia,فقر الدم
+iron deficiency anemia,فقر الدم بعوز الحديد
+megaloblastic anemia,فقر الدم الضخم الأرومات
+sickle cell disease,مرض الخلية المنجلية
+thalassemia,الثلاسيميا
+leukemia,الابيضاض الدموي
+lymphoma,اللمفوما
+multiple myeloma,الورم النخاعي المتعدد
+polycythemia,كثرة الكريات الحمراء
+thrombocytopenia,نقص الصفيحات
+leukocytosis,كثرة الكريات البيضاء
+pneumonia,الالتهاب الرئوي
+bronchitis,التهاب القصبات
+asthma,الربو
+COPD,الانسداد الرئوي المزمن
+emphysema,انتفاخ الرئة
+pulmonary fibrosis,التليف الرئوي
+tuberculosis,السل
+pleural effusion,الانصباب الجنبي
+pneumothorax,استرواح الصدر
+lung cancer,سرطان الرئة
+GERD,الارتجاع المعدي المريئي
+gastritis,التهاب المعدة
+peptic ulcer,القرحة الهضمية
+Helicobacter pylori,جرثومة المعدة
+hepatitis A,التهاب الكبد الوبائي أ
+hepatitis B,التهاب الكبد الوبائي ب
+hepatitis C,التهاب الكبد الوبائي ج
+cirrhosis,تشمع الكبد
+fatty liver,الكبد الدهني
+cholecystitis,التهاب المرارة
+gallstones,حصى المرارة
+pancreatitis,التهاب البنكرياس
+appendicitis,التهاب الزائدة الدودية
+diverticulitis,التهاب الرتوج
+irritable bowel syndrome,متلازمة القولون العصبي
+inflammatory bowel disease,المرض المعوي الالتهابي
+Crohn's disease,داء كرون
+ulcerative colitis,التهاب القولون التقرحي
+celiac disease,الداء البطني
+colorectal cancer,سرطان القولون والمستقيم
+colon polyp,سليلة القولون
+acute kidney injury,الأذية الكلوية الحادة
+chronic kidney disease,الداء الكلوي المزمن
+renal failure,الفشل الكلوي
+nephritis,التهاب الكلية
+nephrotic syndrome,المتلازمة الكلوية
+kidney stones,الحصى الكلوية
+urinary tract infection,التهاب المسالك البولية
+prostatitis,التهاب البروستاتا
+benign prostatic hyperplasia,تضخم البروستاتا الحميد
+meningitis,التهاب السحايا
+encephalitis,التهاب الدماغ
+epilepsy,الصرع
+migraine,الصداع النصفي
+Parkinson's disease,داء باركنسون
+Alzheimer's disease,داء ألزهايمر
+multiple sclerosis,التصلب المتعدد
+Guillain-Barre syndrome,متلازمة غيان باريه
+peripheral neuropathy,اعتلال الأعصاب المحيطية
+sciatica,عرق النسا
+Bell's palsy,شلل بل الوجهي
+brain tumor,ورم الدماغ
+hydrocephalus,الاستسقاء الدماغي
+depression,الاكتئاب
+bipolar disorder,الاضطراب ثنائي القطب
+schizophrenia,الفصام
+hypothyroidism,قصور الغدة الدرقية
+hyperthyroidism,فرط نشاط الغدة الدرقية
+goiter,تضخم الغدة الدرقية
+thyroid nodule,العقيدة الدرقية
+Cushing syndrome,متلازمة كوشينغ
+Addison's disease,داء أديسون
+acromegaly,الضخامة النهائية
+obesity,السمنة
+metabolic syndrome,المتلازمة الأيضية
+dyslipidemia,اضطراب شحوم الدم
+gout,النقرس
+osteoarthritis,الفصال العظمي
+rheumatoid arthritis,التهاب المفاصل الروماتويدي
+lupus,الذئبة الحمامية
+ankylosing spondylitis,الالتهاب الفقاري اللاصق
+psoriasis,الصدفية
+eczema,الإكزيما
+dermatitis,التهاب الجلد
+urticaria,الشرى
+cellulitis,التهاب النسيج الخلوي
+osteoporosis,هشاشة العظام
+osteomyelitis,التهاب العظم
+fracture,الكسر
+sprain,الالتواء
+scoliosis,الجنف
+sepsis,تسمم الدم
+malaria,الملاريا
+dengue fever,حمى الضنك
+chickenpox,الجدري المائي
+measles,الحصبة
+mumps,النكاف
+rubella,الحصبة الألمانية
+influenza,الإنفلونزا
+COVID-19,كوفيد 19
+common cold,الزكام
+sinusitis,التهاب الجيوب الأنفية
+otitis media,التهاب الأذن الوسطى
+otitis externa,التهاب الأذن الخارجية
+conjunctivitis,التهاب الملتحمة
+glaucoma,المياه الزرقاء
+cataract,المياه البيضاء
+allergic rhinitis,التهاب الأنف التحسسي
+anaphylaxis,التأق
+HIV,فيروس نقص المناعة
+AIDS,الإيدز
+syphilis,الزهري
+gonorrhea,السيلان
+chlamydia infection,عدوى الكلاميديا
+ectopic pregnancy,الحمل خارج الرحم
+preeclampsia,مقدمات الارتعاج
+placenta previa,الانزياح المشيمي
+miscarriage,الإجهاض
+infertility,العقم
+endometriosis,الانتباذ البطاني الرحمي
+polycystic ovary syndrome,تكيس المبايض
+uterine fibroid,الورم الليفي الرحمي
+benign tumor,الورم الحميد
+malignant tumor,الورم الخبيث
+metastasis,النقيلة
+cancer,السرطان
+acne,حب الشباب
+alopecia,الثعلبة
+frozen shoulder,الكتف المتجمد
+tennis elbow,مرفق التنس
+carpal tunnel syndrome,متلازمة النفق الرسغي
+hernia,الفتق
+inguinal hernia,الفتق الإربي
+varicose veins,الدوالي
+hemorrhoids,البواسير
+anal fissure,الشرخ الشرجي
+tonsillitis,التهاب اللوزتين
+adenoid hypertrophy,تضخم اللحمية الأنفية
+strabismus,الحول
+refractive error,خطأ الانكسار
+myopia,قصر النظر
+hyperopia,طول النظر
+astigmatism,اللابؤرية
+surgery,الجراحة
+operation,العملية الجراحية
+anesthesia,التخدير
+general anesthesia,تخدير عام
+local anesthesia,تخدير موضعي
+fine needle aspiration,سحب بالإبرة الدقيقة
+endoscopy,التنظير الداخلي
+gastroscopy,تنظير المعدة
+colonoscopy,تنظير القولون
+bronchoscopy,تنظير القصبات
+cystoscopy,تنظير المثانة
+laparoscopy,التنظير البطني
+catheterization,القسطرة
+angioplasty,رأب الأوعية
+stent,الدعامة
+bypass surgery,جراحة المجازة
+CABG,جراحة مجازة تاجية
+pacemaker,منظم القلب
+defibrillator,مزيل الرجفان
+dialysis,الغسيل الكلوي
+hemodialysis,الغسيل الدموي
+peritoneal dialysis,الغسيل البريتواني
+kidney transplant,زرع الكلية
+liver transplant,زرع الكبد
+blood transfusion,نقل الدم
+IV cannula,قثطار وريدي
+central line,قثطار مركزي
+nasogastric tube,أنبوب أنفي معدي
+oxygen therapy,العلاج بالأكسجين
+mechanical ventilation,التهوية الميكانيكية
+intubation,التنبيب
+CPR,الإنعاش القلبي الرئوي
+cardioversion,تقويم النظم
+suturing,الخياطة
+wound dressing,تغيير الضماد
+cast,الجبيرة
+traction,الشد
+physiotherapy,العلاج الطبيعي
+rehabilitation,التأهيل
+vaccination,التطعيم
+immunization,التحصين
+booster dose,الجرعة المنشطة
+injection,الحقن
+intramuscular injection,حقن عضلي
+intravenous injection,حقن وريدي
+subcutaneous injection,حقن تحت الجلد
+tablet,قرص دوائي
+capsule,كبسولة
+syrup,شراب دوائي
+suppository,تحميلة
+inhaler,بخاخ استنشاقي
+surgical drainage,التصريف الجراحي
+debridement,إزالة النسيج الميت
+laparotomy,فتح البطن الجراحي
+appendectomy,استئصال الزائدة الدودية
+cholecystectomy,استئصال المرارة
+hysterectomy,استئصال الرحم
+tonsillectomy,استئصال اللوزتين
+cesarean section,الولادة القيصرية
+lumbar puncture,البزل القطني
+thoracentesis,بزل الصدر
+paracentesis,بزل البطن
+tracheostomy,فتحة القصبة
+analgesic,مسكن
+antipyretic,خافض الحرارة
+paracetamol,الباراسيتامول
+ibuprofen,الإيبوبروفين
+aspirin,الأسبرين
+morphine,المورفين
+opioid,مسكن أفيوني
+antibiotic,مضاد حيوي
+penicillin,البنسلين
+amoxicillin,الأموكسيسيلين
+cephalosporin,السيفالوسبورين
+macrolide,الماكروليد
+fluoroquinolone,الكينولون
+metronidazole,الميترونيدازول
+antifungal,مضاد الفطريات
+antiviral,مضاد الفيروسات
+acyclovir,الأسايكلوفير
+antiretroviral,مضاد الفيروسات الرجعية
+antihypertensive,خافض الضغط
+ACE inhibitor,مثبط الإنزيم المحول للأنجيوتنسين
+beta blocker,حاجب البيتا
+calcium channel blocker,حاجب قنوات الكالسيوم
+diuretic,المدر
+furosemide,الفيوروسيميد
+statin,الستاتين
+metformin,الميتفورمين
+insulin,الإنسولين
+sulfonylurea,السلفونيل يوريا
+anticoagulant,مضاد التخثر
+warfarin,الوارفارين
+heparin,الهيبارين
+antiplatelet,مضاد الصفيحات
+corticosteroid,الكورتيكوستيرويد
+prednisone,البريدنيزون
+bronchodilator,موسع القصبات
+salbutamol,السالبوتامول
+antihistamine,مضاد الهيستامين
+antacid,مضاد الحموضة
+PPI,مثبط مضخة البروتون
+omeprazole,الأوميبرازول
+laxative,الملين
+antiemetic,مضاد القيء
+antidiarrheal,مضاد الإسهال
+antitussive,مضاد الكحة
+antibiotic resistance,مقاومة المضادات الحيوية
+side effect,الأثر الجانبي
+adverse reaction,التفاعل الضار
+drug interaction,التداخل الدوائي
+contraindication,مانع الاستعمال
+dose,الجرعة
+dosage,نظام الجرعات
+overdose,الجرعة الزائدة
+prescription,الوصفة الطبية
+over-the-counter,متاح دون وصفة
+placebo,الدواء الوهمي
+clinical trial,التجربة السريرية
+efficacy,الفاعلية
+pharmacokinetics,الحركية الدوائية
+bacteria,البكتيريا
+virus,الفيروس
+fungus,الفطر
+parasite,الطفيل
+infection,العدوى
+bacteremia,تجرثم الدم
+culture,المزرعة
+sensitivity testing,اختبار الحساسية للمضادات
+Gram stain,صبغة جرام
+incubation period,فترة الحضانة
+carrier,الحامل للمرض
+quarantine,الحجر الصحي
+isolation,العزل
+epidemic,الوباء
+pandemic,الجائحة
+endemic,متوطن
+nosocomial infection,العدوى المستشفوية
+hand hygiene,نظافة اليدين
+sterilization,التعقيم
+disinfection,التطهير
+vaccine,اللقاح
+immunity,المناعة
+herd immunity,مناعة القطيع
+inflammation,الالتهاب
+abscess,الخراج
+wound infection,عدوى الجرح
+patient,المريض
+medical record,السجل الطبي
+medical history,التاريخ المرضي
+chief complaint,الشكوى الرئيسية
+physical examination,الفحص السريري
+vital signs,العلامات الحيوية
+blood pressure,ضغط الدم
+blood pressure measurement,قياس ضغط الدم
+heart rate,معدل ضربات القلب
+respiratory rate,معدل التنفس
+body temperature,درجة حرارة الجسم
+oxygen saturation,تشبع الأكسجين
+BMI,مؤشر كتلة الجسم
+height,الطول
+weight,الوزن
+waist circumference,محيط الخصر
+Glasgow coma scale,مقياس غلاسكو للغيبوبة
+pain scale,مقياس الألم
+capillary blood glucose,سكر الدم الشعري
+peak flow,ذروة التدفق الزفيري
+spirometry,قياس التنفس
+diagnosis,التشخيص
+differential diagnosis,التشخيص التفريقي
+prognosis,المآل
+follow-up,المتابعة
+referral,الإحالة
+discharge,الخروج من المستشفى
+admission,القبول في المستشفى
+consent,الموافقة المستنيرة
+medical report,التقرير الطبي
+Composition,التركيب
+clinic,العيادة
+hospital,المستشفى
+emergency department,قسم الطوارئ
+outpatient clinic,العيادة الخارجية
+inpatient,المقيم في المستشفى
+triage,الفرز الطبي
+appointment,الموعد الطبي
+insurance,التأمين الصحي
+medical certificate,الشهادة الطبية
+sick leave,الإجازة المرضية
+health,الصحة
+prevention,الوقاية
+screening,الفحص المبكر
+surveillance,الترصد الوبائي
+epidemiology,علم الأوبئة
+public health,الصحة العامة
+internal medicine,الطب الباطني
+pediatrics,طب الأطفال
+obstetrics,التوليد
+gynecology,أمراض النساء
+cardiology,أمراض القلب
+neurology,أمراض الأعصاب
+psychiatry,الطب النفسي
+dermatology,الأمراض الجلدية
+orthopedics,جراحة العظام
+urology,جراحة المسالك البولية
+nephrology,أمراض الكلى
+gastroenterology,أمراض الجهاز الهضمي
+hepatology,أمراض الكبد
+endocrinology,أمراض الغدد الصماء
+pulmonology,أمراض الصدر
+hematology,أمراض الدم
+oncology,الأورام
+ophthalmology,طب العيون
+ENT,الأنف والأذن والحنجرة
+anesthesiology,التخدير والعناية المركزة
+pathology,علم الأمراض
+microbiology,علم الأحياء الدقيقة
+family medicine,طب الأسرة
+emergency medicine,طب الطوارئ
+intensive care,العناية المركزة
+neurosurgery,جراحة الأعصاب
+cardiothoracic surgery,جراحة القلب والصدر
+clinical pharmacy,الصيدلة الإكلينيكية
+clinical nutrition,التغذية العلاجية
+dental caries,تسوس الأسنان
+gingivitis,التهاب اللثة
+periodontitis,التهاب دواعم السن
+tooth extraction,قلع السن
+root canal treatment,علاج جذور السن
+dental plaque,اللويحة السنية
+orthodontics,تقويم الأسنان
+dental implant,زرعة الأسنان
+denture,طقم الأسنان
+tooth filling,حشوة السن
