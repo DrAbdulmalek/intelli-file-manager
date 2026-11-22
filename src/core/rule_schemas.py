@@ -445,6 +445,19 @@ class UndoEntry:
             e.recovery_state = "recovery_required"
         return e
 
+    @property
+    def requires_recovery(self) -> bool:
+        """F19 — أداة تمييز آلية لمستدعي rollback_last/all/n (عقد الإرجاع).
+
+        بعد كل استدعاء افحص هذه الخاصية على الكائن المعاد:
+          - True: سجل قديم ملتبس لم يُعكس ولم يُستهلك — يتطلب قرار
+            استرداد/مراجعة يدوياً (لا تُعد المحاولة الآلية؛ كل محاولة
+            تعيد النتيجة نفسها).
+          - False: لا حالة استرداد خاصة — وسواء تراجع بنجاح أو فشل عكسه
+            عادياً يُميَّز بوجود السجل في القائمة وبـrollback_error_message.
+        """
+        return self.recovery_state == "recovery_required"
+
 
 # ─── Ruleset (ملف قواعد كامل) ──────────────────────────────────────────────
 
