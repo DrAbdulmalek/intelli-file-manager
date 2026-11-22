@@ -222,3 +222,25 @@ def test_f8_symlink_to_same_target_after_read_no_sha(clinic, monkeypatch):
     res = db.register_file(str(p))
     assert res["sha256"] is None
     assert _registered_sha(db) is None
+
+
+
+def test_f8_replaced_after_initial_stat_before_hash_no_sha(clinic, monkeypatch):
+    """استبدال الملف بعد stat الأول وقبل حساب البصمة لا يربط بصمة البديل ببيانات الأصل."""
+    db, tmp_path = clinic
+    p = tmp_path / "plain.txt"
+    p.write_text("original-file", encoding="utf-8")
+    real_classify = mdb.classify_sensitivity
+
+    def replace_after_initial_stat(path):
+        info = real_classify(path)
+        replacement = tmp_path / "replacement.txt"
+        replacement.write_text("replacement!", encoding="utf-8")
+        os.replace(replacement, p)
+        return info
+
+    monkeypatch.setattr(mdb, "classify_sensitivity", replace_after_initial_stat)
+    res = db.register_file(str(p))
+    assert res["sha256"] is None
+    assert _registered_sha(db) is None
+    assert p.read_text(encoding="utf-8") == "replacement!"
