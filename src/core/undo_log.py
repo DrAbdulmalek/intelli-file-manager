@@ -200,7 +200,7 @@ class UndoLog:
         # كاملة بسبب سجل فشل لا أكثر. تُعلَّم no-op ويُحتفظ بسجلها (أثر
         # تدقيقي) وتُذكر في نتيجة التراجع.
         if not entry.success:
-            entry._ifm_noop_failed = True
+            setattr(entry, "_ifm_noop_failed", True)
             return
         if at in (ActionType.MOVE.value, ActionType.COPY.value):
             from .safe_mover import compute_sha256
@@ -248,7 +248,7 @@ class UndoLog:
                         "الملف البديل أصلياً — رفض fail-closed والسجل محفوظ: "
                         f"{orig}"
                     )
-                entry._ifm_already_rolled_back = True
+                setattr(entry, "_ifm_already_rolled_back", True)
                 return
             raise RuntimeError(
                 f"الملف المستهدف مفقود بلا تفسير ({at}): {target} — "
