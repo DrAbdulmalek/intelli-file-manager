@@ -404,6 +404,17 @@ class UndoEntry:
     # خطأ محاولة التراجع منفصل عن نتيجة الإجراء الأصلي؛ لا يغيّر success.
     # فارغ للسجلات القديمة، ومتوافق خلفياً عبر from_dict.
     rollback_error_message: str = ""
+    # F19: إصدار صيغة السجل — "1": قديم (كُتب قبل فصل نتيجة التراجع F14،
+    # حيث كان فشل التراجع يُلوّث success/error_message؛ فـsuccess=False
+    # فيه لا يثبت فشل الإجراء الأصلي)، "2": الصيغة الحالية. يُكتشف عند
+    # التحميل من غياب مفتاح rollback_error_message في JSON، والقيمة
+    # الصريحة تنتصر عند إعادة الحفظ حتى لا يضيع التمييز عبر دورات
+    # حفظ/تحميل. التوافق خلفي كامل: السجلات القديمة تُحمّل كما هي.
+    schema_version: str = "2"
+    # F19: حالة الاسترداد — "recovery_required": سجل قديم ملتبس يتطلب
+    # قرار استرداد/مراجعة يدوياً؛ لا يُستهلك ولا يُعكس تلقائياً (انظر
+    # UndoLog._rollback_entry). فارغ لغير ذلك.
+    recovery_state: str = ""
     # checksum للنسخة المنشأة في عمليات copy (يحمي التراجع: إن عُدّل
     # الملف بعد النسخ يُرفض حذفه — جولة DeepSeek 11). متوافق خلفياً:
     # from_dict يفلتر المفاتيح، والقيم القديمة تُترك None
@@ -418,7 +429,21 @@ class UndoEntry:
 
     @classmethod
     def from_dict(cls, d: dict) -> "UndoEntry":
-        return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+        # F19: تمييز أصل السجل (provenance). غياب مفتاح rollback_error_message
+        # في JSON يعني أن السجل كُتب قبل F14 (schema v1) — لا يمكن الوثوق
+        # بـsuccess=False فيه كدليل على فشل الإجراء الأصلي. القيمة الصريحة
+        # schema_version تنتصر إن وُجدت (تُكتب من الصيغة الحالية فصاعداً
+        # عبر to_dict/asdict) فلا يضيع التمييز بعد إعادة الحفظ.
+        version = d.get("schema_version")
+        if version is None:
+            version = "1" if "rollback_error_message" not in d else "2"
+        e = cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+        e.schema_version = str(version)
+        if e.schema_version == "1" and not e.success and not e.recovery_state:
+            # سجل قديم ملتبس: يتطلب قرار استرداد/مراجعة يدوياً — علامة
+            # دائمة تُحفظ مع السجل (لا ترحيل تخميني).
+            e.recovery_state = "recovery_required"
+        return e
 
 
 # ─── Ruleset (ملف قواعد كامل) ──────────────────────────────────────────────

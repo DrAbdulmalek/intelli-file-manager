@@ -27,6 +27,12 @@ from .rule_schemas import UndoEntry, ActionType
 logger = logging.getLogger(__name__)
 
 
+class RecoveryRequiredError(RuntimeError):
+    """F19: سجل قديم ملتبس (schema v1 + success=False) يتطلب قرار استرداد
+    يدوي — قد يكون إجراءً ناجحاً فشل تراجعه قبل فصل النتائج (F14)؛ لا يُعكس
+    ولا يُستهلك تلقائياً، ويبقى السجل محفوظاً بحالة recovery_required."""
+
+
 class UndoLog:
     """سجل التراجع عن الإجراءات
 
@@ -118,6 +124,10 @@ class UndoLog:
     def rollback_last(self) -> Optional[UndoEntry]:
         """يرجع آخر إجراء منفّذ (FIFO reversal)
 
+        F19: سجل قديم ملتبس (schema v1 + success=False) يُرفض عكسه
+        واستهلاكه — يبقى محفوظاً في السجل بحالة recovery_required
+        وrollback_error_message يوضح السبب.
+
         Returns:
             UndoEntry الذي تم التراجع عنه، أو None لو السجل فارغ
         """
@@ -142,6 +152,9 @@ class UndoLog:
 
     def rollback_all(self) -> List[UndoEntry]:
         """يرجع كل الإجراءات بترتيب عكسي (LIFO)
+
+        يتوقف عند أول فشل تراجع حقيقي أو سجل قديم ملتبس (F19) — السجل
+        يبقى محفوظاً والسبب موثقاً في rollback_error_message.
 
         Returns:
             قائمة UndoEntry التي تم التراجع عنها (بنفس ترتيب التراجع)
@@ -194,12 +207,22 @@ class UndoLog:
         # الوجهة قبل إعادة المحاولة.
         entry.__dict__.pop("_ifm_already_rolled_back", None)
         entry.__dict__.pop("_ifm_noop_failed", None)
+        entry.__dict__.pop("_ifm_recovery_required", None)
         at = entry.action_type
         # F13: سجل إخفاق (success=False) لا يمثل إجراءً مكتملاً — لا شيء
         # لعكسه؛ معاملته كخطأ في preflight كانت تُجهض التراجع عن الدفعة
         # كاملة بسبب سجل فشل لا أكثر. تُعلَّم no-op ويُحتفظ بسجلها (أثر
         # تدقيقي) وتُذكر في نتيجة التراجع.
+        # F19: سجل قديم ملتبس (schema v1 + success=False) لا يُصنَّف
+        # noop_failed — لم يُثبت أن الإجراء لم يُنفّذ أصلاً (قد يكون ناجحاً
+        # فشل تراجعه قبل F14). يُعلَّم يتطلب استرداداً، يبقى في السجل، ولا
+        # يجهض الدفعة (بقية السجلات تُراجع)، ويُذكر في النتيجة ضمن
+        # recovery_required.
         if not entry.success:
+            if entry.schema_version == "1":
+                entry.recovery_state = "recovery_required"
+                setattr(entry, "_ifm_recovery_required", True)
+                return
             setattr(entry, "_ifm_noop_failed", True)
             return
         if at in (ActionType.MOVE.value, ActionType.COPY.value):
@@ -409,9 +432,14 @@ class UndoLog:
 
         Returns:
             {"batch_id", "rolled_back": [types], "already_rolled_back": [types],
-             "skipped_failed": [types], "remaining": n}
+             "skipped_failed": [types], "recovery_required": [types],
+             "remaining": n}
              — skipped_failed (F13): سجلات إخفاق في الدفعة؛ لم تُنفّذ
              أصلاً فلا شيء لعكسه، ويبقى سجلها أثراً تدقيقياً.
+             — recovery_required (F19): سجلات قديمة ملتبسة (schema v1 +
+             success=False) — قد تكون إجراءات ناجحة فشل تراجعها قبل F14؛
+             تُحفظ في السجل بحالة recovery_required وتتطلب قرار استرداد
+             يدوياً، ولا تُستهلك ولا تُعكس تلقائياً.
 
         Raises:
             ValueError: batch_id فارغ أو لا توجد إجراءات له.
@@ -437,6 +465,7 @@ class UndoLog:
         rolled_back: List[str] = []
         already: List[str] = []
         skipped_failed: List[str] = []  # F13: سجلات إخفاق — لا شيء لعكسه
+        recovery_required: List[str] = []  # F19: سجلات قديمة ملتبسة
         completed: List[tuple] = []  # (index, entry, post_state)
         failure: Optional[Exception] = None
         failureEntry: Optional[UndoEntry] = None
@@ -444,6 +473,9 @@ class UndoLog:
             entry = self.entries[i]
             if getattr(entry, "_ifm_already_rolled_back", False):
                 already.append(entry.action_type)
+                continue
+            if getattr(entry, "_ifm_recovery_required", False):
+                recovery_required.append(entry.action_type)
                 continue
             if getattr(entry, "_ifm_noop_failed", False):
                 skipped_failed.append(entry.action_type)
@@ -489,6 +521,7 @@ class UndoLog:
             "rolled_back": rolled_back,
             "already_rolled_back": already,
             "skipped_failed": skipped_failed,
+            "recovery_required": recovery_required,
             "remaining": len(self.entries),
         }
 
@@ -497,16 +530,30 @@ class UndoLog:
     def _rollback_entry(self, entry: UndoEntry) -> None:
         """ينفّذ العملية العكسية لإجراء واحد
 
-        F18: سجل الإخفاق (success=False) لم يُنفّذ أصلاً — لا شيء لعكسه.
-        محاولة العكس كانت توقف rollback_all/rollback_n عند آخر سجل (فشل
-        MOVE بلا file_path_after يرفع ValueError) أو تعيد كتابة sidecar
-        لملف قد لا يكون موجوداً (سجل TAG/UNTAG فاشل). يُعامل no-op ويُستهلك
-        من السجل هنا (أثره يبقى في ActionLog) — اتساقاً مع دلالات
-        rollback_batch نفسها (F13: skipped_failed). تحفظ موثق: سجلات قديمة
-        حُفظت قبل فصل نتيجة التراجع (F14) قد تحمل success=False لإجراء
-        ناجح فشل تراجعه — وrollback_batch يعاملها بنفس الدلالة منذ F13.
+        F18: سجل الإخفاق الحالي (schema v2، success=False موثوق) لم يُنفّذ
+        أصلاً — لا شيء لعكسه. محاولة العكس كانت توقف rollback_all/rollback_n
+        عند آخر سجل (فشل MOVE بلا file_path_after يرفع ValueError) أو تعيد
+        كتابة sidecar لملف قد لا يكون موجوداً (سجل TAG/UNTAG فاشل). يُعامل
+        no-op ويُستهلك من السجل هنا (أثره يبقى في ActionLog) — اتساقاً مع
+        دلالات rollback_batch نفسها (F13: skipped_failed).
+
+        F19: سجل قديم ملتبس (schema v1 + success=False) — قبل F14 كان فشل
+        التراجع يُلوّث success/error_message، فالسجل قد يمثل إجراءً ناجحاً
+        فشل تراجعه (الملف ما زال على القرص ويحتاج استرداداً). لا يمكن التمييز
+        من السجل وحده ولا ترحيل تخميني: لا عكس (قد يحذف ملفاً يحتاجه
+        المستخدم بناءً على تخمين) ولا استهلاك (يفقد إمكانية الاسترداد عبر
+        سجل Undo) — يُحفظ بحالة recovery_required ويُرفع
+        RecoveryRequiredError فيبقى السجل محفوظاً (إعادة الإلحاق في
+        rollback_last) ويوقف rollback_all/rollback_n عبر آلية F15.
         """
         if not entry.success:
+            if entry.schema_version == "1":
+                entry.recovery_state = "recovery_required"
+                raise RecoveryRequiredError(
+                    f"سجل قديم ملتبس (schema v1، success=False) — قد يكون "
+                    f"إجراءً ناجحاً فشل تراجعه: لا عكس ولا استهلاك تلقائي، "
+                    f"يتطلب قرار استرداد يدوياً (F19): {entry.file_path}"
+                )
             logger.info(
                 f"تخطّي التراجع عن إجراء فاشل أصلاً ({entry.action_type} على "
                 f"{entry.file_path}) — لم يُنفّذ فلا شيء لعكسه (F18)"
