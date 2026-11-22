@@ -516,7 +516,7 @@ class ActionLog:
                 "entry_id", "timestamp", "action_type", "rule_name",
                 "file_path", "file_path_after", "success", "error_message",
                 "tags_added", "tags_removed", "old_category", "new_category",
-                "checksum_before", "checksum_after", "source", "duration_ms",
+                "checksum_before", "checksum_after", "source", "duration_ms", "batch_id",
             ])
             for e in self.list_entries(reverse=True):
                 writer.writerow([
@@ -527,7 +527,7 @@ class ActionLog:
                     ";".join(e.tags_added), ";".join(e.tags_removed),
                     e.old_category, e.new_category,
                     e.checksum_before, e.checksum_after,
-                    e.source, e.duration_ms,
+                    e.source, e.duration_ms, e.batch_id,
                 ])
         return str(out)
 

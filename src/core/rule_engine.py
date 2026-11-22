@@ -126,6 +126,7 @@ class RuleEngine:
         undo_log_path: Optional[Union[str, Path]] = None,
         confirm_destructive: bool = False,
         action_log: Optional["ActionLog"] = None,
+        batch_id: str = "",
     ) -> List[UndoEntry]:
         """ينفّذ خطة محاكاة مع تسجيل كل إجراء للتراجع
 
@@ -184,6 +185,7 @@ class RuleEngine:
                 entry = self._execute_single(
                     effective_planned, undo_log,
                     action_log=action_log, safe_mover=safe_mover,
+                    batch_id=batch_id,
                 )
                 # تحديث خريطة المسار بعد النقل/النسخ الناجح
                 if entry.success and entry.file_path_after:
@@ -199,6 +201,7 @@ class RuleEngine:
                     timestamp=datetime.now().isoformat(),
                     success=False,
                     error_message=str(e)[:200],
+                    batch_id=batch_id,
                 )
                 entries.append(entry)
                 undo_log.append(entry)
@@ -281,6 +284,7 @@ class RuleEngine:
         *,
         action_log: Optional["ActionLog"] = None,
         safe_mover: Optional["SafeMover"] = None,
+        batch_id: str = "",
     ) -> UndoEntry:
         """ينفّذ إجراءً واحدًا ويسجّله في undo_log
 
@@ -312,6 +316,10 @@ class RuleEngine:
         else:
             raise ValueError(f"نوع إجراء غير معروف: {action_type}")
 
+        # ختم الدفعة (P1): كل UndoEntry من هذه الجلسة يحمل batch_id —
+        # يشمل سجلات الفشل الداخلية (move/copy failures) لأنها مرت من
+        # المنفّذين أعلاه. صفر batch_id للسجلات القديمة = توافق خلفي.
+        entry.batch_id = batch_id
         # تسجيل في ActionLog (PR-07)
         if action_log is not None:
             action_log.log_from_undo_entry(entry, source="rule_engine")
