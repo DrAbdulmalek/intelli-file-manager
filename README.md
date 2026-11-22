@@ -575,3 +575,14 @@ class MyPlugin(IntelliFilePlugin):
 [Report Bug](https://github.com/DrAbdulmalek/intelli-file-manager/issues) · [Request Feature](https://github.com/DrAbdulmalek/intelli-file-manager/issues) · [Contribute](CONTRIBUTING.md)
 
 </div>
+
+---
+
+<div align="center">
+
+## البرمجة | Coding
+
+### برمجة د. عبد المالك الحسيني — حمص، سوريا
+### Developed by Dr. Abdulmalek Alhusseini — Homs, Syria
+
+</div>
