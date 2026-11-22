@@ -216,8 +216,58 @@ def test_f9_rollback_last_failure_keeps_record_and_reports_honestly(tmp_path, lo
     returned = log.rollback_last()
     monkeypatch.undo()
     assert returned is not None
-    assert returned.success is False
-    assert "Recovery" in returned.error_message
-    # F9: السجل بقي (قبل الإصلاح كان pop يفقده نهائياً عند الفشل)
+    # success يصف نجاح MOVE الأصلي، لا محاولة التراجع الفاشلة.
+    assert returned.success is True
+    assert "Recovery" in returned.rollback_error_message
+    assert returned.error_message == ""
+    # F9: السجل بقي ويمكن إعادة المحاولة بعد زوال سبب الفشل.
     assert len(log) == 1
     assert log.entries[0] is returned
+    retried = log.rollback_last()
+    assert retried is returned
+    assert retried.rollback_error_message == ""
+    assert len(log) == 0
+    assert orig.exists() and not dest.exists()
+
+
+
+def test_f9_rollback_all_stops_after_failure_without_spinning(tmp_path, log, monkeypatch):
+    """الفشل يبقي السجل؛ rollback_all يجب أن يتوقف بدلاً من الدوران عليه."""
+    entry, orig, dest, sidecar = _setup_moved_with_sidecar(tmp_path)
+    log.append(entry)
+
+    def fail_move(self, src, dst, **kw):
+        from src.core.safe_mover import MoveResult
+        return MoveResult(
+            source=str(src), destination=str(dst),
+            checksum_before="", checksum_after="", success=False,
+            error="حقن فشل rollback_all", sidecar_moved=False, duration_ms=0,
+        )
+
+    monkeypatch.setattr(SafeMover, "move", fail_move)
+    returned = log.rollback_all()
+    assert returned == [entry]
+    assert len(log) == 1
+    assert entry.success is True
+    assert "حقن فشل rollback_all" in entry.rollback_error_message
+
+
+def test_f9_rollback_n_stops_after_failure_and_preserves_record(tmp_path, log, monkeypatch):
+    """rollback_n لا يكرر محاولة السجل الفاشل ضمن الاستدعاء نفسه."""
+    entry, orig, dest, sidecar = _setup_moved_with_sidecar(tmp_path)
+    log.append(entry)
+
+    def fail_move(self, src, dst, **kw):
+        from src.core.safe_mover import MoveResult
+        return MoveResult(
+            source=str(src), destination=str(dst),
+            checksum_before="", checksum_after="", success=False,
+            error="حقن فشل rollback_n", sidecar_moved=False, duration_ms=0,
+        )
+
+    monkeypatch.setattr(SafeMover, "move", fail_move)
+    returned = log.rollback_n(5)
+    assert returned == [entry]
+    assert len(log) == 1
+    assert entry.success is True
+    assert "حقن فشل rollback_n" in entry.rollback_error_message
