@@ -96,6 +96,53 @@ def _now() -> str:
 
 class ExportError(RuntimeError):
     """خطأ تصدير آمن: تطابق مسار المصدر/الوجهة، أو No-Clobber، أو سباق نشر."""
+class IdentityMismatchError(RuntimeError):
+    """فشل التحقق من هوية الملف أثناء التسجيل (مضاد TOCTOU — fail-closed)."""
+
+
+def _sha256_with_identity_check(p: Path, expected_stat: os.stat_result) -> str:
+    """يحسب SHA-256 عبر الحاجز مع تحقق هوية ثلاثي (P1 — مضاد TOCTOU).
+
+    تسلسل fstat-الأساس:
+      1. فتح عبر open_checked (حاجز + O_NOFOLLOW + فحص ملف عادي).
+      2. fstat على الواصف المفتوح ومقارنته بstat المسار قبل أي قراءة.
+      3. القراءة ثم fstat جديد: كشف استبدال/تغيّر حجم/محتوى أثناء القراءة.
+      4. بعد الإغلاق: stat المسار مرة أخيرة — يجب أن يشير إلى نفس
+         (st_dev, st_ino): كشف استبدال/نقل/تحويل المسار إلى symlink.
+
+    أي فشل في أي خطوة يرفع IdentityMismatchError — لا بصمة جزئية ولا
+    تُخزَّن بصمة لم تتأكد هويتها. لا تدّعية متانة بعد انقطاع الطاقة هنا.
+    """
+    expected = (expected_stat.st_dev, expected_stat.st_ino)
+    h = hashlib.sha256()
+    with open_checked(p, "rb", operation="حساب بصمة تسجيل الملف") as f:
+        st_open = os.fstat(f.fileno())
+        if (st_open.st_dev, st_open.st_ino) != expected:
+            raise IdentityMismatchError(
+                f"الملف المفتوح لا يطابق الملف المطلوب (فحص قبل القراءة): {p}"
+            )
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+        st_after = os.fstat(f.fileno())
+        if (st_after.st_dev, st_after.st_ino) != expected:
+            raise IdentityMismatchError(f"اُستبدل الملف أثناء القراءة: {p}")
+        if st_after.st_size != st_open.st_size:
+            raise IdentityMismatchError(
+                f"تغيّر حجم الملف أثناء القراءة (محتوى متغير): {p}"
+            )
+    try:
+        st_path = p.stat()
+    except OSError as e:
+        raise IdentityMismatchError(
+            f"المسار لم يعد يشير إلى ملف بعد القراءة: {p} — {e}"
+        ) from e
+    if (st_path.st_dev, st_path.st_ino) != expected:
+        raise IdentityMismatchError(
+            f"المسار لم يعد يشير إلى نفس الملف بعد القراءة"
+            f" (استبدال/نقل/رابط رمزي): {p}"
+        )
+    return h.hexdigest()
+
 
 
 class MedicalDB:
@@ -240,18 +287,12 @@ class MedicalDB:
             # كلياً ولا يُسجَّل باسم ملف آخر (مضاد TOCTOU).
             expected_stat = p.stat()
             try:
-                h = hashlib.sha256()
-                with open_checked(p, "rb", operation="حساب بصمة تسجيل الملف") as f:
-                    for chunk in iter(lambda: f.read(1 << 20), b""):
-                        h.update(chunk)
-                    if not verify_open_identity(f, expected_stat):
-                        raise RuntimeError(
-                            f"تغيّر/اُستبدل الملف أثناء حساب البصمة: {p}"
-                        )
-                sha = h.hexdigest()
+                # تحقق ثلاثي (قبل/أثناء/بعد القراءة) — أي فشل يمنع خزن البصمة
+                sha = _sha256_with_identity_check(p, expected_stat)
             except (SensitiveFileBlockedError, OSError, RuntimeError) as e:
                 logger.warning(
-                    "تعذّرت القراءة الآمنة — تسجيل وصفي بلا بصمة: %s (%s)", p, e
+                    "فشل التحقق الآمن — تسجيل وصفي بلا بصمة (fail-closed): %s (%s)",
+                    p, e,
                 )
                 sha = None
         elif not readable:
@@ -337,32 +378,20 @@ class MedicalDB:
             )
 
         out.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(
-            prefix=f".ifm_export_{out.name}_", suffix=".part", dir=str(out.parent)
-        )
+        try:
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=f".ifm_export_{out.name}_", suffix=".part", dir=str(out.parent)
+            )
+        except OSError as e:
+            raise ExportError(f"فشل إنشاء قاعدة البيانات المؤقتة: {e}") from e
         os.close(fd)
         tmp_file = Path(tmp_name)
         published = False
         try:
-            with MedicalDB(tmp_file) as dst:
-                dst.init()
-                for pid_row in self.list_patients():
-                    dst._conn.execute(
-                        "INSERT INTO patients (id, name, age, sex, notes, created_at)"
-                        " VALUES (?,?,?,?,?,?)",
-                        (pid_row["id"], None, None, None, None, pid_row["created_at"]),
-                    )
-                n_rec = 0
-                for r in self.list_records():
-                    dst._conn.execute(
-                        "INSERT INTO records (patient_id, date, record_type, source_path,"
-                        " sha256, summary, findings, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                        (r["patient_id"], r["date"], r["record_type"], None, None,
-                         r["summary"], r["findings"], r["created_at"]),
-                    )
-                    n_rec += 1
-                dst._conn.commit()
-            # تدفق النسخة المكتملة على القرص قبل النشر الذري
+            # الكتابة في دالة قابلة للفحص — فشلها يُنظّف المؤقت في finally
+            n_rec = self._write_deidentified_copy(tmp_file)
+            # fsync على واصف مستقل بعد إغلاق اتصال SQLite المؤقت: النشر
+            # لا يبدأ إلا بعد اكتمال الكتابة وتدفقها للقرص.
             with open(tmp_file, "rb") as f:
                 os.fsync(f.fileno())
             if overwrite and out.exists():
@@ -377,19 +406,64 @@ class MedicalDB:
                         f"شُغلت الوجهة أثناء التصدير (سباق) — رُفض النشر: {out}"
                     ) from e
             published = True
+            # fsync للمجلد (الأفضل جهدًا) — لا تدّعية متانة بعد انقطاع
+            # الطاقة دون اختبار على نظام الملفات المعني (قيد موثق).
+            try:
+                dir_fd = os.open(str(out.parent), os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+            except OSError as e:
+                logger.warning("تعذر fsync لمجلد النشر %s: %s", out.parent, e)
         finally:
-            if not published and tmp_file.exists():
+            # تنظيف الملف المؤقت في كل المسارات بما فيها النجاح عبر
+            # os.link (الرابط المؤقت يبقى ما لم يُحذف صراحةً). أخطاء
+            # التنظيف تُسجَّل ولا تُخفي نتيجة التصدير الأساسية؛ الوجهة
+            # المنشورة لا تُمس عند فشل التنظيف.
+            if tmp_file.exists():
                 try:
                     tmp_file.unlink()
                 except OSError as e:
                     logger.warning("تعذر إزالة الملف المؤقت %s: %s", tmp_file, e)
-        self.log("export_deidentified", detail=str(out))
+        # تتبع العملية خارج قاعدة المصدر (Finding 1): التصدير لا يكتب
+        # أي شيء في processing_log الخاص بالمصدر — التتبع عبر القيمة
+        # المرجعة هنا، وعلى المتصل تسجيلها في سجل خارجي (مثل ActionLog).
         return {
             "out": str(out),
             "patients": len(self.list_patients()),
             "records": n_rec,
             "free_text_policy": "verbatim",
+            "logged_in_source_db": False,
         }
+
+    def _write_deidentified_copy(self, tmp_file: Path) -> int:
+        """يكتب نسخة مجردة كاملة إلى الملف المؤقت (قبل النشر الذري).
+
+        استُخرجت كدالة قابلة للفحص: اختبارات حقن الفشل (commit/كتابة)
+        تلتقطها عبر monkeypatch وتتحقق من تنظيف المؤقت وسلامة المصدر.
+        المنهجية: أبني قاعدة SQLite جديدة بدل نسخ المصدر وقصّ الحقول —
+        هكذا لا تسرب أي بيانات هيكلية غير مقصودة.
+        """
+        with MedicalDB(tmp_file) as dst:
+            dst.init()
+            for pid_row in self.list_patients():
+                dst._conn.execute(
+                    "INSERT INTO patients (id, name, age, sex, notes, created_at)"
+                    " VALUES (?,?,?,?,?,?)",
+                    (pid_row["id"], None, None, None, None, pid_row["created_at"]),
+                )
+            n_rec = 0
+            for r in self.list_records():
+                dst._conn.execute(
+                    "INSERT INTO records (patient_id, date, record_type, source_path,"
+                    " sha256, summary, findings, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (r["patient_id"], r["date"], r["record_type"], None, None,
+                     r["summary"], r["findings"], r["created_at"]),
+                )
+                n_rec += 1
+            dst._conn.commit()
+        return n_rec
 
     # ─── السجل والإحصاء ───────────────────────────────────────────────────
     def log(self, action: str, path: Optional[str] = None, detail: Optional[str] = None) -> None:
