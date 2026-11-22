@@ -29,6 +29,8 @@ class _Wrap:
         if self._on_read and self._reads == 1:
             self._on_read()
         return data
+    def seek(self, offset, whence=0):
+        return self._real.seek(offset, whence)
     def fileno(self):
         return self._real.fileno()
     def __enter__(self):
@@ -130,6 +132,93 @@ def test_path_becomes_symlink_after_read_no_sha(clinic, monkeypatch):
         os.unlink(p)
         os.symlink(decoy, p)
     _patch_open(monkeypatch, on_exit=to_symlink)
+    res = db.register_file(str(p))
+    assert res["sha256"] is None
+    assert _registered_sha(db) is None
+
+
+# ─── F8: استكمال TOCTOU — تغيّر المحتوى مع ثبات الحجم/الـinode ──────────
+# (المراجعة المستقلة F8: مقارنة mtime_ns/ctime_ns + lstat بعد القراءة)
+
+def test_f8_same_size_content_swap_no_sha(clinic, monkeypatch):
+    """تعديل المحتوى أثناء القراءة مع بقاء الحجم نفسه — يجب كشفه."""
+    db, tmp_path = clinic
+    p = tmp_path / "plain.txt"; p.write_text("a" * 500, encoding="utf-8")
+    def same_size_swap():
+        # كتابة محتوى مختلف تماماً بنفس الطول بالضبط
+        fd = os.open(str(p), os.O_WRONLY)
+        try:
+            os.write(fd, b"Z" * 500)
+        finally:
+            os.close(fd)
+    _patch_open(monkeypatch, on_read=same_size_swap)
+    res = db.register_file(str(p))
+    assert res["sha256"] is None
+    assert _registered_sha(db) is None
+
+
+def test_f8_mutate_then_restore_size_no_sha(clinic, monkeypatch):
+    """تعديل المحتوى ثم إعادة الحجم الأصلي — الحجم يتطابق لكن الأوقات لا."""
+    db, tmp_path = clinic
+    p = tmp_path / "plain.txt"; p.write_text("b" * 400, encoding="utf-8")
+    def mutate_and_restore_size():
+        # الكتابة فوق البداية (محتوى مختلف) ثم إعادة الحجم الأصلي —
+        # الحجم يتطابق لكن المحتوى والأوقات لا
+        fd = os.open(str(p), os.O_WRONLY)
+        try:
+            os.write(fd, b"injected-junk" + b"x" * 437)  # 450 بايت
+            os.ftruncate(fd, 400)  # إعادة الحجم الأصلي بمحتوى مختلف
+        finally:
+            os.close(fd)
+    _patch_open(monkeypatch, on_read=mutate_and_restore_size)
+    res = db.register_file(str(p))
+    assert res["sha256"] is None
+    assert _registered_sha(db) is None
+
+
+def test_f8_mutate_with_mtime_restored_still_detected(clinic, monkeypatch):
+    """إخفاء التعديل بإعادة ضبط mtime — ctime لا يمكن إعادة ضبطه فيُكشف."""
+    db, tmp_path = clinic
+    p = tmp_path / "plain.txt"; p.write_text("c" * 300, encoding="utf-8")
+    old = p.stat()
+    def stealth_mutate():
+        fd = os.open(str(p), os.O_WRONLY)
+        try:
+            os.write(fd, b"Q" * 300)
+            os.utime(str(p), ns=(old.st_atime_ns, old.st_mtime_ns))
+        finally:
+            os.close(fd)
+    _patch_open(monkeypatch, on_read=stealth_mutate)
+    res = db.register_file(str(p))
+    assert res["sha256"] is None
+    assert _registered_sha(db) is None
+
+
+def test_f8_same_size_inode_swap_no_sha(clinic, monkeypatch):
+    """استبدال الـinode بمحاكاة (unlink + إنشاء جديد بنفس الحجم)."""
+    db, tmp_path = clinic
+    p = tmp_path / "plain.txt"; p.write_text("d" * 250, encoding="utf-8")
+    def swap_inode_same_size():
+        os.unlink(p)
+        p.write_text("E" * 250, encoding="utf-8")  # inode جديد، حجم مطابق
+    _patch_open(monkeypatch, on_read=swap_inode_same_size)
+    res = db.register_file(str(p))
+    assert res["sha256"] is None
+    assert _registered_sha(db) is None
+
+
+def test_f8_symlink_to_same_target_after_read_no_sha(clinic, monkeypatch):
+    """استبدال المسار برابط رمزي **إلى نفس الملف** — stat العادي كان
+    سيمرّ (نفس dev/ino عبر التابع)؛ lstat يكشف الرابط ويرفض."""
+    db, tmp_path = clinic
+    p = tmp_path / "plain.txt"; p.write_text("سليم-نفس-الهدف", encoding="utf-8")
+    real = tmp_path / "real.bin"
+    def to_symlink_same_target():
+        # ننقل الملف الحقيقي ونجعل الاسم الأصلي رابطاً رمزياً إليه —
+        # نفس الـinode، نفس المحتوى: الحالة الأكثر ملتبسة
+        os.rename(p, real)
+        os.symlink(real, p)
+    _patch_open(monkeypatch, on_exit=to_symlink_same_target)
     res = db.register_file(str(p))
     assert res["sha256"] is None
     assert _registered_sha(db) is None
