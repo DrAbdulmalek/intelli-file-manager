@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — Review Follow-up (F19 — PR #78)
+
+### أُصلح
+- **F19 — تمييز السجلات القديمة الملتبسة** (`src/core/rule_schemas.py` +
+  `src/core/undo_log.py`): سجل قديم (schema v1 — كُتب قبل F14) يحمل
+  success=False قد يمثل إجراءً ناجحاً فشل تراجعه (التلوث القديم)، وكان F18
+  يستهلكه no-op فيفقد قابلية الاسترداد. الآن: حقلا `schema_version` و
+  `recovery_state` — الأصل يُكتشف من غياب مفتاح rollback_error_message في
+  JSON (القيمة الصريحة تنتصر فلا يضيع التمييز عبر حفظ/تحميل)، والسجل
+  الملتبس يُحفظ بحالة recovery_required بلا عكس ولا استهلاك ولا حذف
+  ملف/sidecar، ويوقف rollback_all/n، ويُصنف في نتيجة rollback_batch ضمن
+  مفتاح recovery_required جديد. لا ترحيل تخميني.
+
+### أُضيف
+- 8 اختبارات F19 على سجلات محفوظة فعلياً بصيغة ما قبل F14 (ختم provenance،
+  حفظ بلا حذف، توقف rollback_all، تصنيف الدفعة، ثبات التمييز عبر
+  save/load، التوافق الخلفي للسجلات الناجحة، انحدار F18).
+
 ## [Unreleased] — Review Follow-up (F14–F18 — PR #78)
 
 ### أُصلح
