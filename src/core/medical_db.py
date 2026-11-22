@@ -101,37 +101,82 @@ class IdentityMismatchError(RuntimeError):
 
 
 def _sha256_with_identity_check(p: Path, expected_stat: os.stat_result) -> str:
-    """يحسب SHA-256 عبر الحاجز مع تحقق هوية ثلاثي (P1 — مضاد TOCTOU).
+    """يحسب SHA-256 عبر الحاجز مع تحقق هوية ثلاثي (P1 — مضاد TOCTOU، مكتمل F8).
 
     تسلسل fstat-الأساس:
       1. فتح عبر open_checked (حاجز + O_NOFOLLOW + فحص ملف عادي).
-      2. fstat على الواصف المفتوح ومقارنته بstat المسار قبل أي قراءة.
-      3. القراءة ثم fstat جديد: كشف استبدال/تغيّر حجم/محتوى أثناء القراءة.
-      4. بعد الإغلاق: stat المسار مرة أخيرة — يجب أن يشير إلى نفس
-         (st_dev, st_ino): كشف استبدال/نقل/تحويل المسار إلى symlink.
+      2. fstat على الواصف المفتوح ومقارنته بstat المسار قبل أي قراءة —
+         الآن شاملًا (st_dev, st_ino, st_size, st_mtime_ns, st_ctime_ns).
+      3. القراءة ثم fstat جديد: كشف استبدال، تغيّر حجم، أو **تغيّر محتوى
+         حتى مع بقاء الحجم و inode ثابتين** (F8) — أي كتابة تُغيّر
+         mtime_ns؛ وctime_ns لا يمكن لعملية مستخدم إعادة ضبطه، فلا يمكن
+         التخفي بإعادة ضبط الوقت بعد تعديل المحتوى بنفس الحجم.
+      4. بعد الإغلاق: **lstat** المسار (لا يتبع الروابط الرمزية — F8):
+         يجب أن يشير إلى نفس (st_dev, st_ino) وأن يبقى ملفاً عادياً —
+         استبدال المسار برابط رمزي **حتى إلى نفس الملف** يُرفض.
 
     أي فشل في أي خطوة يرفع IdentityMismatchError — لا بصمة جزئية ولا
     تُخزَّن بصمة لم تتأكد هويتها. لا تدّعية متانة بعد انقطاع الطاقة هنا.
+
+    حدود الإثبات (موثقة، لا تُخفى): الفحص يثبت أن الهوية لم تتغير وأن
+    المحتوى المقروء مرتين متطابق عبر نافذة القراءة على هذا النظام المحلي؛
+    لا يثبت استحالة جميع هجمات TOCTOU (تلاعب على مستوى النواة/نظام ملفات
+    شبكي، أو سباق خارج نافذة الفحص) — الدفاع بالعمق يبقى عبر الحاجز و
+    O_NOFOLLOW والتحقق بعد الإغلاق. الكلفة: قراءة الملف مرتين (دقيقة
+    المحتوى تتطلب ذلك — الطوابع الزمنية وحدها بدقة خشنة على بعض أنظمة
+    الملفات لا تكشف تعديلاً بقي في نافذة نفس النبضة).
     """
+    import stat as _stat
+
     expected = (expected_stat.st_dev, expected_stat.st_ino)
+    expected_size = expected_stat.st_size
+    expected_times = (expected_stat.st_mtime_ns, expected_stat.st_ctime_ns)
     h = hashlib.sha256()
+    h2 = hashlib.sha256()
     with open_checked(p, "rb", operation="حساب بصمة تسجيل الملف") as f:
         st_open = os.fstat(f.fileno())
         if (st_open.st_dev, st_open.st_ino) != expected:
             raise IdentityMismatchError(
                 f"الملف المفتوح لا يطابق الملف المطلوب (فحص قبل القراءة): {p}"
             )
+        if (st_open.st_size, st_open.st_mtime_ns, st_open.st_ctime_ns) != (
+                expected_size, expected_times[0], expected_times[1]):
+            raise IdentityMismatchError(
+                f"تغيّر الملف بين فحص المسار والفتح (حجم/وقت/حالة): {p}"
+            )
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
         st_after = os.fstat(f.fileno())
         if (st_after.st_dev, st_after.st_ino) != expected:
             raise IdentityMismatchError(f"اُستبدل الملف أثناء القراءة: {p}")
-        if st_after.st_size != st_open.st_size:
+        # F8: مقارنة الحجم والأوقات — خط أول سريع لكشف التعديل (mtime_ns
+        # يتغير مع أي كتابة، وctime_ns لا يُعاد ضبطه من فضاء المستخدم).
+        if (st_after.st_size, st_after.st_mtime_ns, st_after.st_ctime_ns) != (
+                st_open.st_size, st_open.st_mtime_ns, st_open.st_ctime_ns):
             raise IdentityMismatchError(
-                f"تغيّر حجم الملف أثناء القراءة (محتوى متغير): {p}"
+                f"تغيّر الملف أثناء القراءة (حجم/وقت تعديل/وقت تغيير الحالة): {p}"
             )
+        # F8: إعادة قراءة كاملة ومقارنة بصمة المحتوى — الإثبات الحتمي
+        # المستقل عن دقة الطوابع الزمنية: أي تعديل محتوى بحجم/inode ثابت
+        # بين القراءتين يُنتج بصمتين مختلفتين → رفض، لا بصمة تُخزَّن.
+        f.seek(0)
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h2.update(chunk)
+        st_final = os.fstat(f.fileno())
+        if (st_final.st_dev, st_final.st_ino) != expected:
+            raise IdentityMismatchError(f"اُستبدل الملف أثناء إعادة القراءة: {p}")
+        if (st_final.st_size, st_final.st_mtime_ns, st_final.st_ctime_ns) != (
+                st_after.st_size, st_after.st_mtime_ns, st_after.st_ctime_ns):
+            raise IdentityMismatchError(
+                f"تغيّر الملف أثناء إعادة القراءة: {p}"
+            )
+    if h.digest() != h2.digest():
+        raise IdentityMismatchError(
+            f"تغيّر محتوى الملف أثناء القراءة (بصمتا قراءتين مختلفتان —"
+            f" فحص مزدوج F8): {p}"
+        )
     try:
-        st_path = p.stat()
+        st_path = os.lstat(p)  # F8: lstat لا يتبع الروابط الرمزية
     except OSError as e:
         raise IdentityMismatchError(
             f"المسار لم يعد يشير إلى ملف بعد القراءة: {p} — {e}"
@@ -140,6 +185,10 @@ def _sha256_with_identity_check(p: Path, expected_stat: os.stat_result) -> str:
         raise IdentityMismatchError(
             f"المسار لم يعد يشير إلى نفس الملف بعد القراءة"
             f" (استبدال/نقل/رابط رمزي): {p}"
+        )
+    if not _stat.S_ISREG(st_path.st_mode):
+        raise IdentityMismatchError(
+            f"المسار لم يعد ملفاً عادياً بعد القراءة (رابط رمزي/جهاز): {p}"
         )
     return h.hexdigest()
 
