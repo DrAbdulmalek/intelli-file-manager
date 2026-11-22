@@ -207,11 +207,12 @@ def test_rollback_copy_refuses_modified_copy(tmp_path):
     log = UndoLog()
     log.append(entry)
 
-    # عقد rollback_last: الفشل يُرجع القيد مع success=False (لا استثناء)
+    # success يصف نجاح النسخ الأصلي؛ فشل محاولة التراجع يسجل منفصلاً.
     rolled = log.rollback_last()
 
-    assert rolled is not None and not rolled.success
-    assert "عُدّل الملف بعد إنشائه" in rolled.error_message
+    assert rolled is not None and rolled.success
+    assert "عُدّل الملف بعد إنشائه" in rolled.rollback_error_message
+    assert rolled.error_message == ""
     # تعديلات المستخدم سليمة — لم تُحذف
     assert copied.exists()
     assert copied.read_text() == "USER-EDITED-AFTER-COPY"
