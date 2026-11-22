@@ -121,3 +121,23 @@ def test_f11_e2e_real_move_rollback_then_identity_proof(tmp_path, log):
     out2 = log.rollback_batch("BF11E2")
     assert out2["already_rolled_back"] == ["move"]
     assert f.read_text(encoding="utf-8") == "e2e-body"
+
+
+
+def test_f11_stale_already_rolled_back_marker_is_cleared_on_retry(tmp_path, log):
+    """إذا ظهرت الوجهة بعد تصنيف محاولة سابقة، لا تبقى علامة stale وتتجاوز التراجع."""
+    orig = tmp_path / "doc.txt"
+    orig.write_text("same-content", encoding="utf-8")
+    dest = tmp_path / "elsewhere" / "doc.txt"
+    entry = _entry(orig, dest, checksum=compute_sha256(orig), batch="BF11-RETRY")
+    log.append(entry)
+
+    # المحاولة الأولى: الوجهة مفقودة والأصل مطابق؛ تُعلّم already-rolled-back.
+    log._preflight_rollback(entry)
+    assert getattr(entry, "_ifm_already_rolled_back", False) is True
+
+    # تغيّرت الحالة قبل إعادة المحاولة: الوجهة أصبحت موجودة بالمحتوى المتوقع.
+    dest.parent.mkdir()
+    dest.write_text("same-content", encoding="utf-8")
+    log._preflight_rollback(entry)
+    assert not getattr(entry, "_ifm_already_rolled_back", False)
