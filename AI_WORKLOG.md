@@ -728,3 +728,35 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 2026-11-20 — symlinked scan-root follow-up (PR #65)
 - Extended root validation to reject symlinked ancestor components, not only a symlink at the selected leaf; added a regression test for a selected directory reached through a symlinked parent.
+
+
+---
+
+## 2026-11-22 — جلسة P0+P1 (فرع فقط — انطلاقاً من main c1267b18)
+
+### الإطار
+- فرع `feat/p0p1-ops-safety-readiness`. لا كتابة على main، لا force-push، لا دمج PR،
+  لا حذف/استبدال لقواعد بيانات أو مسارد قائمة.
+
+### P0
+- README: توحيد النطاق (Core + Medical Module اختيارية) + جدول أوضاع الحاجز. تعارض
+  «ليس أداة طبية» مع وضع العيادة حُسم بتقسيم واضح بدل النفي المطلق.
+
+### P1 (rule_schemas / undo_log / action_log / medical_db)
+- `UndoEntry.batch_id` + `ActionLogEntry.batch_id` مع ترحيل خلفي (from_dict يفلتر المفاتيح؛
+  القيمة الشريطة الفارغة للسجلات القديمة).
+- `UndoLog.rollback_batch`: preflight (قراءة checksum_after فقط) ثم أجهض الدفعة كاملة عند أي تعارض
+  ثم عكس بترتيب عكسي عبر SafeMover فقط ثم حذف السجلات بعد نجاح العكس فقط.
+- `export_deidentified`: ذري + no-clobber + رفض تطابق المصدر/الوجهة بعد realpath (نسبي/سيم-لينك
+  مغطيان) + توثيق حدود free-text (verbatim).
+- `register_file`: حاجز + O_NOFOLLOW + إعادة تحقق هوية بعد القراءة (مضاد TOCTOU) —
+  البصمة غير الموثوقة تُرفض ولا تُسجَّل باسم ملف آخر.
+
+### الاختبارات
+- `tests/unit/test_undo_batch_rollback.py`، `tests/unit/test_medical_db_export.py` — سلبية وبيانات اصطناعية فقط.
+- التنفيذ المحلي غير متاح (بيئة بلا Python): BLOCKED محلياً؛ الإثبات يعتمد على CI للفرع/PR.
+
+### Honesty ledger
+- PROVEN (كود + اختبارات مكتوبة، تنتظر تشغيل CI): آلية rollback_batch وأمان التصدير ومضاد TOCTOU.
+- PARTIALLY PROVEN: جدول أوضاع الحاجز — مطابق لتطبيق sensitive_barrier من القراءة، بلا اختبارات جديدة مخصصة لهذا PR.
+- UNPROVEN: نجاح تشغيل CI الفعلي حتى تاريخ هذا الإدخال.

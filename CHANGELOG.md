@@ -351,3 +351,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SafeMover now fails closed when atomic no-clobber publication is unavailable and rejects symlink path components and non-regular sources; added regression tests for unsafe fallback and symlink cases.
 - Hardened FileHandler scans to use the shared path policy; permit explicitly selected mount roots while pruning nested mounts; fail closed on mount-inspection errors; exclude .gnupg; and add hidden-tree/symlink regression coverage.
 - Scan-root validation now rejects symlinked ancestor components, with regression coverage.
+
+
+---
+
+## [Unreleased] — P0 + P1 (2026-11-22) — branch feat/p0p1-ops-safety-readiness
+
+### Added (P1)
+- `UndoLog.rollback_batch(batch_id)`: تراجع عن دفعة كاملة بترتيب عكسي، عبر SafeMover فقط،
+  مع فحص مبدئي (preflight) يقرأ `checksum_after` ويُجهض الدفعة **كاملة دون أي تعديل**
+  عند اكتشاف ملف عُدّل بعد العملية الأصلية. السجلات تُحذف بعد نجاح عكسها فقط.
+- `UndoEntry.batch_id` و `ActionLogEntry.batch_id` + `ActionLog.by_batch()` —
+  توافق خلفي كامل: السجلات القديمة بلا batch_id تُحمَّل بقيمة الشريطة الفارغة.
+- `ExportError` + إعادة كتابة `MedicalDB.export_deidentified()`: تصدير ذري
+  (mkstemp + fsync + os.link no-clobber، أو os.replace فقط مع overwrite=True صريح)،
+  No-Clobber افتراضياً، رفض تطابق المصدر/الوجهة بعد expanduser+resolve
+  (يشمل الروابط الرمزية والمسارات النسبية)، تنظيف الملف المؤقت دائماً،
+  و`free_text_policy="verbatim"` موثق: النصوص الحرة (summary/findings) تُنسخ
+  نصياً بلا تنقية مدمرة — النشر العام يتطلب مراجعة بشرية.
+
+### Changed (P1)
+- `MedicalDB.register_file()`: حساب البصمة عبر `open_checked()` + إعادة التحقق
+  `verify_open_identity()` بعد القراءة (مضاد TOCTOU) — عند تغيّر/استبدال الملف
+  أثناء القراءة تُرفض البصمة كلياً ولا تُسجَّل باسم ملف آخر.
+
+### Docs (P0)
+- README: توحيد النطاق — IntelliFile Core عام + Medical Module اختيارية + جدول
+  أوضاع الحاجز (strict/local؛ الأسرار والإرسال الخارجي محجوبان دائماً). حُسم تعارض
+  «ليس أداة طبية» مع وجود وضع العيادة والقاعدة الطبية.
+
+### Tests (سلبية، ليست Happy-Path فقط)
+- `tests/unit/test_undo_batch_rollback.py`: تراجع دفعة، أجهض بالكامل دون تعديل عند تعارض،
+  بقاء ملف المستخدم المعدَّل، توافق سجلاتقديمة بلا batch_id.
+- `tests/unit/test_medical_db_export.py`: سلامة قاعدة المصدر بايت-بايت، تجرّد محتوى،
+  No-Clobber يترك الوجهة الموجودة سليمة، overwrite صريح فقط، رفض نفس المسار
+  وسيم-لينك المصدر والمسار النسبي المكافئ.
