@@ -221,7 +221,8 @@ class UndoLog:
         """تعويض آمن: إعادة تطبيق الإجراء الأصلي (عكس التراجع المتوقف).
 
         SafeMover فقط للنقل/النسخ — لا shutil ولا unlink غير محمي؛
-        النسخة المتعوَّضة تُسترجع من المصدر عبر safe_mover.copy.
+        تعويض COPY بدقة المحتوى عبر staging/إثبات تطابق المصدر (F10 —
+        انظر _compensate_copy): لا استرجاع من مصدر معدّل إطلاقاً.
         """
         at = entry.action_type
         if at == ActionType.MOVE.value:
@@ -233,9 +234,7 @@ class UndoLog:
         elif at == ActionType.COPY.value:
             if not entry.file_path_after:
                 raise RuntimeError("تعويض copy ناقص البيانات")
-            res = self.safe_mover.copy(entry.file_path, entry.file_path_after)
-            if not res.success:
-                raise RuntimeError(f"فشل تعويض النسخ: {res.error}")
+            self._compensate_copy(entry)
         elif at == ActionType.TAG.value:
             from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
             tags = _load_sidecar_tags(entry.file_path)
@@ -265,6 +264,82 @@ class UndoLog:
             _save_sidecar_tags(entry.file_path, tags)
         else:
             raise RuntimeError(f"لا يمكن تعويض نوع إجراء: {at}")
+
+    def _compensate_copy(self, entry: UndoEntry) -> None:
+        """تعويض COPY بدقة المحتوى — F10 (المراجعة المستقلة).
+
+        إعادة النسخ من المصدر الحالي قد تُنتج نسخة بمحتوى مختلف عن محتوى
+        الوجهة الأصلي إن عُدّل المصدر بعد النسخ. الترتيب:
+
+          1. نسخة احتياطية (staging) محفوظة وقت التراجع إن وُجدت →
+             الاستعادة منها (محتوى النسخة الأصلي تماماً) + تحقق البصمة؛
+             النسخة الاحتياطية تُحذف فقط بعد نجاح الاستعادة **والتحقق**.
+          2. بلا staging: يُسمح بالمصدر الحالي فقط بإثبات تطابق بصمته
+             مع checksum_after المسجل — إثبات أن المصدر لم يتغير منذ
+             النسخ، فنسخه مطابق تماماً للنسخة الأصلية.
+          3. غير ذلك: fail-closed — لا استرجاع نسخة بمحتوى خاطئ من مصدر
+             معدّل؛ السجل محفوظ كاملاً (حالة Recovery قابلة للاستكمال).
+        """
+        from .safe_mover import compute_sha256
+        dest = entry.file_path_after
+        stage = self._pending_staging.pop(dest, None)
+        if stage and Path(stage).exists():
+            res = self.safe_mover.copy(stage, dest)
+            if not res.success:
+                # لا نفقد النسخة الاحتياطية عند فشل الاستعادة — يُعاد
+                # تسجيلها لتبقى قابلة للاستكمال
+                self._pending_staging[dest] = stage
+                raise RuntimeError(
+                    f"فشل تعويض النسخ من النسخة الاحتياطية: {res.error} — "
+                    f"النسخة الاحتياطية محفوظة في {stage} — الحالة: Recovery"
+                )
+            self._verify_restored_checksum(entry)
+            # نجاح مُتحقق — الآن فقط تُحذف النسخة الاحتياطية
+            self._discard_staging_safely(Path(stage))
+            return
+        if stage:
+            raise RuntimeError(
+                "تعويض COPY fail-closed: النسخة الاحتياطية (staging) "
+                "المسجلة مفقودة من القرص ولا يمكن إثبات محتوى النسخة "
+                "الأصلية — لا استرجاع بمحتوى غير مُتحقق؛ السجل محفوظ — "
+                "الحالة: Recovery"
+            )
+        recorded = getattr(entry, "checksum_after", None)
+        src = Path(entry.file_path)
+        if recorded and src.is_file():
+            try:
+                matches = compute_sha256(src) == recorded
+            except OSError as e:
+                raise RuntimeError(
+                    f"تعذر التحقق من المصدر لتعويض COPY: {e} — الحالة: Recovery"
+                )
+            if matches:
+                res = self.safe_mover.copy(entry.file_path, dest)
+                if not res.success:
+                    raise RuntimeError(
+                        f"فشل تعويض النسخ من المصدر المُثبت تطابقه: {res.error}"
+                    )
+                self._verify_restored_checksum(entry)
+                return
+        raise RuntimeError(
+            "تعويض COPY fail-closed: المصدر الحالي معدّل أو مفقود أو بلا "
+            "بصمة مسجلة، ولا توجد نسخة احتياطية — إعادة النسخ من مصدر "
+            "معدّل تُنتج نسخة مختلفة عن الأصل فلا يُفعل؛ لا تُضحّ ببيانات "
+            "المستخدم — السجل محفوظ كاملاً — الحالة: Recovery"
+        )
+
+    def _verify_restored_checksum(self, entry: UndoEntry) -> None:
+        """يتحقق أن النسخة المعادة تطابق البصمة المسجلة — F10."""
+        from .safe_mover import compute_sha256
+        recorded = getattr(entry, "checksum_after", None)
+        if not recorded:
+            return
+        actual = compute_sha256(entry.file_path_after)
+        if actual != recorded:
+            raise RuntimeError(
+                "النسخة المعادة لا تطابق البصمة المسجلة للنسخة الأصلية — "
+                f"رفض: {entry.file_path_after} — الحالة: Recovery"
+            )
 
     def rollback_batch(self, batch_id: str) -> dict:
         """يتراجع عن كل إجراءات دفعة واحدة (أحدث إجراء أولاً) — P1 مُقوّى.
