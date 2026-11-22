@@ -477,3 +477,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - إيقاف rollback_all وrollback_n عند أول فشل مع الاحتفاظ بالسجل، لمنع الدوران اللانهائي أو إعادة محاولة السجل نفسه مراراً داخل الاستدعاء الواحد.
 - تصفير علامات preflight المؤقتة قبل كل محاولة، لمنع بقاء `already_rolled_back` قديمة بعد تغير حالة الوجهة.
 - أضيفت اختبارات إعادة المحاولة والفشل في rollback_all/rollback_n وعلامة MOVE المؤقتة.
+
+
+## [Unreleased] — register_file baseline identity follow-up (2026-11-22)
+
+- F17: استخدم `register_file` نتيجة `stat` الأولى نفسها كمرجع هوية للبصمة؛ لا تُعد قراءة stat بعد التصنيف، لأن ذلك كان يسمح باستبدال الملف بين الفحص الأول والفتح وربط بصمة البديل ببيانات الملف السابق.
+- أضيف اختبار استبدال الملف بعد stat الأول وقبل حساب البصمة، ويجب أن يفشل تخزين SHA fail-closed.
