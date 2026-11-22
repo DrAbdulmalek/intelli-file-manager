@@ -300,6 +300,73 @@ class TestIFMController:
         assert len(results) == 1
         assert results[0][1] is False  # success=False
 
+    def test_undo_last_failure_not_reported_as_success(self, qapp, tmp_path):
+        # F19 متابعة: فشل التراجع (إجراء ناجح الأصل، v2) لا يُعرض نجاحاً
+        from src.desktop.controllers.ifm_controller import IFMController
+        from src.core.rule_schemas import UndoEntry
+
+        c = IFMController(base_dir=tmp_path, ruleset_path=None)
+        # الوجهة الأصلية داخل دليل قراءة-فقط → SafeMover يفشل فعلاً
+        # (التضارب بدليل موجود يأخذ لاحقة فينجح — لذا القراءة-فقط حتمية)
+        ro = tmp_path / "ro_parent"
+        ro.mkdir()
+        dest_file = tmp_path / "file.txt"
+        dest_file.write_text("X", encoding="utf-8")
+        c.undo_log.append(UndoEntry(action_type="move",
+                                    file_path=str(ro / "target.txt"),
+                                    file_path_after=str(dest_file),
+                                    timestamp="t", success=True))
+        results, errors = [], []
+        c.undo_finished.connect(lambda e, s, msg: results.append((e, s, msg)))
+        c.error.connect(lambda title, msg: errors.append((title, msg)))
+        os.chmod(ro, 0o555)
+        try:
+            c.undo_last()
+        finally:
+            os.chmod(ro, 0o755)
+        _process_events(qapp)
+        assert len(results) == 1 and results[0][1] is False  # لا نجاح
+        assert "فشل التراجع" in results[0][2]
+        assert len(c.undo_log) == 1  # السجل بقي محفوظاً
+        recent = c.action_log.list_entries(limit=1)
+        assert recent and recent[0].success is False  # ActionLog لا يكتب نجاحاً
+        assert any("فشل التراجع" in t for t, _ in errors)
+
+    def test_undo_last_ambiguous_legacy_not_reported_as_success(self, qapp, tmp_path):
+        # F19 متابعة: السجل القديم الملتبس لا يُعرض نجاحاً — عنوان الاسترداد
+        from src.desktop.controllers.ifm_controller import IFMController
+
+        dest = tmp_path / "report.pdf"
+        dest.write_text("user content", encoding="utf-8")
+        legacy = {
+            "action_type": "copy", "file_path": "/src/report.pdf",
+            "file_path_after": str(dest), "rule_name": "r",
+            "old_category": "", "new_category": "",
+            "tags_added": [], "tags_removed": [],
+            "timestamp": "2026-11-01T09:00:00",
+            "success": False,
+            "error_message": "فشل التراجع: تعذر استعادة النسخة",
+            "batch_id": "",
+        }
+        log_path = tmp_path / ".ifm_undo.json"
+        log_path.write_text(json.dumps({"entries": [legacy]}, ensure_ascii=False),
+                            encoding="utf-8")
+        c = IFMController(base_dir=tmp_path, ruleset_path=None,
+                          undo_log_path=str(log_path))
+        assert len(c.undo_log) == 1
+        results, errors = [], []
+        c.undo_finished.connect(lambda e, s, msg: results.append((e, s, msg)))
+        c.error.connect(lambda title, msg: errors.append((title, msg)))
+        c.undo_last()
+        _process_events(qapp)
+        assert len(results) == 1 and results[0][1] is False  # لا نجاح
+        assert "استرداد يدوياً" in results[0][2]
+        assert any("استرداد" in t for t, _ in errors)
+        assert len(c.undo_log) == 1  # الملتبس محفوظ — لا استهلاك
+        assert dest.exists()  # لا عكس ولا حذف
+        recent = c.action_log.list_entries(limit=1)
+        assert recent and recent[0].success is False
+
     def test_export_action_log_json(self, qapp, tmp_path):
         from src.desktop.controllers.ifm_controller import IFMController
         c = IFMController(base_dir=tmp_path, ruleset_path=None)

@@ -213,6 +213,63 @@ def test_undo_last_rolls_back_via_safemover(tmp_path):
     assert got["success"] and src.read_text() == "X"
 
 
+def test_undo_last_ambiguous_legacy_not_success(tmp_path):
+    # F19 متابعة: السجل القديم الملتبس — success=False وسبب F19 يظهر
+    server = _server(tmp_path)
+    dest = tmp_path / "report.pdf"
+    dest.write_text("user content", encoding="utf-8")
+    legacy = {
+        "action_type": "copy", "file_path": "/src/report.pdf",
+        "file_path_after": str(dest), "rule_name": "r",
+        "old_category": "", "new_category": "",
+        "tags_added": [], "tags_removed": [],
+        "timestamp": "2026-11-01T09:00:00",
+        "success": False,
+        "error_message": "فشل التراجع القديم الملوث",
+        "batch_id": "",
+    }
+    log_path = tmp_path / ".ifm_undo.json"
+    log_path.write_text(json.dumps({"entries": [legacy]}, ensure_ascii=False),
+                        encoding="utf-8")
+
+    got = _structured(server, "undo_last", {"undo_log_path": str(log_path)})
+
+    assert got["success"] is False
+    assert got["recovery_required"] is True
+    assert "استرداد يدوياً" in got["error"] and "ملتبس" in got["error"]
+    assert got["restored_path"] == ""
+    assert dest.exists()  # لا عكس ولا حذف
+
+
+def test_undo_last_rollback_failure_not_success(tmp_path):
+    # F19 متابعة: إجراء ناجح الأصل فشل عكسه (v2) — success=False وسبب التراجع
+    server = _server(tmp_path)
+    from src.core.rule_schemas import UndoEntry
+    from src.core.undo_log import UndoLog
+
+    log_path = tmp_path / ".ifm_undo.json"
+    ul = UndoLog(log_path)
+    # الوجهة الأصلية داخل دليل قراءة-فقط → SafeMover يفشل فعلاً
+    # (التضارب بدليل موجود يأخذ لاحقة فينجح — لذا القراءة-فقط حتمية)
+    import os
+    ro = tmp_path / "ro_parent"
+    ro.mkdir()
+    dest_file = tmp_path / "file.txt"
+    dest_file.write_text("X", encoding="utf-8")
+    ul.append(UndoEntry(action_type="move", file_path=str(ro / "target.txt"),
+                        file_path_after=str(dest_file), success=True))
+    ul.save()
+    os.chmod(ro, 0o555)
+    try:
+        got = _structured(server, "undo_last", {"undo_log_path": str(log_path)})
+    finally:
+        os.chmod(ro, 0o755)
+
+    assert got["success"] is False
+    assert got["recovery_required"] is False
+    assert "فشل التراجع" in got["error"]
+
+
 def test_query_action_log_filters(tmp_path):
     server = _server(tmp_path)
     from src.core.action_log import ActionLog
