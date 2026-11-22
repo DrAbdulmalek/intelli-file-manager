@@ -872,3 +872,9 @@ PR #78 يبقى Draft، لا skip/xfail/إضعاف، بيانات اصطناعي
 - **F17 — baseline identity reset:** `register_file` captured `st` for metadata, then called `p.stat()` again after sensitivity classification to create the hash baseline. A replacement between those calls could make the hash refer to a new inode while size/mtime metadata still came from the first inode.
 - **Remediation:** pass the original `st` to `_sha256_with_identity_check`; add a regression test that replaces the file after the initial stat and before hashing, requiring `sha256=None`.
 - **Evidence:** source and test committed to the PR #78 branch; CI pending on the new head. No local test execution claimed.
+
+
+### CI feedback — compatibility assertion updated
+- CI على HEAD `dfbd9ffff` كشف اختباراً قديماً واحداً كان يفرض العقد السابق الخاطئ: `test_rollback_copy_refuses_modified_copy` توقع أن يؤدي فشل التراجع إلى `success=False` وكتابة الخطأ في `error_message`.
+- عُدّل الاختبار ليؤكد العقد المصحح: الإجراء الأصلي الناجح يبقى `success=True`، وخطأ محاولة التراجع يظهر في `rollback_error_message`، مع بقاء النسخة المعدّلة سليمة.
+- نتيجة CI لهذه الجولة كانت **FAILURE** على Python 3.10 و3.11 بسبب هذا التوقع القديم فقط؛ لم تُعلن الجولة ناجحة. إعادة تشغيل CI مطلوبة على HEAD بعد التعديل.
