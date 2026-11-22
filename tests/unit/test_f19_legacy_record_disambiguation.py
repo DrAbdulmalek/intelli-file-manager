@@ -250,3 +250,109 @@ def test_f19_v2_failed_record_still_consumed(tmp_path, tmp_path_factory):
     returned = log.rollback_last()
     assert returned is not None
     assert len(log) == 0  # استهلاك no-op — سلوك F18 لم يتغير
+
+
+# ─── 7) عقد الإرجاع: تمييز آلي للمستدعي + rollback_n + sidecar قديم ─────────
+
+def test_f19_contract_return_pattern_caller_distinguishes(tmp_path):
+    # العقد المعتمد (نمط إرجاعي — لا استثناء يصل المستدعي): التمييز عبر
+    # requires_recovery / rollback_error_message — توثيق rollback_last
+    dest, sc, sha = _make_copied_dest(tmp_path)
+    p = tmp_path / "undo.json"
+    _write_legacy_log(p, [_legacy_copy_dict("/src/report.pdf", str(dest), sha)])
+    log = UndoLog(p)
+    returned = log.rollback_last()
+    # الحالة 3 (ملتبس): يُعاد السجل نفسه بلا استثناء، ولا استهلاك ولا عكس
+    assert isinstance(returned, UndoEntry)
+    assert returned.requires_recovery is True
+    assert returned.recovery_state == "recovery_required"
+    assert "ملتبس" in returned.rollback_error_message
+    assert len(log) == 1
+    assert dest.exists() and sc.exists()
+    # الحالة 1 (عكس ناجح): requires_recovery=False والسجل خارج القائمة
+    log2 = UndoLog()
+    log2.append(UndoEntry(action_type="move", file_path="/x/a.txt",
+                          file_path_after="/x/b.txt", timestamp="t",
+                          success=True))
+    ok = log2.rollback_last()
+    assert ok.requires_recovery is False
+    assert len(log2) == 0
+
+
+def test_f19_rollback_n_stops_at_ambiguous_last_record(tmp_path):
+    # آخر سجل (الأحدث) ملتبس → يتوقف فوراً: محفوظ، وما قبله لم يُمس
+    dest, sc, sha = _make_copied_dest(tmp_path)
+    v2_dest = tmp_path / "v2.txt"
+    v2_dest.write_text("clean", encoding="utf-8")
+    p = tmp_path / "undo.json"
+    _write_legacy_log(p, [
+        {   # الأقدم: نسخة v2 ناجحة (تحمل مفتاح rollback_error_message)
+            "action_type": "copy", "file_path": "/src/v2.txt",
+            "file_path_after": str(v2_dest), "rule_name": "r",
+            "old_category": "", "new_category": "",
+            "tags_added": [], "tags_removed": [],
+            "timestamp": "2026-11-01T09:00:00",
+            "success": True, "error_message": "",
+            "rollback_error_message": "",
+            "checksum_after": compute_sha256(v2_dest), "batch_id": "",
+        },
+        _legacy_copy_dict("/src/report.pdf", str(dest), sha),  # الأحدث: ملتبس
+    ])
+    log = UndoLog(p)
+    rolled = log.rollback_n(2)
+    assert len(rolled) == 1
+    assert rolled[0].requires_recovery is True
+    assert len(log) == 2  # الملتبس محفوظ والأقدم لم يُستهلك
+    assert dest.exists() and sc.exists()
+    assert v2_dest.exists()  # التوقف قبل الوصول إلى الأقدم
+
+
+def test_f19_legacy_mixed_json_tag_sidecar_untouched(tmp_path):
+    # JSON قديم مختلط: MOVE ناجح + TAG ملتبس — sidecar لا يُعاد كتابته
+    src_file = tmp_path / "pic.jpg"
+    dest_dir = tmp_path / "صور"
+    dest_dir.mkdir()
+    src_file.write_text("img", encoding="utf-8")
+    dest = dest_dir / "pic.jpg"
+    mover = SafeMover(verify_checksum=True, move_sidecar=False)
+    res = mover.move(str(src_file), str(dest))
+    assert res.success
+    sc = _sidecar_path(str(dest))
+    sc.write_text(json.dumps({"tags": ["t-new", "keep"], "category": ""}),
+                  encoding="utf-8")
+    sidecar_before = sc.read_text(encoding="utf-8")
+    p = tmp_path / "undo.json"
+    _write_legacy_log(p, [
+        {   # الأقدم: MOVE ناجح (غير ملتبس)
+            "action_type": "move", "file_path": str(src_file),
+            "file_path_after": str(dest), "rule_name": "legacy",
+            "old_category": "", "new_category": "",
+            "tags_added": [], "tags_removed": [],
+            "timestamp": "2025-01-01T00:00:00",
+            "success": True, "error_message": "", "batch_id": "",
+        },
+        {   # الأحدث: TAG ملتبس — إجراء ناجح فشل تراجعه قبل F14
+            "action_type": "tag", "file_path": str(dest),
+            "rule_name": "legacy", "old_category": "", "new_category": "",
+            "tags_added": ["t-new"], "tags_removed": [],
+            "timestamp": "2025-01-01T00:05:00",
+            "success": False,
+            "error_message": "فشل التراجع: تعذر تحديث sidecar",
+            "batch_id": "",
+        },
+    ])
+    log = UndoLog(p)
+    returned = log.rollback_last()  # الأحدث = TAG الملتبس
+    assert returned.requires_recovery is True
+    assert len(log) == 2  # الملتبس محفوظ + الأقدم لم يُمس
+    # sidecar لم يُعاد كتابته ولا مُسَّ: نفس البايتات، الوسمان باقيان
+    assert sc.exists()
+    assert sc.read_text(encoding="utf-8") == sidecar_before
+    assert dest.exists()
+    # الاستدعاء الثاني: الملتبس فوقي — يعاد السجل نفسه (التوقف fail-closed
+    # يحجب الأقدم حتى يُحل الملتبس يدوياً)، وMOVE لا يُمس إطلاقاً
+    again = log.rollback_last()
+    assert again.action_type == "tag" and again.requires_recovery is True
+    assert len(log) == 2
+    assert sc.read_text(encoding="utf-8") == sidecar_before
+    assert not src_file.exists() and dest.exists()  # الأقدم محجوب لم يُمس

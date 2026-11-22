@@ -124,9 +124,20 @@ class UndoLog:
     def rollback_last(self) -> Optional[UndoEntry]:
         """يرجع آخر إجراء منفّذ (FIFO reversal)
 
-        F19: سجل قديم ملتبس (schema v1 + success=False) يُرفض عكسه
-        واستهلاكه — يبقى محفوظاً في السجل بحالة recovery_required
-        وrollback_error_message يوضح السبب.
+        F19 — عقد الإرجاع (النمط الإرجاعي، لا نمط الرفع — بدون تغيير
+        السلوك بعد تدقيق المستدعين): سجل قديم ملتبس (schema v1 +
+        success=False) لا يُعكس ولا يُستهلك؛ RecoveryRequiredError يُرفع
+        داخلياً في _rollback_entry ويُلتقط هنا فقط لإعادة إلحاق السجل،
+        **ولا يُعاد رفعه للمستدعي**. ثلاث حالات للكائن المعاد:
+          1. عكس ناجح: السجل خارج القائمة بعد الاستدعاء،
+             requires_recovery=False.
+          2. فشل عكس عادي (v2): السجل داخل القائمة، rollback_error_message
+             مفعم، requires_recovery=False — قابل لإعادة المحاولة.
+          3. سجل قديم ملتبس: السجل داخل القائمة، requires_recovery=True،
+             rollback_error_message يشرح السبب — يتطلب قرار استرداد
+             يدوياً ولا تُعيد المحاولة الآلية شيئاً.
+        يجب على المستدعي فحص requires_recovery (أو rollback_error_message)
+        بعد كل استدعاء لتمييز الحالات.
 
         Returns:
             UndoEntry الذي تم التراجع عنه، أو None لو السجل فارغ
@@ -154,7 +165,9 @@ class UndoLog:
         """يرجع كل الإجراءات بترتيب عكسي (LIFO)
 
         يتوقف عند أول فشل تراجع حقيقي أو سجل قديم ملتبس (F19) — السجل
-        يبقى محفوظاً والسبب موثقاً في rollback_error_message.
+        يبقى محفوظاً والسبب موثقاً في rollback_error_message. القائمة
+        المعادة قد تنتهي بسجل ملتبس محفوظ (requires_recovery=True) —
+        انظر عقد الإرجاع في rollback_last.
 
         Returns:
             قائمة UndoEntry التي تم التراجع عنها (بنفس ترتيب التراجع)
@@ -171,7 +184,13 @@ class UndoLog:
         return rolled_back
 
     def rollback_n(self, n: int) -> List[UndoEntry]:
-        """يرجع آخر n إجراءات"""
+        """يرجع آخر n إجراءات
+
+        يتوقف عند أول فشل تراجع حقيقي أو سجل قديم ملتبس (F19) — السجل
+        يبقى محفوظاً ولا يُستمر بما قبله ضمن الاستدعاء نفسه. القائمة
+        المعادة قد تنتهي بسجل ملتبس محفوظ (requires_recovery=True) —
+        انظر عقد الإرجاع في rollback_last.
+        """
         rolled_back: List[UndoEntry] = []
         for _ in range(min(n, len(self.entries))):
             entry = self.rollback_last()
@@ -545,6 +564,8 @@ class UndoLog:
         سجل Undo) — يُحفظ بحالة recovery_required ويُرفع
         RecoveryRequiredError فيبقى السجل محفوظاً (إعادة الإلحاق في
         rollback_last) ويوقف rollback_all/rollback_n عبر آلية F15.
+        الاستثناء يُلتقط في rollback_last ولا يُعاد رفعه للمستدعي —
+        العقد إرجاعي (انظر عقد الإرجاع في docstring rollback_last).
         """
         if not entry.success:
             if entry.schema_version == "1":
