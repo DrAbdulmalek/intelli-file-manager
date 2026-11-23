@@ -1,11 +1,11 @@
 """Privacy-minimal structured feedback events for IntelliFile.
 
-Raw paths, document text, prompts, and patient data are intentionally not
-accepted or stored. Callers may provide a digest of locally-held details.
+Only bounded categorical tokens are accepted. Free-form details, paths,
+document text, prompts, patient data, and caller-supplied digests are not
+part of this API or persisted schema.
 """
 from __future__ import annotations
 
-import hashlib
 import re
 import sqlite3
 import time
@@ -23,16 +23,8 @@ def _token(value: str, field: str) -> str:
     return value
 
 
-def _digest(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError("details must be a string")
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
 class FeedbackStore:
-    """Append-oriented local SQLite store for sanitized feedback metadata."""
+    """Append-oriented local SQLite store for categorical feedback metadata."""
 
     def __init__(self, database_path: str | Path):
         self.database_path = Path(database_path).expanduser()
@@ -50,7 +42,6 @@ class FeedbackStore:
                     observed_code TEXT,
                     evidence_status TEXT NOT NULL,
                     reproduction_token TEXT,
-                    details_sha256 TEXT,
                     decision TEXT NOT NULL DEFAULT 'unreviewed',
                     created_at REAL NOT NULL
                 )
@@ -76,26 +67,35 @@ class FeedbackStore:
         expected_code: str | None = None,
         observed_code: str | None = None,
         reproduction_token: str | None = None,
-        local_details: str | None = None,
     ) -> int:
         component = _token(component, "component")
         event_type = _token(event_type, "event_type")
         evidence_status = _token(evidence_status, "evidence_status")
         if severity not in _ALLOWED_SEVERITIES:
             raise ValueError("unsupported severity")
-        for name, value in (("expected_code", expected_code), ("observed_code", observed_code),
-                            ("reproduction_token", reproduction_token)):
+        for name, value in (
+            ("expected_code", expected_code),
+            ("observed_code", observed_code),
+            ("reproduction_token", reproduction_token),
+        ):
             if value is not None:
                 _token(value, name)
-        details_hash = _digest(local_details)
         with self._connect() as conn:
             cursor = conn.execute(
                 """INSERT INTO feedback_events
                    (component, event_type, severity, expected_code, observed_code,
-                    evidence_status, reproduction_token, details_sha256, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (component, event_type, severity, expected_code, observed_code,
-                 evidence_status, reproduction_token, details_hash, time.time()),
+                    evidence_status, reproduction_token, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    component,
+                    event_type,
+                    severity,
+                    expected_code,
+                    observed_code,
+                    evidence_status,
+                    reproduction_token,
+                    time.time(),
+                ),
             )
             return int(cursor.lastrowid)
 
@@ -114,10 +114,11 @@ class FeedbackStore:
             raise ValueError("limit must be between 1 and 1000")
         with self._connect() as conn:
             return [
-                dict(row) for row in conn.execute(
+                dict(row)
+                for row in conn.execute(
                     """SELECT id, component, event_type, severity, expected_code,
                               observed_code, evidence_status, reproduction_token,
-                              details_sha256, decision, created_at
+                              decision, created_at
                        FROM feedback_events ORDER BY id DESC LIMIT ?""",
                     (limit,),
                 ).fetchall()
