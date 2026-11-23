@@ -73,6 +73,8 @@ class ActionLogEntry:
     duration_ms: float = 0.0
     # معرّف فريد للسجل (للاستخدام في الروابط/الترتيب)
     entry_id: int = 0
+    # معرّف دفعة العمليات (P1) — فارغ للسجلات القديمة (توافق خلفي كامل)
+    batch_id: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -161,6 +163,7 @@ class ActionLog:
         source: str = SOURCE_RULE_ENGINE,
         duration_ms: float = 0.0,
         timestamp: Optional[str] = None,
+        batch_id: str = "",
     ) -> ActionLogEntry:
         """يضيف سجل إجراء جديدًا
 
@@ -184,6 +187,7 @@ class ActionLog:
                 checksum_after=checksum_after,
                 source=source,
                 duration_ms=duration_ms,
+                batch_id=batch_id,
                 entry_id=self._next_id,
             )
             self._next_id += 1
@@ -224,6 +228,7 @@ class ActionLog:
             old_category=undo_entry.old_category,
             new_category=undo_entry.new_category,
             timestamp=undo_entry.timestamp,
+            batch_id=getattr(undo_entry, "batch_id", ""),
             source=source,
             checksum_before=checksum_before,
             checksum_after=checksum_after,
@@ -345,6 +350,12 @@ class ActionLog:
         with self._lock:
             self._entries = []
             self._next_id = 1
+
+    def by_batch(self, batch_id: str) -> List[ActionLogEntry]:
+        """يُرجع سجلات دفعة محددة (أحدث أولًا) — P1"""
+        with self._lock:
+            entries = [e for e in self._entries if e.batch_id == batch_id]
+        return list(reversed(entries))
 
     def get_entry(self, entry_id: int) -> Optional[ActionLogEntry]:
         """يبحث عن entry بمعرّفه"""
@@ -505,7 +516,7 @@ class ActionLog:
                 "entry_id", "timestamp", "action_type", "rule_name",
                 "file_path", "file_path_after", "success", "error_message",
                 "tags_added", "tags_removed", "old_category", "new_category",
-                "checksum_before", "checksum_after", "source", "duration_ms",
+                "checksum_before", "checksum_after", "source", "duration_ms", "batch_id",
             ])
             for e in self.list_entries(reverse=True):
                 writer.writerow([
@@ -516,7 +527,7 @@ class ActionLog:
                     ";".join(e.tags_added), ";".join(e.tags_removed),
                     e.old_category, e.new_category,
                     e.checksum_before, e.checksum_after,
-                    e.source, e.duration_ms,
+                    e.source, e.duration_ms, e.batch_id,
                 ])
         return str(out)
 

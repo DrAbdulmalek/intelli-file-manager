@@ -126,6 +126,7 @@ class RuleEngine:
         undo_log_path: Optional[Union[str, Path]] = None,
         confirm_destructive: bool = False,
         action_log: Optional["ActionLog"] = None,
+        batch_id: str = "",
     ) -> List[UndoEntry]:
         """ينفّذ خطة محاكاة مع تسجيل كل إجراء للتراجع
 
@@ -184,6 +185,7 @@ class RuleEngine:
                 entry = self._execute_single(
                     effective_planned, undo_log,
                     action_log=action_log, safe_mover=safe_mover,
+                    batch_id=batch_id,
                 )
                 # تحديث خريطة المسار بعد النقل/النسخ الناجح
                 if entry.success and entry.file_path_after:
@@ -199,6 +201,7 @@ class RuleEngine:
                     timestamp=datetime.now().isoformat(),
                     success=False,
                     error_message=str(e)[:200],
+                    batch_id=batch_id,
                 )
                 entries.append(entry)
                 undo_log.append(entry)
@@ -281,6 +284,7 @@ class RuleEngine:
         *,
         action_log: Optional["ActionLog"] = None,
         safe_mover: Optional["SafeMover"] = None,
+        batch_id: str = "",
     ) -> UndoEntry:
         """ينفّذ إجراءً واحدًا ويسجّله في undo_log
 
@@ -312,6 +316,10 @@ class RuleEngine:
         else:
             raise ValueError(f"نوع إجراء غير معروف: {action_type}")
 
+        # ختم الدفعة (P1): كل UndoEntry من هذه الجلسة يحمل batch_id —
+        # يشمل سجلات الفشل الداخلية (move/copy failures) لأنها مرت من
+        # المنفّذين أعلاه. صفر batch_id للسجلات القديمة = توافق خلفي.
+        entry.batch_id = batch_id
         # تسجيل في ActionLog (PR-07)
         if action_log is not None:
             action_log.log_from_undo_entry(entry, source="rule_engine")
@@ -360,6 +368,9 @@ class RuleEngine:
             rule_name=planned.rule_name,
             timestamp=timestamp,
             success=True,
+            # F11: بصمة الملف بعد النقل — أساس إثبات الهوية في preflight
+            # (تمييز الملف الأصلي المُعاد عن ملف بديل عند already-rolled-back)
+            checksum_after=result.checksum_after,
         )
         undo_log.append(entry)
         return entry
@@ -424,7 +435,11 @@ class RuleEngine:
 
         # تحميل الوسوم الحالية من ملف جانبي
         tags = _load_sidecar_tags(planned.file_path)
-        if tag not in tags:
+        # F12: التمييز بين «أُضيف فعلياً» و«كان موجوداً» — tags_added
+        # لا تسجل إلا ما أُضيف فعلاً حتى لا يزيل rollback وسماً لم تضفه
+        # العملية (الوسم الموجود مسبقاً لا يُمس عند التراجع).
+        already_present = tag in tags
+        if not already_present:
             tags.append(tag)
             _save_sidecar_tags(planned.file_path, tags)
 
@@ -432,7 +447,8 @@ class RuleEngine:
             action_type=ActionType.TAG.value,
             file_path=planned.file_path,
             rule_name=planned.rule_name,
-            tags_added=[tag],
+            tags_added=[] if already_present else [tag],
+            tags_already_present=[tag] if already_present else [],
             timestamp=timestamp,
             success=True,
         )
@@ -498,9 +514,15 @@ class RuleEngine:
     def _exec_delete_flag(
         self, planned: PlannedAction, undo_log: "UndoLog", timestamp: str
     ) -> UndoEntry:
-        """يضع وسم 'to_delete' (لا حذف فعلي)"""
+        """يضع وسم 'to_delete' (لا حذف فعلي)
+
+        F12: إن كان الوسم موجوداً مسبقاً فلا يُضاف ولا يُسجَّل في
+        tags_added — التراجع عن إجراء لم يغيّر شيئاً يجب أن يبقى بلا أثر
+        (لا يزيل وسم delete لم تضفه العملية نفسها).
+        """
         tags = _load_sidecar_tags(planned.file_path)
-        if "to_delete" not in tags:
+        already_present = "to_delete" in tags
+        if not already_present:
             tags.append("to_delete")
             _save_sidecar_tags(planned.file_path, tags)
 
@@ -508,7 +530,8 @@ class RuleEngine:
             action_type=ActionType.DELETE_FLAG.value,
             file_path=planned.file_path,
             rule_name=planned.rule_name,
-            tags_added=["to_delete"],
+            tags_added=[] if already_present else ["to_delete"],
+            tags_already_present=["to_delete"] if already_present else [],
             timestamp=timestamp,
             success=True,
         )
