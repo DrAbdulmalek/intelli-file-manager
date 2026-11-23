@@ -27,6 +27,12 @@ from .rule_schemas import UndoEntry, ActionType
 logger = logging.getLogger(__name__)
 
 
+class RecoveryRequiredError(RuntimeError):
+    """F19: سجل قديم ملتبس (schema v1 + success=False) يتطلب قرار استرداد
+    يدوي — قد يكون إجراءً ناجحاً فشل تراجعه قبل فصل النتائج (F14)؛ لا يُعكس
+    ولا يُستهلك تلقائياً، ويبقى السجل محفوظاً بحالة recovery_required."""
+
+
 class UndoLog:
     """سجل التراجع عن الإجراءات
 
@@ -47,6 +53,9 @@ class UndoLog:
         self.path = Path(path) if path else None
         self.entries: List[UndoEntry] = []
         self._safe_mover = None  # SafeMover إلزامي للتراجع (لا shutil مباشر)
+        # F10: النسخ الاحتياطية (staging) المعلقة — المفتاح file_path_after
+        # والقيمة مسار النسخة الاحتياطية على القرص؛ تُحذف فقط بعد تعويض مُتحقق
+        self._pending_staging: dict[str, str] = {}
         if self.path and self.path.exists():
             self.load()
 
@@ -115,18 +124,38 @@ class UndoLog:
     def rollback_last(self) -> Optional[UndoEntry]:
         """يرجع آخر إجراء منفّذ (FIFO reversal)
 
+        F19 — عقد الإرجاع (النمط الإرجاعي، لا نمط الرفع — بدون تغيير
+        السلوك بعد تدقيق المستدعين): سجل قديم ملتبس (schema v1 +
+        success=False) لا يُعكس ولا يُستهلك؛ RecoveryRequiredError يُرفع
+        داخلياً في _rollback_entry ويُلتقط هنا فقط لإعادة إلحاق السجل،
+        **ولا يُعاد رفعه للمستدعي**. ثلاث حالات للكائن المعاد:
+          1. عكس ناجح: السجل خارج القائمة بعد الاستدعاء،
+             requires_recovery=False.
+          2. فشل عكس عادي (v2): السجل داخل القائمة، rollback_error_message
+             مفعم، requires_recovery=False — قابل لإعادة المحاولة.
+          3. سجل قديم ملتبس: السجل داخل القائمة، requires_recovery=True،
+             rollback_error_message يشرح السبب — يتطلب قرار استرداد
+             يدوياً ولا تُعيد المحاولة الآلية شيئاً.
+        يجب على المستدعي فحص requires_recovery (أو rollback_error_message)
+        بعد كل استدعاء لتمييز الحالات.
+
         Returns:
             UndoEntry الذي تم التراجع عنه، أو None لو السجل فارغ
         """
         if not self.entries:
             return None
         entry = self.entries.pop()
+        entry.rollback_error_message = ""
         try:
             self._rollback_entry(entry)
         except Exception as e:
             logger.error(f"فشل التراجع عن {entry.action_type} على {entry.file_path}: {e}")
-            entry.success = False
-            entry.error_message = str(e)[:200]
+            # F9: لا نغيّر success/error_message؛ فهما يصفان نتيجة
+            # الإجراء الأصلي لا محاولة التراجع. فصل خطأ التراجع يمنع
+            # تحويل إجراء ناجح إلى سجل فاشل ثم تخطيه في rollback_batch.
+            entry.rollback_error_message = str(e)[:200]
+            # يبقى سجل Undo الأصلي كاملاً وقابلاً لإعادة المحاولة.
+            self.entries.append(entry)
         # حفظ تلقائي لو path محدد
         if self.path:
             self.save()
@@ -134,6 +163,11 @@ class UndoLog:
 
     def rollback_all(self) -> List[UndoEntry]:
         """يرجع كل الإجراءات بترتيب عكسي (LIFO)
+
+        يتوقف عند أول فشل تراجع حقيقي أو سجل قديم ملتبس (F19) — السجل
+        يبقى محفوظاً والسبب موثقاً في rollback_error_message. القائمة
+        المعادة قد تنتهي بسجل ملتبس محفوظ (requires_recovery=True) —
+        انظر عقد الإرجاع في rollback_last.
 
         Returns:
             قائمة UndoEntry التي تم التراجع عنها (بنفس ترتيب التراجع)
@@ -143,26 +177,409 @@ class UndoLog:
             entry = self.rollback_last()
             if entry is not None:
                 rolled_back.append(entry)
+                # فشل التراجع يُبقي السجل في القائمة؛ التوقف يمنع
+                # الدوران اللانهائي على السجل نفسه.
+                if entry.rollback_error_message:
+                    break
         return rolled_back
 
     def rollback_n(self, n: int) -> List[UndoEntry]:
-        """يرجع آخر n إجراءات"""
+        """يرجع آخر n إجراءات
+
+        يتوقف عند أول فشل تراجع حقيقي أو سجل قديم ملتبس (F19) — السجل
+        يبقى محفوظاً ولا يُستمر بما قبله ضمن الاستدعاء نفسه. القائمة
+        المعادة قد تنتهي بسجل ملتبس محفوظ (requires_recovery=True) —
+        انظر عقد الإرجاع في rollback_last.
+        """
         rolled_back: List[UndoEntry] = []
         for _ in range(min(n, len(self.entries))):
             entry = self.rollback_last()
             if entry is not None:
                 rolled_back.append(entry)
+                # لا نعيد محاولة السجل الفاشل ضمن نفس استدعاء rollback_n.
+                if entry.rollback_error_message:
+                    break
         return rolled_back
+
+    # ─── التراجع عن دفعة كاملة (P1 — مُقوّى بعد المراجعة المستقلة) ──────
+
+    def _preflight_rollback(self, entry: UndoEntry) -> None:
+        """فحص تعارض مبدئي قبل أي تعديل على القرص (قراءة فقط — fail-closed).
+
+        دلالات غياب الملف المستهدف (مراجعة مستقلة Finding 5 + F11):
+          - MOVE: الوجهة مفقودة + المسار الأصلي موجود → يُعامل كتراجع
+            مكتمل سابقاً **فقط بإثبات هوية (F11)**: بصمة الملف الموجود
+            تطابق checksum_after المسجل — يُعلَّم السجل already_rolled_back
+            ولا يُعاد عكسه ولا يُحذف. بلا هوية موثوقة، أو مع ملف بديل/
+            معدّل: رفض fail-closed (لا تصنيف، لا حذف سجل).
+          - MOVE: الوجهة والأصل مفقودان معاً → غياب غير مفسَّر → رفض يُجهض
+            الدفعة كاملة.
+          - COPY: النسخة مفقودة لا يمكن تمييزها عدلياً عن حذف خارجي
+            (سجلاتنا الناجحة تُحذف فقط بعد عكس ناجح) → رفع خطأ يُجهض
+            الدفعة كاملة دون أي تعديل.
+          - أنواع sidecar (tag/untag/set_category/delete_flag): يجب وجود
+            الملف الأساسي؛ حارس محتوى sidecar غير متاح (قيد موثق في
+            AI_WORKLOG — لا checksum_after لهذه الأنواع).
+        """
+        # العلامات المؤقتة تخص محاولة preflight واحدة فقط؛ لا يجوز أن
+        # تبقى علامة already_rolled_back من محاولة سابقة إذا تغيرت حالة
+        # الوجهة قبل إعادة المحاولة.
+        entry.__dict__.pop("_ifm_already_rolled_back", None)
+        entry.__dict__.pop("_ifm_noop_failed", None)
+        entry.__dict__.pop("_ifm_recovery_required", None)
+        at = entry.action_type
+        # F13: سجل إخفاق (success=False) لا يمثل إجراءً مكتملاً — لا شيء
+        # لعكسه؛ معاملته كخطأ في preflight كانت تُجهض التراجع عن الدفعة
+        # كاملة بسبب سجل فشل لا أكثر. تُعلَّم no-op ويُحتفظ بسجلها (أثر
+        # تدقيقي) وتُذكر في نتيجة التراجع.
+        # F19: سجل قديم ملتبس (schema v1 + success=False) لا يُصنَّف
+        # noop_failed — لم يُثبت أن الإجراء لم يُنفّذ أصلاً (قد يكون ناجحاً
+        # فشل تراجعه قبل F14). يُعلَّم يتطلب استرداداً، يبقى في السجل، ولا
+        # يجهض الدفعة (بقية السجلات تُراجع)، ويُذكر في النتيجة ضمن
+        # recovery_required.
+        if not entry.success:
+            if entry.schema_version == "1":
+                entry.recovery_state = "recovery_required"
+                setattr(entry, "_ifm_recovery_required", True)
+                return
+            setattr(entry, "_ifm_noop_failed", True)
+            return
+        if at in (ActionType.MOVE.value, ActionType.COPY.value):
+            from .safe_mover import compute_sha256
+            target = Path(entry.file_path_after) if entry.file_path_after else None
+            if target is not None and target.exists():
+                if entry.checksum_after:
+                    current = compute_sha256(target)
+                    if current != entry.checksum_after:
+                        raise RuntimeError(
+                            "رفض التراجع: عُدّل الملف بعد العملية الأصلية — "
+                            f"حماية من فقد تعديلات المستخدم: {target}"
+                        )
+                return
+            if target is None:
+                raise RuntimeError(
+                    f"بيانات التراجع ناقصة ({at}): file_path_after مفقود"
+                )
+            orig = Path(entry.file_path)
+            if at == ActionType.MOVE.value and orig.exists():
+                # F11: وجود ملف في المسار الأصلي لا يثبت أنه الملف الأصلي
+                # نفسه — يلزم إثبات هوية: بصمة الملف الموجود يجب أن تطابق
+                # checksum_after (بصمة الملف عند الوجهة بعد النقل الأصلي؛
+                # MOVE لا يغيّر المحتوى). ملف بديل أو معدّل لا يُصنَّف
+                # أصلياً — رفض fail-closed ولا يُحذف سجل Undo عند غياب
+                # الدليل.
+                recorded = getattr(entry, "checksum_after", None)
+                if not recorded:
+                    raise RuntimeError(
+                        "MOVE: ملف في المسار الأصلي بلا هوية موثوقة في "
+                        "السجل (لا checksum_after) — لا يمكن إثبات أنه "
+                        "الملف الأصلي المُعاد نفسه — رفض fail-closed، لا "
+                        f"تصنيف already-rolled-back، والسجل محفوظ: {orig}"
+                    )
+                try:
+                    current = compute_sha256(orig)
+                except OSError as e:
+                    raise RuntimeError(
+                        f"MOVE: تعذر التحقق من هوية الملف في المسار الأصلي: "
+                        f"{orig} — {e} — رفض fail-closed والسجل محفوظ"
+                    )
+                if current != recorded:
+                    raise RuntimeError(
+                        "MOVE: الملف في المسار الأصلي لا يطابق بصمة الملف "
+                        "المنقول (ملف بديل أو معدّل بعد التراجع) — لا يُصنَّف "
+                        "الملف البديل أصلياً — رفض fail-closed والسجل محفوظ: "
+                        f"{orig}"
+                    )
+                setattr(entry, "_ifm_already_rolled_back", True)
+                return
+            raise RuntimeError(
+                f"الملف المستهدف مفقود بلا تفسير ({at}): {target} — "
+                "أُجهض الدفعة (fail-closed)"
+            )
+        # أنواع sidecar: الملف الأساسي شرط
+        if not Path(entry.file_path).exists():
+            raise RuntimeError(
+                f"الملف الأساسي مفقود لعملية sidecar ({at}): {entry.file_path}"
+            )
+
+    def _capture_post_state(self, entry: UndoEntry):
+        """يلتقط حالة ما بعد الدفعة قبل عكس الإجراء (للتعويض عند الفشل)."""
+        if entry.action_type == ActionType.SET_CATEGORY.value:
+            from .rule_engine import _load_sidecar
+            return _load_sidecar(entry.file_path).get("category", "")
+        return None
+
+    def _reapply_entry(self, entry: UndoEntry, post_state) -> None:
+        """تعويض آمن: إعادة تطبيق الإجراء الأصلي (عكس التراجع المتوقف).
+
+        SafeMover فقط للنقل/النسخ — لا shutil ولا unlink غير محمي؛
+        تعويض COPY بدقة المحتوى عبر staging/إثبات تطابق المصدر (F10 —
+        انظر _compensate_copy): لا استرجاع من مصدر معدّل إطلاقاً.
+        """
+        at = entry.action_type
+        if at == ActionType.MOVE.value:
+            if not entry.file_path_after:
+                raise RuntimeError("تعويض move ناقص البيانات")
+            res = self.safe_mover.move(entry.file_path_after, entry.file_path)
+            if not res.success:
+                raise RuntimeError(f"فشل تعويض النقل: {res.error}")
+        elif at == ActionType.COPY.value:
+            if not entry.file_path_after:
+                raise RuntimeError("تعويض copy ناقص البيانات")
+            self._compensate_copy(entry)
+        elif at == ActionType.TAG.value:
+            from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
+            tags = _load_sidecar_tags(entry.file_path)
+            for tag in entry.tags_added:
+                if tag not in tags:
+                    tags.append(tag)
+            _save_sidecar_tags(entry.file_path, tags)
+        elif at == ActionType.UNTAG.value:
+            from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
+            tags = _load_sidecar_tags(entry.file_path)
+            removed_set = set(entry.tags_removed)
+            tags = [t for t in tags if t not in removed_set]
+            _save_sidecar_tags(entry.file_path, tags)
+        elif at == ActionType.SET_CATEGORY.value:
+            from .rule_engine import _load_sidecar, _save_sidecar
+            sc = _load_sidecar(entry.file_path)
+            if post_state:
+                sc["category"] = post_state
+            else:
+                sc.pop("category", None)
+            _save_sidecar(entry.file_path, sc)
+        elif at == ActionType.DELETE_FLAG.value:
+            from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
+            tags = _load_sidecar_tags(entry.file_path)
+            if "to_delete" not in tags:
+                tags.append("to_delete")
+            _save_sidecar_tags(entry.file_path, tags)
+        else:
+            raise RuntimeError(f"لا يمكن تعويض نوع إجراء: {at}")
+
+    def _compensate_copy(self, entry: UndoEntry) -> None:
+        """تعويض COPY بدقة المحتوى — F10 (المراجعة المستقلة).
+
+        إعادة النسخ من المصدر الحالي قد تُنتج نسخة بمحتوى مختلف عن محتوى
+        الوجهة الأصلي إن عُدّل المصدر بعد النسخ. الترتيب:
+
+          1. نسخة احتياطية (staging) محفوظة وقت التراجع إن وُجدت →
+             الاستعادة منها (محتوى النسخة الأصلي تماماً) + تحقق البصمة؛
+             النسخة الاحتياطية تُحذف فقط بعد نجاح الاستعادة **والتحقق**.
+          2. بلا staging: يُسمح بالمصدر الحالي فقط بإثبات تطابق بصمته
+             مع checksum_after المسجل — إثبات أن المصدر لم يتغير منذ
+             النسخ، فنسخه مطابق تماماً للنسخة الأصلية.
+          3. غير ذلك: fail-closed — لا استرجاع نسخة بمحتوى خاطئ من مصدر
+             معدّل؛ السجل محفوظ كاملاً (حالة Recovery قابلة للاستكمال).
+        """
+        from .safe_mover import compute_sha256
+        dest = entry.file_path_after
+        stage = self._pending_staging.pop(dest, None)
+        if stage and Path(stage).exists():
+            res = self.safe_mover.copy(stage, dest)
+            if not res.success:
+                # لا نفقد النسخة الاحتياطية عند فشل الاستعادة — يُعاد
+                # تسجيلها لتبقى قابلة للاستكمال
+                self._pending_staging[dest] = stage
+                raise RuntimeError(
+                    f"فشل تعويض النسخ من النسخة الاحتياطية: {res.error} — "
+                    f"النسخة الاحتياطية محفوظة في {stage} — الحالة: Recovery"
+                )
+            self._verify_restored_checksum(entry)
+            # نجاح مُتحقق — الآن فقط تُحذف النسخة الاحتياطية
+            self._discard_staging_safely(Path(stage))
+            return
+        if stage:
+            raise RuntimeError(
+                "تعويض COPY fail-closed: النسخة الاحتياطية (staging) "
+                "المسجلة مفقودة من القرص ولا يمكن إثبات محتوى النسخة "
+                "الأصلية — لا استرجاع بمحتوى غير مُتحقق؛ السجل محفوظ — "
+                "الحالة: Recovery"
+            )
+        recorded = getattr(entry, "checksum_after", None)
+        src = Path(entry.file_path)
+        if recorded and src.is_file():
+            try:
+                matches = compute_sha256(src) == recorded
+            except OSError as e:
+                raise RuntimeError(
+                    f"تعذر التحقق من المصدر لتعويض COPY: {e} — الحالة: Recovery"
+                )
+            if matches:
+                res = self.safe_mover.copy(entry.file_path, dest)
+                if not res.success:
+                    raise RuntimeError(
+                        f"فشل تعويض النسخ من المصدر المُثبت تطابقه: {res.error}"
+                    )
+                self._verify_restored_checksum(entry)
+                return
+        raise RuntimeError(
+            "تعويض COPY fail-closed: المصدر الحالي معدّل أو مفقود أو بلا "
+            "بصمة مسجلة، ولا توجد نسخة احتياطية — إعادة النسخ من مصدر "
+            "معدّل تُنتج نسخة مختلفة عن الأصل فلا يُفعل؛ لا تُضحّ ببيانات "
+            "المستخدم — السجل محفوظ كاملاً — الحالة: Recovery"
+        )
+
+    def _verify_restored_checksum(self, entry: UndoEntry) -> None:
+        """يتحقق أن النسخة المعادة تطابق البصمة المسجلة — F10."""
+        from .safe_mover import compute_sha256
+        recorded = getattr(entry, "checksum_after", None)
+        if not recorded:
+            return
+        actual = compute_sha256(entry.file_path_after)
+        if actual != recorded:
+            raise RuntimeError(
+                "النسخة المعادة لا تطابق البصمة المسجلة للنسخة الأصلية — "
+                f"رفض: {entry.file_path_after} — الحالة: Recovery"
+            )
+
+    def rollback_batch(self, batch_id: str) -> dict:
+        """يتراجع عن كل إجراءات دفعة واحدة (أحدث إجراء أولاً) — P1 مُقوّى.
+
+        النموذج (مراجعة مستقلة Finding 4):
+          1. فحص مبدئي (preflight) لكل الإجراءات قبل أي تعديل — أي تعارض
+             أو غياب غير مفسَّر يُجهض الدفعة كاملة دون أي تغيير.
+          2. عكس بترتيب عكسي عبر SafeMover فقط (لا shutil مباشر).
+          3. عند فشل منتصف الدفعة: استرداد تعويضي (Transactional Recovery)
+             — كل إجراء عُكس بالفعل يُعاد تطبيقه (بعكس عكسه) بالترتيب
+             العكسي، فتُستعاد حالة ما قبل محاولة التراجع تماماً؛ ثم تبقى
+             **كل** السجلات في السجل (لا حذف إطلاقاً عند الفشل) ويُرفع
+             خطأ يوثّق نتيجة التعويض.
+          4. السجلات تُحذف فقط بعد نجاح عكس **كل** الدفعة.
+            عملية MOVE مكتملة مسبقاً (دليل: الأصل موجود والوجهة مفقودة)
+            تُعلَّم already_rolled_back ويُحتفظ بسجلها ويُذكر في النتيجة.
+
+        Returns:
+            {"batch_id", "rolled_back": [types], "already_rolled_back": [types],
+             "skipped_failed": [types], "recovery_required": [types],
+             "remaining": n}
+             — skipped_failed (F13): سجلات إخفاق في الدفعة؛ لم تُنفّذ
+             أصلاً فلا شيء لعكسه، ويبقى سجلها أثراً تدقيقياً.
+             — recovery_required (F19): سجلات قديمة ملتبسة (schema v1 +
+             success=False) — قد تكون إجراءات ناجحة فشل تراجعها قبل F14؛
+             تُحفظ في السجل بحالة recovery_required وتتطلب قرار استرداد
+             يدوياً، ولا تُستهلك ولا تُعكس تلقائياً.
+
+        Raises:
+            ValueError: batch_id فارغ أو لا توجد إجراءات له.
+            RuntimeError: فشل الفحص المبدئي (لم يُعدّل أي ملف)، أو فشل
+                في منتصف الدفعة (عُوّض ما عُكس ولم يُحذف أي سجل).
+        """
+        if not batch_id:
+            raise ValueError("batch_id مطلوب")
+        idx = [i for i, e in enumerate(self.entries) if e.batch_id == batch_id]
+        if not idx:
+            raise ValueError(f"لا توجد إجراءات للدفعة: {batch_id}")
+        preflight_errors: List[str] = []
+        for i in reversed(idx):
+            try:
+                self._preflight_rollback(self.entries[i])
+            except Exception as exc:
+                preflight_errors.append(f"[{self.entries[i].action_type}] {exc}")
+        if preflight_errors:
+            raise RuntimeError(
+                "أُجهض التراجع عن الدفعة كاملة (فحص مبدئي فاشل — "
+                "لم يُعدّل أي ملف): " + " | ".join(preflight_errors)
+            )
+        rolled_back: List[str] = []
+        already: List[str] = []
+        skipped_failed: List[str] = []  # F13: سجلات إخفاق — لا شيء لعكسه
+        recovery_required: List[str] = []  # F19: سجلات قديمة ملتبسة
+        completed: List[tuple] = []  # (index, entry, post_state)
+        failure: Optional[Exception] = None
+        failureEntry: Optional[UndoEntry] = None
+        for i in reversed(idx):
+            entry = self.entries[i]
+            if getattr(entry, "_ifm_already_rolled_back", False):
+                already.append(entry.action_type)
+                continue
+            if getattr(entry, "_ifm_recovery_required", False):
+                recovery_required.append(entry.action_type)
+                continue
+            if getattr(entry, "_ifm_noop_failed", False):
+                skipped_failed.append(entry.action_type)
+                continue
+            try:
+                post_state = self._capture_post_state(entry)
+                self._rollback_entry(entry)
+            except Exception as e:
+                failure = e
+                failureEntry = entry
+                break
+            completed.append((i, entry, post_state))
+            rolled_back.append(entry.action_type)
+        if failure is not None or failureEntry is not None:
+            comp_errors: List[str] = []
+            for (ci, centry, cpost) in reversed(completed):
+                try:
+                    self._reapply_entry(centry, cpost)
+                except Exception as e2:
+                    comp_errors.append(f"[{centry.action_type}] {e2}")
+            if self.path:
+                self.save()
+            msg = (
+                f"فشل التراجع في منتصف الدفعة عن {failureEntry.action_type} "
+                f"({failureEntry.file_path}): {failure}. "
+                f"عُكس بالفعل {len(completed)} إجراء و"
+                + ("عُوِّضت كلها بنجاح — "
+                   if not comp_errors else "فشل تعويض بعضها — ")
+                + "استُعيدت حالة ما قبل محاولة التراجع، ولم يُحذف أي سجل "
+                "(استرداد تعويضي — Transactional Recovery)."
+            )
+            if comp_errors:
+                msg += " أخطاء التعويض: " + " | ".join(comp_errors)
+            raise RuntimeError(msg)
+        # نجاح الدفعة كاملة الآن — حذف السجلات المتراجَع عنها فعلاً
+        # (بترتيب فهرسي تنازلي لإبقاء الفهارس صالحة)
+        for (ci, centry, cpost) in completed:
+            self.entries.pop(ci)
+        if self.path:
+            self.save()
+        return {
+            "batch_id": batch_id,
+            "rolled_back": rolled_back,
+            "already_rolled_back": already,
+            "skipped_failed": skipped_failed,
+            "recovery_required": recovery_required,
+            "remaining": len(self.entries),
+        }
 
     # ─── منطق التراجع لكل نوع ────────────────────────────────────────────
 
     def _rollback_entry(self, entry: UndoEntry) -> None:
-        """ينفّذ العملية العكسية لإجراء واحد"""
+        """ينفّذ العملية العكسية لإجراء واحد
+
+        F18: سجل الإخفاق الحالي (schema v2، success=False موثوق) لم يُنفّذ
+        أصلاً — لا شيء لعكسه. محاولة العكس كانت توقف rollback_all/rollback_n
+        عند آخر سجل (فشل MOVE بلا file_path_after يرفع ValueError) أو تعيد
+        كتابة sidecar لملف قد لا يكون موجوداً (سجل TAG/UNTAG فاشل). يُعامل
+        no-op ويُستهلك من السجل هنا (أثره يبقى في ActionLog) — اتساقاً مع
+        دلالات rollback_batch نفسها (F13: skipped_failed).
+
+        F19: سجل قديم ملتبس (schema v1 + success=False) — قبل F14 كان فشل
+        التراجع يُلوّث success/error_message، فالسجل قد يمثل إجراءً ناجحاً
+        فشل تراجعه (الملف ما زال على القرص ويحتاج استرداداً). لا يمكن التمييز
+        من السجل وحده ولا ترحيل تخميني: لا عكس (قد يحذف ملفاً يحتاجه
+        المستخدم بناءً على تخمين) ولا استهلاك (يفقد إمكانية الاسترداد عبر
+        سجل Undo) — يُحفظ بحالة recovery_required ويُرفع
+        RecoveryRequiredError فيبقى السجل محفوظاً (إعادة الإلحاق في
+        rollback_last) ويوقف rollback_all/rollback_n عبر آلية F15.
+        الاستثناء يُلتقط في rollback_last ولا يُعاد رفعه للمستدعي —
+        العقد إرجاعي (انظر عقد الإرجاع في docstring rollback_last).
+        """
         if not entry.success:
-            logger.warning(
-                f"محاولة التراجع عن إجراء فاشل أصلاً ({entry.action_type} على "
-                f"{entry.file_path}) — قد لا يكون آمنًا"
+            if entry.schema_version == "1":
+                entry.recovery_state = "recovery_required"
+                raise RecoveryRequiredError(
+                    f"سجل قديم ملتبس (schema v1، success=False) — قد يكون "
+                    f"إجراءً ناجحاً فشل تراجعه: لا عكس ولا استهلاك تلقائي، "
+                    f"يتطلب قرار استرداد يدوياً (F19): {entry.file_path}"
+                )
+            logger.info(
+                f"تخطّي التراجع عن إجراء فاشل أصلاً ({entry.action_type} على "
+                f"{entry.file_path}) — لم يُنفّذ فلا شيء لعكسه (F18)"
             )
+            return
 
         action_type = entry.action_type
 
@@ -182,7 +599,14 @@ class UndoLog:
             raise ValueError(f"لا يمكن التراجع عن نوع إجراء: {action_type}")
 
     def _rollback_move(self, entry: UndoEntry) -> None:
-        """عكس النقل: نقل الملف من الوجهة إلى المصدر (مع sidecar)"""
+        """عكس النقل: نقل الملف من الوجهة إلى المصدر (مع sidecar)
+
+        F9 (إجراء متعدد الخطوات): فشل نقل الـsidecar بعد نجاح نقل الملف
+        الأساسي لا يُترك نصفاً — تعويض داخلي فوري: يُعاد الملف الأساسي
+        إلى الوجهة (حالة ما بعد الدفعة) ثم يُرفع خطأ Recovery واضح.
+        إن تعذر التعويض نفسه، تُوثّق الحالة الجزئية كما هي دون أي
+        تدّعية باستعادة الحالة الأصلية، وتبقى سجلات Undo كاملة.
+        """
         if not entry.file_path_after:
             raise ValueError("file_path_after مفقود لعملية move")
         src = Path(entry.file_path_after)
@@ -202,12 +626,28 @@ class UndoLog:
             raise RuntimeError(f"فشل التراجع عن النقل عبر SafeMover: {result.error}")
         if src_sidecar.exists():
             dst_sidecar = _sidecar_path(str(dst))
-            # لا حذف صامت لشاغل الـsidecar (جولة DeepSeek 11 — كان
-            # dst_sidecar.unlink() يمسح بيانات شاغل): عقد «اللاحقة لا
-            # الاستبدال» يُطبق هنا أيضاً — SafeMover يتضارب باللاحقة
             result_sc = self.safe_mover.move(str(src_sidecar), str(dst_sidecar))
             if not result_sc.success:
-                raise RuntimeError(f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error}")
+                # F9: فشل داخل الإجراء — الملف الأساسي في الأصل والـsidecar
+                # في الوجهة. تعويض داخلي: إعادة الملف الأساسي إلى الوجهة.
+                back = self.safe_mover.move(str(dst), str(src))
+                if back.success:
+                    raise RuntimeError(
+                        f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error} — "
+                        "عُوّض داخل الإجراء: أُعيد الملف الأساسي إلى الوجهة "
+                        "(حالة ما بعد الدفعة مستعادة) — الحالة: Recovery، "
+                        "سجل التراجع محفوظ كاملاً وقابل للاستكمال بعد رفع "
+                        "سبب فشل الـsidecar. لم يُحذف ولم يُستبدل أي "
+                        "sidecar موجود مسبقاً (تضارب SafeMover باللاحقة)."
+                    )
+                raise RuntimeError(
+                    f"فشل تراجع الـsidecar عبر SafeMover: {result_sc.error}، "
+                    f"وتعذر التعويض الداخلي أيضاً ({back.error}) — الحالة "
+                    f"الجزئية الموثقة: الملف الأساسي في {dst} والـsidecar في "
+                    f"{src_sidecar} — لا تدّعية استعادة الحالة الأصلية؛ "
+                    "الحالة: Recovery، سجل التراجع محفوظ كاملاً "
+                    "(قابل للاستكمال يدوياً بعد رفع السببين)."
+                )
 
     def _rollback_copy(self, entry: UndoEntry) -> None:
         """عكس النسخ: حذف النسخة المنشأة (مع sidecar)
@@ -217,10 +657,22 @@ class UndoLog:
         قليلة مضت — لا بيانات سابقة على القرص تُمس بهذا الحذف. الحارس:
         إن عُدّل الملف بعد نسخه (checksum يخالف المسجل في القيد) يُرفض
         التراجع صراحةً حمايةً لتعديلات المستخدم اللاحقة.
+
+        F10: قبل أي حذف تُنشأ نسخة احتياطية (staging) من النسخة — لا
+        يُحذف الملف الأصلي إلا بعد نجاح النسخ الاحتياطي والتحقق من
+        بصمته؛ النسخة الاحتياطية تبقى على القرص حتى نجاح تعويض مُتحقق
+        (لا تُحذف قبل التحقق)، فلا تُضحّ ببيانات المستخدم إذا فشل
+        التعويض لاحقاً.
+
+        F9 (إجراء متعدد الخطوات): فشل حذف الـsidecar بعد نجاح حذف
+        النسخة لا يُترك نصفاً — تعويض داخلي فوري: تُعاد النسخة من
+        النسخة الاحتياطية بمحتواها الأصلي المُتحقق، ثم يُرفع خطأ
+        Recovery واضح وتبقى سجلات Undo كاملة.
         """
         if not entry.file_path_after:
             raise ValueError("file_path_after مفقود لعملية copy")
         copied = Path(entry.file_path_after)
+        stage: Optional[Path] = None
         if not copied.exists():
             logger.warning(f"النسخة المنسوخة غير موجودة: {copied}")
         else:
@@ -237,13 +689,115 @@ class UndoLog:
                         "رفض التراجع عن النسخ: عُدّل الملف بعد إنشائه — "
                         f"حماية من فقد تعديلات المستخدم: {copied}"
                     )
+            # F10: النسخ الاحتياطي قبل أي حذف — فشله يُجهض التراجع قبل
+            # أي تغيير على القرص
+            stage = self._create_staging_backup(entry, copied)
             copied.unlink()
         # حذف sidecar المنسوخ إن وُجد (جزء من النسخة المنشأة نفسها —
         # يخضع لنفس الاستثناء المعتمد أعلاه)
         from .rule_engine import _sidecar_path
         copied_sidecar = _sidecar_path(str(copied))
         if copied_sidecar.exists():
-            copied_sidecar.unlink()
+            try:
+                copied_sidecar.unlink()
+            except OSError as e:
+                # F9: فشل داخل الإجراء بعد حذف النسخة — تعويض داخلي:
+                # إعادة النسخة من النسخة الاحتياطية (إن وُجدت)
+                if stage is not None and stage.exists():
+                    self._restore_from_staging(entry, copied, stage)
+                    raise RuntimeError(
+                        f"فشل حذف sidecar النسخة المنسوخة: {e} — عُوّض "
+                        "داخل الإجراء: أُعيدت النسخة بمحتواها الأصلي "
+                        "المُتحقق من النسخة الاحتياطية (حالة ما قبل "
+                        "التراجع مستعادة) — الحالة: Recovery، سجل "
+                        "التراجع محفوظ كاملاً وقابل للاستكمال بعد رفع "
+                        "سبب فشل الـsidecar."
+                    ) from e
+                # لا نسخة احتياطية متاحة (النسخة لم تكن موجودة أصلاً —
+                # لم يُحذف شيء): الحالة دون تغيير فعلي
+                raise RuntimeError(
+                    f"فشل حذف sidecar النسخة المنسوخة: {e} — لم يُحذف "
+                    "الملف الأساسي (لم يكن موجوداً) فالحالة الفعلية "
+                    "دون تغيير؛ الحالة: Recovery، سجل التراجع محفوظ."
+                ) from e
+
+    # ─── النسخ الاحتياطي (staging) لعكس النسخ — F9/F10 ───────────────────
+
+    def _create_staging_backup(self, entry: UndoEntry, copied: Path) -> Path:
+        """ينشئ نسخة احتياطية (staging) من النسخة قبل حذفها — F10.
+
+        - عبر SafeMover.copy فقط (لا حذف ولا استبدال صامت؛ التضارب
+          باللاحقة).
+        - يُتحقق من بصمة النسخة الاحتياطية مقابل checksum_after المسجل
+          قبل السماح بأي حذف — عدم التطابق يُجهض التراجع قبل أي تغيير.
+        - لا تُحذف النسخة الاحتياطية قبل التحقق من نجاح التعويض.
+        """
+        from .safe_mover import compute_sha256
+        recorded = getattr(entry, "checksum_after", None)
+        ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")
+        stage = copied.parent / f".{copied.name}.ifm_undo_stage_{ts}.part"
+        res = self.safe_mover.copy(str(copied), str(stage))
+        if not res.success:
+            raise RuntimeError(
+                "فشل إنشاء النسخة الاحتياطية للتراجع — أُجهض عكس النسخة "
+                f"قبل أي حذف (fail-closed): {res.error}"
+            )
+        stage_path = Path(res.final_path)
+        if recorded:
+            try:
+                actual = compute_sha256(stage_path)
+            except OSError as e:
+                self._discard_staging_safely(stage_path)
+                raise RuntimeError(
+                    f"تعذر التحقق من بصمة النسخة الاحتياطية: {e} — أُجهض "
+                    "عكس النسخة قبل أي حذف (fail-closed)"
+                )
+            if actual != recorded:
+                self._discard_staging_safely(stage_path)
+                raise RuntimeError(
+                    "النسخة الاحتياطية لا تطابق البصمة المسجلة — أُجهض "
+                    "عكس النسخة قبل أي حذف (fail-closed)"
+                )
+        self._pending_staging[entry.file_path_after] = str(stage_path)
+        return stage_path
+
+    def _restore_from_staging(self, entry: UndoEntry, copied: Path,
+                              stage: Path) -> None:
+        """يعيد النسخة من النسخة الاحتياطية مع تحقق البصمة — F10.
+
+        النسخة الاحتياطية تُحذف فقط بعد نجاح الاستعادة **والتحقق** منها؛
+        أي فشل يتركها على القرص (حالة Recovery قابلة للاستكمال).
+        """
+        from .safe_mover import compute_sha256
+        res = self.safe_mover.copy(str(stage), str(copied))
+        if not res.success:
+            raise RuntimeError(
+                f"فشل إعادة النسخة من النسخة الاحتياطية: {res.error} — "
+                f"النسخة الاحتياطية محفوظة في {stage} (لا تُضح ببيانات "
+                "المستخدم) — الحالة: Recovery"
+            )
+        recorded = getattr(entry, "checksum_after", None)
+        if recorded:
+            actual = compute_sha256(copied)
+            if actual != recorded:
+                raise RuntimeError(
+                    "النسخة المعادة من النسخة الاحتياطية لا تطابق البصمة "
+                    f"المسجلة — النسخة الاحتياطية محفوظة في {stage} — "
+                    "الحالة: Recovery"
+                )
+        # نجاح مُتحقق — الآن فقط تُحذف النسخة الاحتياطية (ملف staging
+        # أنشأه هذا الإجراء؛ الحذف المباشر للنسخة الاحتياطية نفسها مقبول
+        # بموجب الاستثناء الموثق أعلاه)
+        self._discard_staging_safely(stage)
+        self._pending_staging.pop(entry.file_path_after, None)
+
+    @staticmethod
+    def _discard_staging_safely(stage: Path) -> None:
+        """يحذف ملف staging أنشأه الإجراء نفسه؛ فشل الحذف يُسجَّل ولا يُخفي الخطأ الأصلي"""
+        try:
+            stage.unlink()
+        except OSError as e:
+            logger.warning("تعذر إزالة النسخة الاحتياطية %s: %s", stage, e)
 
     def _rollback_tag(self, entry: UndoEntry) -> None:
         """عكس إضافة وسم: إزالة الوسم"""
@@ -279,7 +833,16 @@ class UndoLog:
         _save_sidecar(entry.file_path, sidecar)
 
     def _rollback_delete_flag(self, entry: UndoEntry) -> None:
-        """عكس وسم الحذف: إزالة وسم to_delete"""
+        """عكس وسم الحذف: إزالة وسم to_delete
+
+        F12: يُزال فقط إذا أضافته العملية نفسها (tags_added غير فارغ).
+        السجلات الجديدة من _exec_delete_flag تترك tags_added فارغاً إن
+        كان الوسم موجوداً مسبقاً فلا يمس التراجع بيانات سابقة. السجلات
+        القديمة تسجل ['to_delete'] دائماً — سلوكها كما كان، وحدّها الموثق:
+        لا إمكان لإثبات الحالة السابقة من السجل القديم وحده.
+        """
+        if not entry.tags_added:
+            return
         from .rule_engine import _load_sidecar_tags, _save_sidecar_tags
         tags = _load_sidecar_tags(entry.file_path)
         if "to_delete" in tags:

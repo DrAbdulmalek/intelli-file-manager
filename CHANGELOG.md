@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — Review Follow-up (F19 متابعة ٢ — PR #78)
+
+### أُصلح
+- **F19 متابعة — إبلاغ فشل التراجع بدقة** (`216d2c3`):
+  - `ifm_controller.undo_last/undo_all`: النجاح يُعلن فقط إذا استُهلك السجل فعلاً؛ السجل المحفوظ يُكتب بـ`success=False` مع سبب الفشل، ويُصدر `undo_finished(success=False)` + `error` — «يتطلب استرداداً يدوياً» للملتبس، «فشل التراجع» للعادي.
+  - MCP `_tool_undo_last`: `success` = عكس ناجح استهلك السجل فعلاً، مفتاح `recovery_required` جديد، وعرض `rollback_error_message` بدل `error_message` الأصلي.
+  - توثيق عقد F19: الرفع **داخلي** في `_rollback_entry`، والعقد إرجاعي عبر `requires_recovery` — صُحّح في `AI_WORKLOG.md` وجسم PR عند الموضعين الأصليين.
+  - اختبارات +4 (MCP × 2، Controller × 2) تثبت أن الفشل لا يُعرض نجاحاً.
+
+## [Unreleased] — Review Follow-up (F19 — PR #78)
+
+### أُصلح
+- **F19 — تمييز السجلات القديمة الملتبسة** (`src/core/rule_schemas.py` +
+  `src/core/undo_log.py`): سجل قديم (schema v1 — كُتب قبل F14) يحمل
+  success=False قد يمثل إجراءً ناجحاً فشل تراجعه (التلوث القديم)، وكان F18
+  يستهلكه no-op فيفقد قابلية الاسترداد. الآن: حقلا `schema_version` و
+  `recovery_state` — الأصل يُكتشف من غياب مفتاح rollback_error_message في
+  JSON (القيمة الصريحة تنتصر فلا يضيع التمييز عبر حفظ/تحميل)، والسجل
+  الملتبس يُحفظ بحالة recovery_required بلا عكس ولا استهلاك ولا حذف
+  ملف/sidecar، ويوقف rollback_all/n، ويُصنف في نتيجة rollback_batch ضمن
+  مفتاح recovery_required جديد. لا ترحيل تخميني.
+
+### أُضيف
+- **عقد الإرجاع الرسمي لـrollback_last/all/n (F19 متابعة)**: نمط إرجاعي —
+  RecoveryRequiredError يُرفع داخلياً فقط ولا يصل المستدعي؛ التمييز بثلاث
+  حالات عبر `UndoEntry.requires_recovery` (عكس ناجح / فشل عكس عادي / سجل
+  ملتبس يتطلب قراراً يدوياً). بدون تغيير سلوك — بعد تدقيق كل مستدعي src/
+  (MCP يعيد استقطاباً صحيحاً؛ عيب إبلاغ سابق لـF19 في سطح المكتب موثق في
+  AI_WORKLOG ولا يُعدل هذه الجولة).
+- 11 اختباراً F19 على سجلات محفوظة فعلياً بصيغة ما قبل F14 (ختم provenance،
+  حفظ بلا حذف، توقف rollback_all وrollback_n، تصنيف الدفعة، ثبات التمييز
+  عبر save/load، التوافق الخلفي للسجلات الناجحة، انحدار F18، عقد الإرجاع
+  صراحة، JSON مختلط بـTAG ملتبس — sidecar بنفس البايتات).
+
+## [Unreleased] — Review Follow-up (F14–F18 — PR #78)
+
+### أُصلح
+- **F14 — فصل نتيجة العملية عن نتيجة التراجع** (`src/core/undo_log.py` +
+  `src/core/rule_schemas.py`): حقل جديد `rollback_error_message` — فشل التراجع
+  لم يعد يقلب `success`/`error_message` الخاصين بالإجراء الأصلي، فلا يتحول
+  إجراء ناجح إلى سجل «فاشل» يُتخطى في rollback_batch، ويصبح إعادة محاولة
+  التراجع ممكنة بعد رفع السبب. الحقل مُسلسَل (asdict/from_dict) فلا تُفقد
+  حالة الاسترداد بعد save/load.
+- **F15 — منع الدوران/إعادة المحاولة اللانهائية**: rollback_all وrollback_n
+  تتوقفان عند أول خطأ تراجع حقيقي (السجل يبقى محفوظاً قابلاً لإعادة المحاولة
+  لاحقاً).
+- **F16 — إزالة العلامات المؤقتة القديمة**: علامتا preflight
+  (`_ifm_already_rolled_back`/`_ifm_noop_failed`) تُمسحان بداية كل فحص —
+  نتيجة فحص سابق لا تتجاوز محاولة لاحقة بعد تغيّر حالة الوجهة.
+- **F17 — تثبيت هوية الملف عند التسجيل** (`src/core/medical_db.py`):
+  `register_file` يستخدم نتيجة stat الأولى نفسها (التي سُجلت منها الحجم/الوقت)
+  كأساس فحص البصمة — كانت إعادة stat بعد تصنيف الحساسية تسمح باستبدال الملف
+  بين الفحصين وربط بصمة ملف جديد ببيانات الملف السابق.
+- **F18 — سجلات الإخفاق no-op في rollback_last/all/n** (`src/core/undo_log.py`):
+  كان العكس يُحاول حتى لسجلات success=False فيتوقف rollback_all عند سجل
+  إخفاق ولا يصل للناجحين قبله، ويُعاد كتابة sidecar لملف مفقود (سجل TAG
+  فاشل). الآن تُستهلك بلا عكس (أثرها في ActionLog) — اتساقاً مع دلالات
+  rollback_batch (F13: skipped_failed).
+
+### أُضيف
+- اختبارات المتابعة: retry/loop-termination (F15)، تنظيف العلامات القديمة (F16)،
+  الاستبدال قبل حساب البصمة (F17)، مواءمة عقد التراجع في اختبارين قديمين (بلا
+  إضعاف)، و4 اختبارات F18.
+
+## [Unreleased] — Independent Review Round 2 (F8–F13 — PR #78)
+
+### أُصلح
+- **F8 — TOCTOU كامل** (`src/core/medical_db.py`): تحقق الهوية في
+  `_sha256_with_identity_check` صار شاملاً (st_dev/st_ino/st_size/st_mtime_ns/
+  st_ctime_ns) قبل القراءة وبعدها، مع **قراءة مزدوجة ومقارنة بصمة المحتوى**
+  (كشف حتمي لتغيّر المحتوى بحجم وinode ثابتين — مستقل عن دقة الطوابع الزمنية
+  الخشنة)، وlstat بعد الإغلاق مع فحص S_ISREG (رفض استبدال المسار برابط رمزي
+  حتى إلى نفس الهدف). حدود الإثبات موثقة في docstring.
+- **F9 — تعويض داخل الإجراء متعدد الخطوات** (`src/core/undo_log.py`): فشل
+  نقل/hذف sidecar بعد نجاح الخطوة الأولى لم يعد يترك تراجعاً نصفاً — تعويض
+  داخلي فوري يعيد حالة ما بعد الدفعة، ورسائل Recovery صريحة قابلة للاستكمال،
+  ولا تدّعية استعادة عند تعذر التعويض. كما لم يعد `rollback_last` يفقد سجل
+  التراجع عند الفشل.
+- **F10 — دقة تعويض COPY** (`src/core/undo_log.py`): التعويض يستعيد النسخة
+  من نسخة احتياطية staging مُتحققة البصمة (تبقى حتى نجاح الاستعادة **والتحقق**)،
+  أو من المصدر فقط بإثبات تطابق بصمته مع checksum_after — وإلا fail-closed:
+  لا استرجاع نسخة بمحتوى خاطئ من مصدر معدّل، ولا تُضح ببيانات المستخدم.
+- **F11 — إثبات already-rolled-back لـ MOVE** (`src/core/undo_log.py` +
+  `src/core/rule_engine.py`): تصنيف «التراجع مكتمل سابقاً» يتطلب تطابق بصمة
+  الملف الموجود مع checksum_after المسجل؛ ملف بديل أو معدّل أو سجل بلا هوية →
+  رفض fail-closed بلا حذف سجل. `_exec_move` يسجل checksum_after للنقل الناجح.
+- **F12 — المحافظة على الوسوم السابقة** (`src/core/rule_engine.py` +
+  `src/core/rule_schemas.py` + `src/core/undo_log.py`): `tags_added` تسجل ما
+  أُضيف فعلاً فقط؛ حقل جديد `tags_already_present` يميز الموجود مسبقاً (توافق
+  خلفي كامل)؛ التراجع لا يزال وسم لم تضفه العملية — بالمرجع نفسه UNTAG و
+  DELETE_FLAG، والسجلات القديمة بسلوكها الموثق.
+- **F13 — إصلاح مصاحب** (`src/core/undo_log.py`): سجلات الإخفاق داخل الدفعة
+  لم تعد تُجهض preflight التراجع (لم تُنفّذ أصلاً فلا شيء لعكسه) — تُعلَّم
+  no-op في `skipped_failed` ويُحتفظ بسجلها أثراً تدقيقياً؛ وإلا فإن وصول
+  batch_id إلى سجلات الفشل كان يمنع التراجع عن الدفعة كاملة.
+
+### أُضيف
+- اختبارات المراجعة المستقلة الجديدة: `test_register_file_toctou.py` (5 اختبارات
+  F8 إضافية)، `test_f9_intra_action_compensation.py` (5)،
+  `test_f10_copy_compensation.py` (5)، `test_f11_move_identity.py` (6)،
+  `test_f12_tag_preservation.py` (6 عبر RuleEngine.execute الحقيقي)،
+  `test_f13_batch_id_e2e.py` (اختبار تكامل end-to-end من execute حتى export_csv
+  يشمل السجلات الناجحة والفاشلة + قابلية التراجع الكاملة للدفعة).
+
 ## [Unreleased] — AlphaCode closed-loop integration (تكامل الحلقة المغلقة)
 
 ### أُضيف
@@ -351,3 +455,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SafeMover now fails closed when atomic no-clobber publication is unavailable and rejects symlink path components and non-regular sources; added regression tests for unsafe fallback and symlink cases.
 - Hardened FileHandler scans to use the shared path policy; permit explicitly selected mount roots while pruning nested mounts; fail closed on mount-inspection errors; exclude .gnupg; and add hidden-tree/symlink regression coverage.
 - Scan-root validation now rejects symlinked ancestor components, with regression coverage.
+
+
+---
+
+## [Unreleased] — P0 + P1 (2026-11-22) — branch feat/p0p1-ops-safety-readiness
+
+### Added (P1)
+- `UndoLog.rollback_batch(batch_id)`: تراجع عن دفعة كاملة بترتيب عكسي، عبر SafeMover فقط،
+  مع فحص مبدئي (preflight) يقرأ `checksum_after` ويُجهض الدفعة **كاملة دون أي تعديل**
+  عند اكتشاف ملف عُدّل بعد العملية الأصلية. السجلات تُحذف بعد نجاح عكسها فقط.
+- `UndoEntry.batch_id` و `ActionLogEntry.batch_id` + `ActionLog.by_batch()` —
+  توافق خلفي كامل: السجلات القديمة بلا batch_id تُحمَّل بقيمة الشريطة الفارغة.
+- `ExportError` + إعادة كتابة `MedicalDB.export_deidentified()`: تصدير ذري
+  (mkstemp + fsync + os.link no-clobber، أو os.replace فقط مع overwrite=True صريح)،
+  No-Clobber افتراضياً، رفض تطابق المصدر/الوجهة بعد expanduser+resolve
+  (يشمل الروابط الرمزية والمسارات النسبية)، تنظيف الملف المؤقت دائماً،
+  و`free_text_policy="verbatim"` موثق: النصوص الحرة (summary/findings) تُنسخ
+  نصياً بلا تنقية مدمرة — النشر العام يتطلب مراجعة بشرية.
+
+### Changed (P1)
+- `MedicalDB.register_file()`: حساب البصمة عبر `open_checked()` + إعادة التحقق
+  `verify_open_identity()` بعد القراءة (مضاد TOCTOU) — عند تغيّر/استبدال الملف
+  أثناء القراءة تُرفض البصمة كلياً ولا تُسجَّل باسم ملف آخر.
+
+### Docs (P0)
+- README: توحيد النطاق — IntelliFile Core عام + Medical Module اختيارية + جدول
+  أوضاع الحاجز (strict/local؛ الأسرار والإرسال الخارجي محجوبان دائماً). حُسم تعارض
+  «ليس أداة طبية» مع وجود وضع العيادة والقاعدة الطبية.
+
+### Tests (سلبية، ليست Happy-Path فقط)
+- `tests/unit/test_undo_batch_rollback.py`: تراجع دفعة، أجهض بالكامل دون تعديل عند تعارض،
+  بقاء ملف المستخدم المعدَّل، توافق سجلاتقديمة بلا batch_id.
+- `tests/unit/test_medical_db_export.py`: سلامة قاعدة المصدر بايت-بايت، تجرّد محتوى،
+  No-Clobber يترك الوجهة الموجودة سليمة، overwrite صريح فقط، رفض نفس المسار
+  وسيم-لينك المصدر والمسار النسبي المكافئ.
+
+
+---
+
+## [Unreleased] — PR #78 Remediation (2026-11-22) — مراجعة مستقلة: CI فاشل (1 failed/1051 passed على 3.10 و3.11)
+
+### Fixed — التصدير (Findings 1، 2، 3)
+- **F1**: إزالة `self.log("export_deidentified", ...)` من `export_deidentified` — كانت تكتب في
+  `processing_log` داخل قاعدة المصدر فتخالف شرط عدم تعديل المصدر (سبب فشل CI الفعلي:
+  `test_export_success_and_source_untouched`). التتبع الآن عبر القيمة المرجعة
+  (`logged_in_source_db: False`) + توثيق استخدام ActionLog الخارجي. سجل العمليات العام وما عداه بلا تغيير.
+- **F2**: تنظيف الملف المؤقت في كل المسارات بما فيها النجاح عبر `os.link` (كان الرابط المؤقت يبقى)؛
+  أخطاء التنظيف تُسجَّل ولا تحجب نتيجة التصدير الأساسية؛ الوجهة المنشورة لا تُمس عند فشل التنظيف.
+- **F3**: الكتابة مُستخرجة إلى `_write_deidentified_copy()` (قابلة لحقن الفشل)؛ fsync على واصف مستقل
+  بعد إغلاق SQLite وقبل النشر؛ fsync مجلد جهدي — **لا تدّعية متانة بعد انقطاع الطاقة** (قيد موثق).
+  ``mkstemp`` فاشل يتحول إلى ExportError.
+
+### Fixed — rollback_batch (Findings 4، 5، 6)
+- **F4**: فشل منتصف الدفعة لم يبق حالة جزئية: كل إجراء عُكس بالفعل يُعاد تطبيقه (استرداد تعويضي —
+  Transactional Recovery) عبر SafeMover فقط، تُستعاد حالة ما قبل محاولة التراجع، **ولا يُحذف أي سجل**
+  إلا بعد نجاح عكس الدفعة كلها.
+- **F5**: دلالات غياب المستهدف — MOVE: أصل موجود + وجهة مفقودة = مكتمل مسبقاً (يُحتفظ بالسجل ويُذكر
+  في `already_rolled_back`)؛ الوجهة والأصل مفقودان = أجهض fail-closed. COPY: نسخة مفقودة غير قابلة
+  للتمييز عدلياً عن حذف خارجي = أجهض. لا حذف سجل عند غياب دليل كافٍ.
+- **F6**: preflight لأنواع sidecar (tag/untag/set_category/delete_flag): شرط وجود الملف الأساسي؛
+  حارس محتوى sidecar قيد موثق (لا checksum_after لهذه الأنواع).
+
+### Fixed — register_file TOCTOU (Finding 7)
+- تحقق ثلاثي في `_sha256_with_identity_check()`: fstat قبل القراءة، فstat بعد القراءة (استبدال/
+  تغيّر حجم/محتوى)، stat المسار بعد الإغلاق (استبدال/نقل/رابط رمزي). أي فشل = لا بصمة تُخزَّن (fail-closed).
+
+### Added — تكامل batch_id (المرحلة 4)
+- `RuleEngine.execute(..., batch_id="")`: ختم موحّد في `_execute_single` يشمل كل UndoEntry المنبثقة
+  عن الجلسة (بما فيها سجلات الفشل) — لم يعد الإبقاء على الحقل بلا وصول فعلي.
+- `ActionLog.export_csv`: عمود batch_id؛ السجلات القديمة القيمة "" بلا تغيير معانٍ.
+
+### Tests
+- فحص الحالة الفعلية للمصدر (بايت + عدد processing_log) بدل ادعاء التوثيق.
+- حقن فشل التصدير: mkstemp/كتابة/fsync/سباق نشر — تنظيف المؤقت وسلامة الوجهة والمصدر في كل حالة.
+- فشل منتصف دفعة 5 إجراءات: تعويض كامل + بقاء السجلات + استرداد كامل بعد إزالة الحقن.
+- دلالات MOVE/COPY المفقود + preflight sidecar + happy path للأنواع الدلالية.
+- مصفوفة TOCTOU: 5 سيناريوهات + اختبار تحكم إيجابي للبصمة.
+- ممنوع skip/xfail — لا تعديل اختبارات لإضعاف الحماية.
+
+## [Unreleased] — UndoLog retry semantics follow-up (2026-11-22)
+
+### أُصلح
+- فصل خطأ محاولة التراجع `rollback_error_message` عن `success/error_message` اللذين يصفان الإجراء الأصلي؛ فشل rollback_last لا يحوّل إجراءً ناجحاً إلى سجل فاشل يتخطاه rollback_batch.
+- إيقاف rollback_all وrollback_n عند أول فشل مع الاحتفاظ بالسجل، لمنع الدوران اللانهائي أو إعادة محاولة السجل نفسه مراراً داخل الاستدعاء الواحد.
+- تصفير علامات preflight المؤقتة قبل كل محاولة، لمنع بقاء `already_rolled_back` قديمة بعد تغير حالة الوجهة.
+- أضيفت اختبارات إعادة المحاولة والفشل في rollback_all/rollback_n وعلامة MOVE المؤقتة.
+
+
+## [Unreleased] — register_file baseline identity follow-up (2026-11-22)
+
+- F17: استخدم `register_file` نتيجة `stat` الأولى نفسها كمرجع هوية للبصمة؛ لا تُعد قراءة stat بعد التصنيف، لأن ذلك كان يسمح باستبدال الملف بين الفحص الأول والفتح وربط بصمة البديل ببيانات الملف السابق.
+- أضيف اختبار استبدال الملف بعد stat الأول وقبل حساب البصمة، ويجب أن يفشل تخزين SHA fail-closed.

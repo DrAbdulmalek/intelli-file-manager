@@ -63,9 +63,24 @@ The `mobile/` directory and `buildozer.spec` are **experimental and not
 part of the product core** — see [`mobile/README.md`](mobile/README.md).
 Android / Kivy is not the product direction for the foreseeable future.
 
-IntelliFile is **not** a medical tool. Any medical-specific classification
-logic that may exist in the codebase is unintended scope and is being
-tracked separately.
+**IntelliFile Core** is a general-purpose local-first file manager. On top of
+it, an **optional Medical Module** (Clinic Mode) can be enabled when needed:
+local SQLite medical database (`src/core/medical_db.py`), local medical
+search + glossary, and medical document processing. The module is
+logically independent: it is off by default and imposes no medical
+requirements on general users.
+
+### Protection modes (medical barrier)
+
+| Mode | Env variable | Medical files | Secrets (.env, keys) | External send |
+|---|---|---|---|---|
+| Strict (default) | `INTELLIFILE_MEDICAL_MODE=strict` or unset | read blocked | always blocked | always blocked |
+| Local (clinic) | `INTELLIFILE_MEDICAL_MODE=local` | local read allowed | always blocked | always blocked |
+
+Public sharing of clinic data goes through `export_deidentified`: an
+atomic, no-clobber export that strips personal fields and reports
+`free_text_policy="verbatim"` so free-text limits are never hidden
+(see the P0+P1 entry in `CHANGELOG.md`).
 
 ---
 

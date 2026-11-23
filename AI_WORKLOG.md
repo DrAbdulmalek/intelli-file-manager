@@ -728,3 +728,318 @@ Track all AI agent activity across repositories to prevent conflicts, ensure acc
 
 ## 2026-11-20 — symlinked scan-root follow-up (PR #65)
 - Extended root validation to reject symlinked ancestor components, not only a symlink at the selected leaf; added a regression test for a selected directory reached through a symlinked parent.
+
+
+---
+
+## 2026-11-22 — جلسة P0+P1 (فرع فقط — انطلاقاً من main c1267b18)
+
+### الإطار
+- فرع `feat/p0p1-ops-safety-readiness`. لا كتابة على main، لا force-push، لا دمج PR،
+  لا حذف/استبدال لقواعد بيانات أو مسارد قائمة.
+
+### P0
+- README: توحيد النطاق (Core + Medical Module اختيارية) + جدول أوضاع الحاجز. تعارض
+  «ليس أداة طبية» مع وضع العيادة حُسم بتقسيم واضح بدل النفي المطلق.
+
+### P1 (rule_schemas / undo_log / action_log / medical_db)
+- `UndoEntry.batch_id` + `ActionLogEntry.batch_id` مع ترحيل خلفي (from_dict يفلتر المفاتيح؛
+  القيمة الشريطة الفارغة للسجلات القديمة).
+- `UndoLog.rollback_batch`: preflight (قراءة checksum_after فقط) ثم أجهض الدفعة كاملة عند أي تعارض
+  ثم عكس بترتيب عكسي عبر SafeMover فقط ثم حذف السجلات بعد نجاح العكس فقط.
+- `export_deidentified`: ذري + no-clobber + رفض تطابق المصدر/الوجهة بعد realpath (نسبي/سيم-لينك
+  مغطيان) + توثيق حدود free-text (verbatim).
+- `register_file`: حاجز + O_NOFOLLOW + إعادة تحقق هوية بعد القراءة (مضاد TOCTOU) —
+  البصمة غير الموثوقة تُرفض ولا تُسجَّل باسم ملف آخر.
+
+### الاختبارات
+- `tests/unit/test_undo_batch_rollback.py`، `tests/unit/test_medical_db_export.py` — سلبية وبيانات اصطناعية فقط.
+- التنفيذ المحلي غير متاح (بيئة بلا Python): BLOCKED محلياً؛ الإثبات يعتمد على CI للفرع/PR.
+
+### Honesty ledger
+- PROVEN (كود + اختبارات مكتوبة، تنتظر تشغيل CI): آلية rollback_batch وأمان التصدير ومضاد TOCTOU.
+- PARTIALLY PROVEN: جدول أوضاع الحاجز — مطابق لتطبيق sensitive_barrier من القراءة، بلا اختبارات جديدة مخصصة لهذا PR.
+- UNPROVEN: نجاح تشغيل CI الفعلي حتى تاريخ هذا الإدخال.
+
+
+---
+
+# Independent Review Findings — PR #78 Remediation (2026-11-22)
+
+المراجعة المستقلة رفضت P0+P1 مبدئياً: CI فاشل فعلياً
+(CI — intelli-file-manager #141: FAILURE؛ Python CI #180: FAILURE؛
+Python 3.11: 1 failed, 1051 passed, 175 skipped؛ Python 3.10: نفس النتيجة).
+الاختبار الفاشل: `tests/unit/test_medical_db_export.py::test_export_success_and_source_untouched`.
+
+| Finding | السبب | التعديل العلاجي | الاختبار المثبت | النتيجة الفعلية | قيود متبقية |
+|---|---|---|---|---|---|
+| F1 — المصدر يتغير أثناء التصدير | `export_deidentified` كان يكتب `self.log(...)` في `processing_log` بالمصدر | حذف الكتابة كلياً؛ التتبع عبر القيمة المرجعة (+`logged_in_source_db: False`) وتوثيق ActionLog الخارجي | `test_export_success_source_untouched`: مقارنة بايت المصدر + عدد processing_log قبل/بعد — الحالة الفعلية لا ادعاء التوثيق | PROVEN (بالكود؛ نجاح CI النهائي مطلوب للتأكيد) | لا |
+| F2 — بقاء مؤقت بعد os.link | `published=True` كان يقفز فوق التنظيف | التنظيف في `finally` بلا شرط النشر؛ أخطاء التنظيف تُسجَّل ولا تحجب نتيجة التصدير؛ الوجهة لا تُمس | 4 اختبارات حقن فشل (mkstemp/كتابة/fsync/سباق نشر) + فحص `_parts(tmp)` فارغ دائماً + سلامة الوجهة الموجودة | PROVEN (بالكود؛ ينتظر CI) | تحقق متانة ما بعد انقطاع الطاقة خارج النطاق (F3) |
+| F3 — تسلسل fsync/نشر | fsync سليم ترتيبياً لكن غير موثق القيود | كتابة مستخرجة؛ fsync قبل النشر بعد إغلاق SQLite؛ fsync مجلد جهدي؛ توثيق صريح: لا تدّعية متانة بعد انقطاع الطاقة | مراقبة كودية + اختبارات تسلسل الفشل | PARTIALLY PROVEN (متانة الطاقة UNPROVEN — معلن) | يتطلب نظام ملفات مُختبَر لإثبات متانة |
+| F4 — تراجع جزئي بمنتصف الدفعة | حذف سجلات العمليات المتراجَع عنها لحظة نجاح كل واحدة قبل اكتمال الدفعة | استرداد تعويضي (Transactional Recovery): إعادة تطبيق ما عُكس بالترتيب العكسي عبر SafeMover، لا حذف سجلات إلا بعد نجاح الدفعة كلها | `test_mid_batch_failure_compensates_and_keeps_records`: دفعة 5 إجراءات، أول عكسين ينجحان، الثالث يفشل بحقن، نتحقق: لا حذف سجلات + الحالة معادَة + إعادة المحاولة بعد إزالة الحقن تُتم التراجع كاملاً | PROVEN (بالكود؛ ينتظر CI) | |
+| F5 — الملفات المفقودة | preflight لم يرفض المستهدف الغائب؛ rollback_move/copy بدون استثناء ثم حذف السجل | دلالات لكل نوع — MOVE مكتمل-مسبقاً يحتفظ بالسجل؛ غير مفسَّر/COPY مفقودة = أجهض fail-closed | `test_move_missing_target_source_present_marks_already`، `test_move_missing_target_and_source_aborts`، `test_copy_missing_target_aborts` | PROVEN (بالكود؛ ينتظر CI) | |
+| F6 — تغطية كل الأنواع | preflight كان يمر أنواع sidecar صامتة | شرط وجود الملف الأساسي لأنواع sidecar؛ قيد حارس المحتوى موثق | `test_sidecar_op_missing_file_aborts` + `test_sidecar_ops_rollback_happy_path` (tag/set_category) | PARTIALLY PROVEN (tag/untag/set_category/delete_flag: happy + missing؛ DELETE_FLAG التراجع السلبي مغطى ضمن القائمة نفسها) | حارس محتوى sidecar غير متاح (لا checksum_after) |
+| F7 — TOCTOU في register_file | التحقق الوحيد كان بعد القراءة وبعدد حالة stat مسار واحدة | `_sha256_with_identity_check`: fstat قبل/أثناء القراءة + stat المسار بعد الإغلاق — أي فشل = لا بصمة (fail-closed، لا بصمة بلا هوية مثبتة) | `test_register_file_toctou.py`: 5 سيناريوهات (استبدال قبل الفتح، أثناء القراءة، تزييف محتوى بنفس inode، حذف بعد القراءة، تحوّل المسار symlink) + تحكم إيجابي للبصمة الصحيحة | PROVEN (بالكود؛ ينتظر CI) | |
+| المرحلة 4 — وصول batch_id فعلياً | RuleEngine كان ينشئ UndoEntry بلا batch_id (الحقل فقط بلا وصول) | ختم موحّد في `_execute_single` + ختم مسار الاستثناء؛ CSV ActionLog يستقبل عمود batch_id؛ ``log_from_undo_entry`` مُتمم | ختم مطابق: كل منفّذي _exec_* يمر عبر _execute_single؛ الفحص بالقراءة — اختبار مخصص بلا حاجة بالكود (الختم شرطي على البنية) | PARTIALLY PROVEN (الوصول مثبت بالبنية؛ اختبار وصول نشط لم يُكتب) | إضافة اختبار وصول نشط يحفظ السجلات ويقرأها للتحقق |
+
+## ضوابط التزام (Remediation Manifest)
+- الفرع فقط؛ لا main؛ لا force-push/reset/amend؛ لا دمج PR #78 (يبقى Draft).
+- الترتيب: fix(medical_db) → fix(undo_log) → feat(batch_id reach) → test(findings) → docs.
+- لا skip/xfail ولا إضعاف معايير؛ الاختبار المعدَّل فقط هو فحص المصدر الفعلي بدل الادعاء.
+- قيد تلويحي: تشغيل Python محلياً غير متاح في بيئة التنفيذ — الإثبات الصحي عبر CI (3.10 + 3.11).
+
+
+---
+
+# Verification Outcome — Independent Review Findings — PR #78 Remediation (2026-11-22)
+
+نتيجة CI النهائية على رأس الإصلاح (بعد مصفوفة التشخيصات عبر annotations — `REMEDIATION-DIAG`
+حددت الاختبار الفاشل: `test_undo_batch_rollback.py::test_sidecar_ops_rollback_happy_path`
+بل: خلل إعداد في الاختبار نفسه (وضعان الوسم في سجل Undo دون تطبيقه على sidecar) — أُصلح
+بمواءمة الحالة الفعلية مع دلالات `_exec_tag`/`_exec_set_category`، دون أي إضعاف):
+
+| الفحص | Run | النتيجة |
+|---|---|---|
+| backend (Python 3.10) — CI fail-closed | #157 / run 45014081151 | ✅ success (1m13s) |
+| backend (Python 3.11) — CI fail-closed | #157 / run 45014081151 | ✅ success (1m13s) |
+| test (Python 3.10) — Python CI | #196 / run 45014081147 | ✅ success (1m23s) |
+| diagnostics failed-test summary | غير حاجب (if: failure) | أُظهر الاختبار الفاشل في دورتين سابقتين ودون تغيير أي قاعدة نجاح/فشل |
+
+ملخص الإصلاحات: F1 (لا كتابة بالمصدر) ✅ حاجز CI؛ F2 (تنظيف المؤقت) ✅ حاجز CI؛
+F3 (تسلسل fsync، بلا تدعية متانة) ✅؛ F4 (تعويض منتصف الدفعة) ✅ حاجز CI؛
+F5 (دلالات المفقود fail-closed) ✅ حاجز CI؛ F6 (preflight sidecar) ✅ حاجز CI؛
+F7 (TOCTOU ثلاثي) ✅ حاجز CI؛ المرحلة 4 (ختم batch_id موحد + CSV) ✅ حاجز CI.
+قيود متبقية: متانة ما بعد انقطاع الطاقة UNPROVEN؛ حارس محتوى sidecar غير متاح؛
+وصول batch_id النشط مثبت بالبنية دون اختبار وصول نشط.
+
+---
+
+# Independent Review Round 2 — F8–F13 (2026-11-22)
+
+تولت جلسة الوكيل المستقلة الثانية (z.ai) معالجة نتائج المراجعة المستقلة الجديدة F8–F13
+على نفس الفرع، بنفس ضوابط الجولة السابقة (فرع فقط، لا main، لا force-push/reset/amend،
+PR #78 يبقى Draft، لا skip/xfail/إضعاف، بيانات اصطناعية في tmp_path فقط، commits منفصلة).
+ميزة بيئية هذه الجولة: **Python متاح محلياً** — فشُغّلت المجموعة الكاملة قبل الدفع
+(1052→1081 ناجحاً، نفس الـ23 فشلاً البيئي المسبق: 22 watcher + 1 شبكة HF)، وruff
+الحاجب (E9,F63,F7,F82,F821) نظيف على كل الملفات المعدلة.
+
+| النتيجة | الإصلاح | الدليل | التصنيف |
+|---|---|---|---|
+| F8 — استكمال TOCTOU | `_sha256_with_identity_check`: مقارنة شاملة (dev/ino/size/mtime_ns/ctime_ns) قبل القراءة وبعدها + **قراءة مزدوجة ومقارنة بصمة المحتوى** (إثبات حتمي مستقل عن دقة الطوابع الخشنة على بعض أنظمة الملفات) + lstat بعد الإغلاق مع S_ISREG (رفض رابط رمزي حتى لنفس الهدف) | 6 اختبارات إلزامية (تبديل محتوى بحجم ثابت، تعديل ثم إعادة حجم، إخفاء بإعادة ضبط mtime — يكشفه ctime، تبديل inode بحجم مطابق، رابط رمزي لنفس الهدف، إيجابي) | **PROVEN** ضمن حدود موثقة: لا تدّعية ضد تلاعب مستوى النواة/الشبكة أو سباق خارج نافذة الفحص؛ متانة ما بعد انقطاع الطاقة تبقى UNPROVEN (قيد F3 الموروث) |
+| F9 — فشل داخل إجراء متعدد الخطوات | تعويض داخلي فوري في `_rollback_move` (فشل sidecar يعيد الملف الأساسي للوجهة) و`_rollback_copy` (فشل sidecar يعيد النسخة من staging مُتحققة)، و`rollback_last` لم يعد يفقد السجل عند الفشل (كان pop يفقده) — رسائل Recovery صريحة، ولا تدّعية استعادة عند تعذر التعويض | 5 اختبارات إلزامية (نقل ناجح+sidecar فاشل، فشل قبل أي تغيير، حذف COPY ناجح+sidecar فاشل، فشل التعويض نفسه مع بقاء staging، بقاء السجلات بلا ادعاء كاذب) | **PROVEN** بCI؛ حد موثق: حالة «فشل التعويض الداخلي أيضاً» تُوثق الجزئية كما هي وتتطلب استكمالاً يدوياً بمسارات مذكورة في الرسالة |
+| F10 — دقة تعويض COPY | `_compensate_copy`: الاستعادة من staging مُتحقق البصمة أولاً؛ ثم المصدر فقط **بإثبات تطابق بصمته** مع checksum_after؛ وإلا fail-closed — لا استرجاع من مصدر معدّل إطلاقاً؛ staging لا يُحذف إلا بعد نجاح الاستعادة **والتحقق** | السيناريو الإلزامي الكامل (نسخ→تعديل المصدر→rollback→فشل لاحق→المحتوى الأصلي يُعاد) + 4 اختبارات (مصدر مُثبت التطابق، fail-closed لمصدر معدّل بلا staging، fail-closed لstaging مفقود، بقاء staging عند فشل التعويض ثم الاستكمال منه) | **PROVEN**؛ حد موثق: خريطة staging ذاكرية لكل UndoLog — لو ماتت العملية بين الإنشاء والتعويض يبقى ملف staging على القرص للاستكمال اليدوي بينما يعود التعويض التلقائي fail-closed |
+| F11 — إثبات already-rolled-back لـ MOVE | preflight يتطلب **إثبات هوية**: تطابق بصمة الملف الموجود مع checksum_after (MOVE لا يغيّر المحتوى) — ملف بديل أو معدّل → رفض fail-closed بلا تصنيف ولا حذف سجل؛ سجل قديم بلا checksum_after → رفض fail-closed (تغيير سلوك متعمد بموجب F11)؛ `_exec_move` يسجل checksum_after للنقل الناجح | 6 اختبارات (أصلي=تصنيف، بديل=رفض، معدّل=رفض، مفقود=إجهاض، قديم بلا هوية=رفض، E2E واقعي) | **PROVEN**؛ حد موثق: بصمة تثبت المحتوى لا التاريخ — ملف أُعيد ثم عُدّل يُرفض (سلوك مقصود fail-closed) |
+| F12 — المحافظة على الوسوم السابقة | `_exec_tag`/`_exec_delete_flag` تسجل في tags_added **ما أُضيف فعلاً فقط** والوسم الموجود مسبقاً في حقل جديد `tags_already_present` (توافق خلفي كامل — from_dict يفلتر المفاتيح)؛ `_rollback_delete_flag` يزال فقط ما أضافته العملية؛ السجلات القديمة بسلوكها السابق (حد موثق: لا إثبات للحالة السابقة منها) | 6 اختبارات عبر RuleEngine.execute الحقيقي (TAG موجود/جديد، UNTAG موجود/مفقود، DELETE_FLAG موجود مسبقاً/جديد + سجل قديم) | **PROVEN**؛ حد موثق: سجلات ما قبل F12 تظل تحذف وسم غير مضاف إن كان مسجلاً في tags_added القديمة |
+| F13 — وصول batch_id من البداية للنهاية | اختبار تكامل حقيقي: execute بخطة 7 إجراءات (6 ناجحة + نقل ملف غير موجود فاشل) → UndoLog على القرص → ActionLog → export_csv: **7/7 سجلات** تحمل القيمة نفسها في كل الطبقات بما فيها صف الفشل في CSV | اختباران (الوصول الكامل 7/7 + الأثر الفعلي على القرص والتراجع الكامل للدفعة عبر batch_id) | **PROVEN**؛ إصلاح إنتاجي مصاحب: سجلات الإخفاق في الدفعة لم تعد تُجهض preflight (لم تُنفّذ أصلاً) — تُعلَّم no-op في skipped_failed ويُحتفظ بسجلها أثراً تدقيقياً |
+
+## ضوابط التزام (الجولة الثانية)
+- الفرع فقط؛ لا main؛ لا force-push/reset/amend؛ لا دمج PR #78 (يبقى Draft).
+- commits منفصلة لكل نتيجة: F8 → F9 → F10 → F11 → F12 → F13 (+docs).
+- لا skip/xfail/إضعاف؛ تعديل اختبار واحد فقط (test_move_missing_target_source_present_marks_already)
+  بأضيف من القديم: أُضيف checksum_after لإثبات الهوية الذي يفرضه F11.
+- لا ميزات خارج F8–F13؛ إصلاح preflight لسجلات الإخفاق جزء متلازم مع F13
+  (وصول batch_id للسجلات الفاشلة يجعل التجهيز القديم يمنع التراجع).
+- الإثبات المحلي: المجموعة الكاملة 1081 ناجحاً / 169 متخطى / 23 فشلاً بيئياً مسبقاً
+  (مطابقة تامة لخط الأساس قبل التغييرات) + ruff الحاجب نظيف. تأكيد CI على 3.10/3.11
+  على رأس HEAD النهائي مطلوب لتحويل «PROVEN بCI» إلى نتيجة نهائية موثقة.
+
+
+---
+
+## 2026-11-22 — Independent follow-up review: UndoLog retry semantics
+
+### Findings
+- **F14 — rollback_last corrupts original outcome:** عند فشل التراجع كان `rollback_last` يغيّر `entry.success=False` ويمحو معنى نتيجة الإجراء الأصلي. بعد ذلك يتعامل `rollback_batch` مع السجل بوصفه إخفاق تنفيذ ويضعه في `skipped_failed`، فلا يمكن إعادة محاولة التراجع فعلياً.
+- **F15 — rollback_all can loop forever:** بعد F9 أصبح `rollback_last` يعيد السجل الفاشل إلى القائمة؛ حلقة `while self.entries` لا تتقدم عند فشل آخر سجل، فتكرر المحاولة بلا نهاية. `rollback_n` كان يعيد محاولة السجل نفسه حتى استنفاد العدد.
+- **F16 — stale preflight marker:** علامة `_ifm_already_rolled_back` كانت تبقى على كائن UndoEntry بين الاستدعاءات. إذا تغيرت حالة الوجهة بعد محاولة preflight سابقة، قد تُستخدم العلامة القديمة لتجاوز rollback رغم أن الوجهة عادت موجودة.
+
+### Remediation
+- إضافة `rollback_error_message` منفصل ومتوافق خلفياً؛ لا تتغير `success` أو `error_message` اللتان تصفان الإجراء الأصلي.
+- إيقاف `rollback_all` و`rollback_n` بعد أول فشل مع إبقاء السجل وإتاحة إعادة المحاولة باستدعاء لاحق.
+- إعادة ضبط علامات preflight المؤقتة في بداية كل فحص.
+- إضافة اختبارات انحدار في `test_f9_intra_action_compensation.py` و`test_f11_move_identity.py`.
+
+### Evidence ledger
+- Code changes and tests added in branch `fix/undo-log-retry-semantics-2026-11-22`.
+- Local execution is not available in this GitHub-only editing pass; test results remain **UNPROVEN** until CI runs on the resulting branch/PR head.
+- No changes to main; no merge; PR #78 remains Draft.
+
+
+---
+
+## 2026-11-22 — Independent review F17: preserve initial register_file identity
+
+- **F17 — baseline identity reset:** `register_file` captured `st` for metadata, then called `p.stat()` again after sensitivity classification to create the hash baseline. A replacement between those calls could make the hash refer to a new inode while size/mtime metadata still came from the first inode.
+- **Remediation:** pass the original `st` to `_sha256_with_identity_check`; add a regression test that replaces the file after the initial stat and before hashing, requiring `sha256=None`.
+- **Evidence:** source and test committed to the PR #78 branch; CI pending on the new head. No local test execution claimed.
+
+
+### CI feedback — compatibility assertion updated
+- CI على HEAD `dfbd9ffff` كشف اختباراً قديماً واحداً كان يفرض العقد السابق الخاطئ: `test_rollback_copy_refuses_modified_copy` توقع أن يؤدي فشل التراجع إلى `success=False` وكتابة الخطأ في `error_message`.
+- عُدّل الاختبار ليؤكد العقد المصحح: الإجراء الأصلي الناجح يبقى `success=True`، وخطأ محاولة التراجع يظهر في `rollback_error_message`، مع بقاء النسخة المعدّلة سليمة.
+- نتيجة CI لهذه الجولة كانت **FAILURE** على Python 3.10 و3.11 بسبب هذا التوقع القديم فقط؛ لم تُعلن الجولة ناجحة. إعادة تشغيل CI مطلوبة على HEAD بعد التعديل.
+
+
+### CI type-check note — transient UndoEntry markers
+- CI على `75658bdce6324c8eb6c05f3fbbfcea4baef3ce1c` أظهر أن فحص mypy غير الحاجب يبلّغ عن الإسناد الديناميكي لعلامتي preflight على `UndoEntry` (`_ifm_noop_failed` و`_ifm_already_rolled_back`). حُوّل الإسناد إلى `setattr` لتجنب خطأ `attr-defined` دون تغيير السلوك.
+- الفحص نفسه أبلغ عن 321 خطأ نوعياً في 54 ملفاً (منها أخطاء سابقة خارج نطاق الجولة)؛ يبقى mypy غير حاجب في workflow. لا ندّعي إصلاح مجموعة أخطاء الأنواع كلها.
+- أُطلقت CI جديدة على HEAD بعد تعديل الإسناد؛ نتيجة هذا الرأس تنتظر الاكتمال.
+
+---
+
+# Verification Round — CI on F14–F17 head + F18 follow-up (2026-11-22)
+
+جولة تحقق مستقلة على رأس معالجة F14–F17 (`4c084415`): لا الاكتفاء بالعلامة الخضراء.
+
+## نتيجة التحقق على 4c084415
+- CI عبر API على الرأس نفسه: Python CI (run 45040402629) ✅ وCI fail-closed (run 45040402593) ✅ —
+  والفشل الأوسط السابق على `37efbce` (توقع قديم في test_rollback_copy_refuses_modified_copy)
+  أُصلح في `054f3b9` بمواءمة العقد الجديدة (فصل نتيجة التراجع) بلا إضعاف — الاختبار ما زال
+  يثبت بقاء تعديلات المستخدم وحمايتها.
+- مراجعة diffs مستقلة: F14 (فصل rollback_error_message — الحقل مُسلسَل عبر asdict/from_dict
+  فلا فقد حالة الاسترداد بعد save/load)، F15 (إيقاف الحلقات)، F16 (تنظيف العلامات المؤقتة
+  لكل محاولة preflight + setattr بدل الإسناد المباشر)، F17 (أول stat كأساس موحد للهوية
+  والبيانات الوصفية) — كلها سليمة؛ تعديلات الاختبارات تقوية (عقود جديدة + اختبار إعادة
+  المحاولة + إيقاف الحلقات) لا إضعاف.
+- المجموعة الكاملة محلياً (3.12) على الرأس نفسه: **1085 ناجحاً / 169 متخطى / 23 فشلاً بيئياً
+  مسبقاً** (مطابقة حرفية لخط الأساس: 22 watchdog + 1 شبكة HF) — صفر فشل جديد. ruff الحاجب نظيف.
+
+## F18 — ثغرة متبقية اكتشفتها في نفس العائلة وعالجتها (a84f6b2)
+`_rollback_entry` كان يحاول العكس حتى لسجلات success=False (تحذير فقط ثم يكمل):
+- فشل MOVE بلا file_path_after يرفع ValueError → rollback_all/rollback_n يتوقفان عند آخر
+  سجل ولا يصلان للناجحين قبله (بعد إصلاح الدوران في F15 أصبح التوقف — لكن التوقف أمام سجل
+  إخفاق يمنع إتمام التراجع).
+- سجل إخفاق TAG/UNTAG يعيد كتابة sidecar لملف قد لا يكون موجوداً (_save_sidecar_tags
+  يُنشئه عند الغياب) — أثر زائف لإجراء لم يُنفّذ.
+العلاج: سجل الإخفاق no-op يُستهلك من السجل في rollback_last/all/n (لا شيء لعكسه؛ أثره يبقى
+في ActionLog) — اتساقاً مع rollback_batch (F13: skipped_failed). success يبقى وصفاً للإجراء
+الأصلي ولا يمسه المسار؛ rollback_error_message يظل فارغاً فلا يوقف حلقة F15.
+4 اختبارات جديدة (test_f18_failed_records_noop.py) + المجموعة المحلية بعد الإصلاح:
+1089 ناجحاً / نفس الـ23 البيئية — صفر فشل جديد.
+تحفظ موثق: سجلات قديمة حُفظت قبل F14 قد تحمل success=False لإجراء ناجح فشل تراجعه —
+rollback_batch يعاملها بنفس الدلالة منذ F13؛ لا إمكان للتمييز من السجل القديم وحده.
+
+---
+
+# F19 — Legacy Undo Record Disambiguation (مراجعة المالك المستقلة — 2026-11-22)
+
+## الثغرة (اكتشاف المالك — مسار مثبت من منطق الكود)
+سجل قديم كُتب **قبل F14** قد يحمل `success=False` لإجراء **ناجح** فشل تراجعه —
+قبل F14 كان `rollback_last` يلوّث `success`/`error_message` بنتيجة التراجع،
+فالسجل القديم الملتبس (مثال المالك: COPY ناجح + error_message نص فشل تراجع)
+لا يمكن تمييزه عن سجل إخفاق تنفيذ حقيقي من السجل وحده. F18 كان يستهلكه no-op
+(يُزال من السجل) → **فقدان قابلية الاسترداد** عبر سجل Undo بينما النسخة تبقى
+على القرص؛ وrollback_batch يصنفه skipped_failed فلا يسترد أيضاً.
+
+## العلاج (2665644) — بلا ترحيل تخميني
+- `UndoEntry`: حقل `schema_version` ("1" قديم / "2" حالي) + حقل
+  `recovery_state` ("recovery_required"). الأصل يُكتشف عند التحميل من **غياب
+  مفتاح rollback_error_message في JSON** (الصيغة الحالية تكتبه دائماً عبر
+  asdict)؛ القيمة الصريحة تنتصر عند إعادة الحفظ فلا يضيع التمييز عبر دورات
+  حفظ/تحميل — مكتمل بثلاثة حقول تفرق: نتيجة العملية الأصلية (`success`)،
+  نتيجة محاولة التراجع (`rollback_error_message`)، حالة الاسترداد
+  (`recovery_state`).
+- `rollback_last/all/n` (`_rollback_entry`): السجل الملتبس يرفع
+  `RecoveryRequiredError` **داخلياً في _rollback_entry فقط** — يلتقطه
+  rollback_last فيبقى محفوظاً (إعادة إلحاق)، لا عكس (قد يحذف ملفاً يحتاجه
+  المستخدم بناءً على تخمين) ولا استهلاك (يفقد الاسترداد)، ويوقف
+  rollback_all/n عبر آلية F15 بوضوح. الاستثناء لا يصل المستدعي — العقد
+  إرجاعي عبر requires_recovery (انظر قسم المتابعة أدناه). لا حذف أي
+  ملف/sidecar أثناء معالجة السجلات الملتبسة.
+- `rollback_batch`: لا يصنفه noop_failed — يعلّمه ويبقيه والنتيجة تحمل
+  مفتاح `recovery_required` جديداً؛ بقية الدفعة تُراجع طبيعياً.
+- 8 اختبارات على سجلات **محفوظة فعلياً بصيغة ما قبل F14 على القرص** (بدون
+  المفاتيح الجديدة): ختم provenance عند التحميل، حفظ بلا حذف (النسخة
+  بمحتوى المستخدم + sidecar سليمان)، توقف rollback_all، تصنيف الدفعة المختلطة،
+  ثبات التمييز عبر save/load، انسحاب طبيعي للسجل القديم الناجح
+  (success=True غير ملتبس)، وانحدار F18 (سجل v2 فاشل يُستهلك كما هو).
+
+## التحقق
+- المجموعة الكاملة محلياً (3.12): **1097 ناجحاً / 169 متخطى / 23 فشلاً بيئياً
+  مسبقاً** (مطابقة خط الأساس حرفياً) — صفر فشل جديد. ruff الحاجب نظيف.
+- القيود الموثقة: السجل الملتبس يتطلب قراراً يدوياً من المستخدم (مراجعة
+  الملف على القرص ثم إزالة السجل يدوياً من JSON بعد الفصل — لا أداة حل
+  تلقائي في هذه الجولة)؛ وrollback_all يتوقف عند السجل الملتبس فلا يصل
+  للإجراءات الأقدم منه حتى يُحل يدوياً (سلوك fail-closed مقصود).
+
+## F19 متابعة — حسم عقد الإرجاع بعد مراجعة المالك (793af88 — 2026-11-22)
+
+### تصحيح العقد
+تقرير التسليم السابق قال «rollback_last يرفع RecoveryRequiredError» — صياغة غير
+دقيقة عن التنفيذ: الرفع يحدث **داخلياً في _rollback_entry** فقط، ويلتقطه
+rollback_last ويعيد السجل محفوظاً (نمط إرجاعي). الحسم وفق تفضيل المالك —
+**بدون تغيير السلوك** بعد تدقيق المستدعين:
+
+- عقد الإرجاع الرسمي (docstring rollback_last) بثلاث حالات: (1) عكس ناجح —
+  السجل خارج القائمة، requires_recovery=False؛ (2) فشل عكس عادي v2 — السجل
+  داخل القائمة، rollback_error_message مفعم، قابل لإعادة المحاولة؛
+  (3) سجل قديم ملتبس — السجل داخل القائمة، requires_recovery=True، يتطلب
+  قرار استرداد يدوياً ولا تُعيد المحاولة الآلية شيئاً.
+- `UndoEntry.requires_recovery`: خاصية تمييز آلية للمستدعي (بدل فحص نصي) —
+  docstrings في rollback_all/rollback_n و_rollback_entry تحيل للعقد.
+
+### خلاصة تدقيق المستدعين (src/ كاملة — مستدعيان فقط)
+- `src/mcp_server/server.py:296` (_tool_undo_last): للسجل الملتبس يعيد
+  success=False + is_error=True (لأن success لا يُقلب) — استقطاب صحيح؛
+  سبب الخطأ يعرض error_message القديم لا سبب F19 (تحسين لاحق ممكن).
+- `src/desktop/controllers/ifm_controller.py:523/541` (undo_last/undo_all):
+  يسجل log_rollback(rolled, success=True) ويصدر undo_finished(success=True)
+  **حتى عند سجل محفوظ** (rollback_error_message مفعم) — **عيب سابق لـF19**
+  يقع مع أي فشل تراجع عادي منذ F9، لا مع F19 وحده. موثق هنا كخلاصة تدقيق
+  ولا يُعدل هذه الجولة (خارج التفويض — مرشح إصلاح صغير مستقبلي مع قرار
+  تصميمي عن ما ينبغي أن تعرضه الواجهة لحالة recovery_required).
+
+### اختبارات إضافية (+3 → 11 إجمالاً في ملف F19)
+- rollback_n بملتبس في الآخر: يتوقف فوراً، الملتبس محفوظ، الأقدم (v2) لم يُمس.
+- عقد الإرجاع صراحة: الحالتان (1) و(3) يفرق بينهما المستدعي عبر
+  requires_recovery.
+- JSON قديم مختلط (TAG ملتبس + MOVE ناجح): sidecar بنفس البايتات لا يُعاد
+  كتابته، والملتبس يحجب الأقدم fail-closed (المحاولة الثانية تعيد السجل نفسه).
+
+### التحقق
+- المجموعة الكاملة محلياً (3.12): **1100 ناجحاً / 169 متخطى / 23 بيئية مسبقاً**
+  — صفر جديد. ruff الحاجب نظيف.
+
+# F19 متابعة ٢ — إغلاق الجولة: CHANGELOG + أرشفة سجل الجلسة (توجيه المالك — 2026-11-22)
+
+## سجل الجولة الخارجية (مؤرشف بالكامل في docs/session-records/)
+- وكيل الجلسة (DeepSeek): البنود الخمسة منفذة على `216d2c3` — توحيد صياغة
+  عقد F19 في الموضعين الأصليين، إصلاح إبلاغ سطح المكتب، إصلاح إبلاغ MCP،
+  +4 اختبارات تثبت أن الفشل لا يُعرض نجاحاً، وCI أخضر (fail-closed + Python
+  CI) و1102 ناجحاً محلياً / 171 متخطى / 23 بيئية — صفر جديد.
+- مراجعة مستقلة (ChatGPT): تحقق مستقل من HEAD والأب وCI وسلوك
+  undo_last/undo_all/MCP — البنود PROVEN في المواضع الخمسة. الملاحظة
+  الوحيدة: CHANGELOG.md بلا مدخل لهذه الدفعة (نقص توثيق لا يمس الكود).
+- تقييم الجولة وخطة الإغلاق (Claude): اعتماد مدخل CHANGELOG المقترح
+  docs-only على الفرع نفسه، ثم قرار Draft→Ready والدمج للمالك وحده —
+  ولا P2 قبله. الحزمة الجاهزة سُلّمت لوكيل الأدوات للتنفيذ (المسار ب).
+
+## التنفيذ الفعلي (وكيل الأدوات — Z.ai)
+- مدخل CHANGELOG المقترح أُضيف نصاً كما اعتمدته الجلسة، تحت قسم جولة جديد
+  «F19 متابعة ٢» بعنوان فرعي «أُصلح» وفق عرف الملف (التكيّف الوحيد:
+  `### Fixed` ← `### أُصلح`).
+- سجل الجلسة الكامل (تقرير التسليم + مراجعة ChatGPT + تقييم وخطة الإغلاق +
+  حزمة التنفيذ + سجل التنفيذ) مؤرشف في
+  `docs/session-records/2026-11-22_f19_followup_closure_session.md` — وفق
+  توجيه المالك: «أضف محتويات الجلسة هذه إلى المستودعات لتطويرها».
+- الثوابت المحفوظة: لا دمج، لا كتابة على main، لا بدء P2، لا إعادة فتح
+  نطاق F19، لا إعادة كتابة تاريخ — كل التعديلات هنا docs فقط.
+
+### التحقق
+- `git diff 216d2c3..HEAD --stat`: CHANGELOG.md (الإغلاق) + أرشيف الجلسة
+  وقسم AI_WORKLOG (أرشفة توجيه المالك) — لا ملف كود أو اختبارات.
+- CI على الرأس النهائي (fail-closed + Python CI): يُسجل في جسم PR #78
+  بعد اكتمال التشغيل — هذا الملف كُتب قبل الدفع.
+
+## 2026-11-23 — بوابة التحقق النهائية لحزمة إغلاق F8–F13 (PR #78 — توجيه المالك)
+
+- جلسة تحقق فقط (لا تغيير كود) بتوجيه المالك «نعم تابع التنفيذ» بعد اكتمال
+  الحزمة (F19 + F8–F12 + F13) على الفرع. السجل الكامل:
+  `docs/session-records/2026-11-23_f8_f13_verification_gate.md`.
+- النتائج على `5134a91`: 1102 ناجحًا / 23 فشلًا (كلها watcher — خط أساس
+  بيئي مؤكد بتطابق أسماء الفاشلة مع main) / 171 تخطيًا مبررًا (165 PySide6
+  + 5 ocr-core + 1 عينة). ملفات F الأساسية 42/42 بلا تخطٍ. ruff الفئات
+  الجسيمة نظيفة. لا `deselect` خفي (pytest.ini `-v --tb=short` فقط).
+- التصنيف: PROVEN لكل بند من F8–F13 وF19 متابعة (أدلة الاختبارات في السجل).
+- PR #78 يبقى Draft — لا دمج وفق توجيه المراجعة المستقلة. الخطوة التالية:
+  مراجعة المالك النهائية وقرار Draft→Ready (مستهدف الخارطة 2026-11-25).

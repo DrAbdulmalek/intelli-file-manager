@@ -512,7 +512,13 @@ class IFMController(QObject):
     # ─── UndoLog ────────────────────────────────────────────────────────────
 
     def undo_last(self) -> None:
-        """يتراجع عن آخر إجراء"""
+        """يتراجع عن آخر إجراء
+
+        F19 متابعة — عقد الإرجاع: يُعلن نجاحاً فقط إذا استُهلك السجل فعلاً
+        (عكس ناجح). فشل التراجع العادي أو السجل القديم الملتبس لا يُعرض
+        نجاحاً — يُكتب في ActionLog بـsuccess=False، ويُصدر undo_finished
+        (success=False) + error، والسجل يبقى محفوظاً في UndoLog.
+        """
         if len(self.undo_log) == 0:
             self.undo_finished.emit(None, False, "سجل التراجع فارغ")
             return
@@ -521,13 +527,33 @@ class IFMController(QObject):
             entries_before = self.undo_log.list_entries()
             target_entry = entries_before[-1] if entries_before else None
             rolled = self.undo_log.rollback_last()
-            # تسجيل العملية العكسية في ActionLog (log_rollback يأخذ UndoEntry)
-            if rolled is not None:
+            if rolled is None:
+                self.undo_finished.emit(None, False, "سجل التراجع فارغ")
+            elif rolled.requires_recovery or rolled.rollback_error_message:
+                # F19 متابعة: السجل بقي محفوظاً — الملف لم يُستعد، لا نجاح
+                failure = (
+                    "سجل قديم ملتبس يتطلب قرار استرداد يدوياً (F19): "
+                    + rolled.file_path
+                    if rolled.requires_recovery
+                    else "فشل التراجع: " + rolled.rollback_error_message
+                )
+                title = ("يتطلب استرداداً يدوياً" if rolled.requires_recovery
+                         else "فشل التراجع")
+                self.action_log.log_rollback(rolled, success=False,
+                                             error_message=failure)
+                recent = self.action_log.list_entries(limit=1)
+                if recent:
+                    self.action_logged.emit(recent[0])
+                self.undo_finished.emit(None, False, failure)
+                self.error.emit(title, failure)
+            else:
+                # عكس ناجح فقط — تسجيل العملية العكسية في ActionLog
+                # (log_rollback يأخذ UndoEntry)
                 self.action_log.log_rollback(rolled, success=True)
                 recent = self.action_log.list_entries(limit=1)
                 if recent:
                     self.action_logged.emit(recent[0])
-            self.undo_finished.emit(target_entry, True, "")
+                self.undo_finished.emit(target_entry, True, "")
             self.undo_log_changed.emit(len(self.undo_log))
             self._emit_state()
         except Exception as e:
@@ -536,11 +562,37 @@ class IFMController(QObject):
             self.error.emit("فشل التراجع", str(e))
 
     def undo_all(self) -> None:
-        """يتراجع عن كل الإجراءات"""
+        """يتراجع عن كل الإجراءات
+
+        F19 متابعة — عقد الإرجاع: كل سجل عُكس فعلاً يُكتب في ActionLog
+        بـsuccess=True؛ السجل الذي بقي (فشل عكس عادي أو ملتبس F19) يُكتب
+        بـsuccess=False ولا يُعرض نجاحاً — error signal بالسبب.
+        """
         try:
             rolled = self.undo_log.rollback_all()
+            # التوقف عند أول فشل — العنصر الأخير فقط قد يكون محفوظاً
+            succeeded = []
+            failed = None
             for entry in rolled:
+                if entry.requires_recovery or entry.rollback_error_message:
+                    failed = entry
+                else:
+                    succeeded.append(entry)
+            for entry in succeeded:
                 self.action_log.log_rollback(entry, success=True)
+            if failed is not None:
+                failure = (
+                    "سجل قديم ملتبس يتطلب قرار استرداد يدوياً (F19): "
+                    + failed.file_path
+                    if failed.requires_recovery
+                    else ("فشل التراجع الكلي عند: " + failed.file_path
+                          + " — " + failed.rollback_error_message)
+                )
+                title = ("يتطلب استرداداً يدوياً" if failed.requires_recovery
+                         else "فشل التراجع الكلي")
+                self.action_log.log_rollback(failed, success=False,
+                                             error_message=failure)
+                self.error.emit(title, failure)
             self.undo_log_changed.emit(len(self.undo_log))
             self._emit_state()
         except Exception as e:

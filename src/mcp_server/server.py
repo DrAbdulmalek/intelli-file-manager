@@ -294,10 +294,28 @@ class IntelliFileMcpServer:
         log_path = str(args["undo_log_path"])
         undo_log = UndoLog(log_path)
         entry = undo_log.rollback_last()
+        # F19 متابعة — عقد الإرجاع: success تعني عكساً ناجحاً استهلك السجل
+        # فعلاً (لا recovery ولا rollback_error_message). سبب الفشل يعرض
+        # سبب التراجع/سبب F19 لا error_message الأصلي للإجراء.
+        recovery = entry is not None and entry.requires_recovery
+        preserved = entry is not None and (
+            recovery or bool(entry.rollback_error_message)
+        )
+        if entry is None:
+            error = "السجل فارغ"
+        elif recovery:
+            error = ("سجل قديم ملتبس يتطلب قرار استرداد يدوياً (F19): "
+                     + entry.file_path)
+        elif preserved:
+            error = "فشل التراجع: " + entry.rollback_error_message
+        else:
+            error = ""
         structured: Dict[str, Any] = {
-            "success": bool(entry is not None and entry.success),
-            "error": entry.error_message if entry is not None else "السجل فارغ",
-            "restored_path": entry.file_path if entry is not None else "",
+            "success": bool(entry is not None and not preserved),
+            "recovery_required": bool(recovery),
+            "error": error,
+            "restored_path": (entry.file_path
+                              if (entry is not None and not preserved) else ""),
         }
         token = None
         if structured["success"]:
