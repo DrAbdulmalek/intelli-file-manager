@@ -499,3 +499,26 @@ def test_legacy_feedback_schema_is_preserved_but_payloads_are_not_exposed(tmp_pa
         ("new-token",),
     ).fetchone()
     assert tuple(new_row) == ("", "{}", "{}")
+
+
+
+def test_feedback_record_rejects_non_string_fields(tmp_path):
+    server = _server(tmp_path)
+    invalid_arguments = [
+        {"token": None, "signal": "negative"},
+        {"token": "safe-token", "signal": ["negative"]},
+        {"token": "safe-token", "signal": "negative", "context": ["/synthetic/path"]},
+        {"token": "safe-token", "signal": "negative", "condition": {"path": "/synthetic/path"}},
+        {"token": "safe-token", "signal": "negative", "preferred_action": ["suffix"]},
+    ]
+    for arguments in invalid_arguments:
+        response = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "feedback_record", "arguments": arguments},
+            }
+        )
+        assert response["result"]["isError"] is True
+    assert server.store.events_for_token("safe-token") == []
