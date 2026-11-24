@@ -501,7 +501,6 @@ def test_legacy_feedback_schema_is_preserved_but_payloads_are_not_exposed(tmp_pa
     assert tuple(new_row) == ("", "{}", "{}")
 
 
-
 def test_feedback_record_rejects_non_string_fields(tmp_path):
     server = _server(tmp_path)
     invalid_arguments = [
