@@ -1,0 +1,201 @@
+# =============================================================================
+# Archive Sort Ruleset — مبني على القرار الموحد لفرز الأرشيف (2026-11-24)
+# المسار المستهدف: /run/media/xorthomson/My Passport/  (NTFS — fuseblk)
+# الأداة: intelli-file-manager | المرجع: GitHub main = 5a96a05 (الإصدار 1.7)
+# =============================================================================
+# هذا الملف يُستهلك عبر Ruleset.from_yaml() ثم RuleEngine.dry_run() للإنتاج
+# خطة محاكاة (HTML) بلا أي كتابة على القرص. لا يُنفَّذ فعلياً قبل اعتماد
+# المالك بندياً وبعد اجتياز بوابة تأمين النسختين الخارجيتين لقاعدة البيانات.
+#
+# قواعد القرار الموحد المدمجة هنا:
+#   * 7 مجلدات وجهة بأسماء عربية ثابتة بلا مسافات:
+#       مستودعات_كود | بيانات_حية | وثائق | أرشيف_مؤرخ | سلة_تحقق | وسائط | Index
+#   * عتبة موحدة 500 ميجابايت للملفات الثقيلة (بدل جيجابايت).
+#   * إعفاء crops.db الحية من إعادة التسمية (تُسمى النسخ الاحتياطية فقط).
+#   * أولوية البصمة/الجرد للملفات الـ14، ثم الامتداد للمسح العام.
+#   * المكررات إلى سلة_تحقق (لا حذف)، المحتفظ به الأحدث/المرجع.
+#   * ملفات التوثيق (README/CHANGELOG) تلازم مستودعات_كود.
+#   * العمر ترشيح لا قاعدة حاكمة (الملف القديم النشط لا يُؤرشف تلقائياً).
+#
+# ملاحظة تنفيذية: محرك القواعد الحالي أول-مطابقة-يفوز (first-match-wins)،
+# لذلك القواعد الأكثر تحديداً (الأعلى أولوية) تسبق القواعد العامة. الحقول
+# المتاحة للشروط: extension, category, file_name, file_path, parent_dir,
+# file_size, mime_type, content_type, is_duplicate, has_tag, has_exif, extra.
+# لا يدعم المحرك شرط "أكبر من X وأصغر من Y" في قاعدة واحدة (شرط واحد لكل
+# حقل)، لذا يُطبَّق النطاق [400MB, 500MB] عبر قاعدة وسيطة + القاعدة العامة.
+# =============================================================================
+
+name: Archive Sort — Unified Decision Nov 2026
+description: قواعد فرز قرص My Passport وفق القرار الموحد (محاكاة إلزامية قبل التنفيذ)
+rules:  # ═══════════════════════════════════════════════════════════════════════
+  # (1) بيانات_حية — exemption: crops.db الحية لا تُعاد تسميتها ولا تُؤرشف
+  #     القرار: نقل لا نسخ بعد تأمين نسختين خارجيتين؛ تبقى باسمها.
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Live database crops.db
+    description: قاعدة البيانات الحية crops.db — نقل إلى بيانات_حية بلا إعادة تسمية
+    priority: 1000
+    enabled: true
+    conditions:
+      - field: file_name
+        op: eq
+        value: crops.db
+    actions:
+      - type: move
+        target: بيانات_حية
+      - type: set_category
+        value: بيانات_حية
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (2) سلة_تحقق — المكررات ( SHA-256 مطابق ) لا تُحذف، المحتفظ به المرجع
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Duplicates to verification bin
+    description: الملفات المكررة (مطابقة البصمة) إلى سلة_تحقق — لا حذف
+    priority: 900
+    enabled: true
+    conditions:
+      - field: is_duplicate
+        op: eq
+        value: true
+    actions:
+      - type: move
+        target: سلة_تحقق
+      - type: tag
+        value: duplicate
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (3) أرشيف_مؤرخ — الملفات الثقيلة فوق العتبة (500MB) أولاً
+  #     النطاق [400MB,500MB] عبر قاعدة وسيطة أقل أولوية؛ >500MB هنا.
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Heavy files over 500MB
+    description: ملفات أكبر من 500 ميجابايت إلى أرشيف_مؤرخ (عتبة موحدة قابلة للضبط)
+    priority: 800
+    enabled: true
+    conditions:
+      - field: file_size
+        op: gt
+        value: 524288000
+    actions:
+      - type: move
+        target: أرشيف_مؤرخ
+      - type: tag
+        value: heavy-file
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (4) مستودعات_كود — ملفات التوثيق الملازمة (README/CHANGELOG) أولاً
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Documentation files
+    description: ملفات README وCHANGELOG تلازم مستودعات_كود
+    priority: 700
+    enabled: true
+    conditions:
+      - field: file_name
+        op: contains
+        value: README
+    actions:
+      - type: move
+        target: مستودعات_كود
+
+  - name: Changelog files
+    description: ملفات CHANGELOG تلازم مستودعات_كود
+    priority: 695
+    enabled: true
+    conditions:
+      - field: file_name
+        op: contains
+        value: CHANGELOG
+    actions:
+      - type: move
+        target: مستودعات_كود
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (5) وسائط — صور/فيديو/صوت (يُنشأ المجلد فقط إن وُجدت كميات)
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Images to media
+    description: الصور إلى مجلد وسائط
+    priority: 600
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: صور
+    actions:
+      - type: move
+        target: وسائط
+
+  - name: Videos to media
+    description: الفيديو إلى مجلد وسائط
+    priority: 595
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: فيديو
+    actions:
+      - type: move
+        target: وسائط
+
+  - name: Audio to media
+    description: الصوت إلى مجلد وسائط
+    priority: 590
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: صوت
+    actions:
+      - type: move
+        target: وسائط
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (6) وثائق — المستندات العامة (PDF/Word/Excel/PPT/نص) وفق الفئات الافتراضية
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Documents to docs
+    description: المستندات إلى مجلد وثائق
+    priority: 500
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: مستندات
+    actions:
+      - type: move
+        target: وثائق
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (7) Catch-all: برمجة → مستودعات_كود | أرشيفات → أرشيف_مؤرخ | أخرى → سلة_تحقق
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Code to repos
+    description: ملفات البرمجة إلى مستودعات_كود
+    priority: 400
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: برمجة
+    actions:
+      - type: move
+        target: مستودعات_كود
+
+  - name: Archives to dated archive
+    description: الأرشيفات (zip/rar/7z) إلى أرشيف_مؤرخ
+    priority: 395
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: أرشيفات
+    actions:
+      - type: move
+        target: أرشيف_مؤرخ
+
+  - name: Other to verification bin
+    description: غير المصنف إلى سلة_تحقق للمراجعة اليدوية
+    priority: 100
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: أخرى
+    actions:
+      - type: move
+        target: سلة_تحقق
