@@ -135,21 +135,20 @@ _TOOL_DEFS: List[Dict[str, Any]] = [
     {
         "name": "feedback_record",
         "description": (
-            "تسجيل إشارة مستخدم على استدعاء سابق عبر feedback_token: "
-            "negative / positive_implicit / positive_explicit / outcome — مع سياق "
-            "وحالة مفضلة (suffix/reject/ask_user فقط؛ الأمان خارج التعلم)."
+            "تسجيل إشارة تصنيفية محدودة لاستدعاء سابق. لا يقبل ملاحظات حرة أو "
+            "مسارات أو مدخلات أو مخرجات الملفات."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "token": {"type": "string"},
                 "signal": {"type": "string", "enum": ["negative", "positive_implicit", "positive_explicit", "outcome"]},
-                "note": {"type": "string"},
-                "context": {"type": "string", "description": "الأداة صاحبة التوكن مثل safe_move_file"},
+                "context": {"type": "string", "description": "معرّف الأداة مثل safe_move_file"},
                 "condition": {"type": "string"},
                 "preferred_action": {"type": "string", "enum": ["suffix", "reject", "ask_user"]},
             },
             "required": ["token", "signal"],
+            "additionalProperties": False,
         },
     },
     {
@@ -335,17 +334,22 @@ class IntelliFileMcpServer:
         )
 
     def _tool_feedback_record(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        token = str(args["token"])
-        context = str(args.get("context", "unknown"))
+        allowed = {"token", "signal", "context", "condition", "preferred_action"}
+        if set(args) - allowed:
+            return self._result(
+                {"success": False, "error": "حقول feedback الإضافية غير مسموحة"},
+                is_error=True,
+            )
+        token = args.get("token")
+        context = args.get("context", "unknown")
         try:
             stored = self.store.record(
                 token=token,
                 tool=context,
-                signal=str(args["signal"]),
-                note=str(args.get("note", "")),
+                signal=args.get("signal"),
                 context=context,
-                condition_key=str(args.get("condition", "")),
-                preferred_action=str(args.get("preferred_action", "")),
+                condition_key=args.get("condition", ""),
+                preferred_action=args.get("preferred_action", ""),
             )
         except ValueError as e:
             return self._result({"success": False, "error": str(e)}, is_error=True)
@@ -365,9 +369,9 @@ class IntelliFileMcpServer:
 
     def _new_token(self, tool: str, inputs: dict, outcome: dict) -> str:
         token = uuid.uuid4().hex[:16]
+        # inputs/outcome may contain paths or file content; never persist them.
         try:
-            self.store.record(token=token, tool=tool, signal="outcome",
-                              context=tool, inputs=inputs, outcome=outcome)
+            self.store.record(token=token, tool=tool, signal="outcome", context=tool)
         except Exception as e:  # pragma: no cover — لا تُفشل الأداة بسبب السجل
             logger.warning("تعذر تسجيل outcome: %s", e)
         return token
