@@ -341,15 +341,29 @@ class IntelliFileMcpServer:
                 is_error=True,
             )
         token = args.get("token")
+        signal = args.get("signal")
         context = args.get("context", "unknown")
+        condition = args.get("condition", "")
+        preferred_action = args.get("preferred_action", "")
+        if (
+            not isinstance(token, str)
+            or not isinstance(signal, str)
+            or not isinstance(context, str)
+            or not isinstance(condition, str)
+            or not isinstance(preferred_action, str)
+        ):
+            return self._result(
+                {"success": False, "error": "حقول feedback يجب أن تكون معرفات نصية محدودة"},
+                is_error=True,
+            )
         try:
             stored = self.store.record(
                 token=token,
                 tool=context,
-                signal=args.get("signal"),
+                signal=signal,
                 context=context,
-                condition_key=args.get("condition", ""),
-                preferred_action=args.get("preferred_action", ""),
+                condition_key=condition,
+                preferred_action=preferred_action,
             )
         except ValueError as e:
             return self._result({"success": False, "error": str(e)}, is_error=True)
