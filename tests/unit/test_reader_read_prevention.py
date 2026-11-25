@@ -209,10 +209,14 @@ class ReadRecorder:
                 super().__init__(file, *a, **kw)
                 self._recorder_fd = self.fileno()
                 self._recorder_closed = False
-                try:
-                    recorder._remember_fd(self._recorder_fd, file)
-                except (TypeError, ValueError):
-                    pass
+                if not isinstance(file, int):
+                    try:
+                        recorder._remember_fd(self._recorder_fd, file)
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    recorder._fd_bytes.setdefault(self._recorder_fd, 0)
+                    recorder._fd_open[self._recorder_fd] = True
 
             def read(self, *a, **kw):
                 data = super().read(*a, **kw)
