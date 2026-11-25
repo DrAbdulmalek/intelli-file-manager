@@ -1,12 +1,12 @@
 # Session Handoff — intelli-file-manager
 
-**التاريخ**: 2026-11-24 23:10 UTC
-**الفرع**: `feat/archive-sort-unified-decision` @ `1077e5f`
+**التاريخ**: 2026-11-25 00:47 UTC
+**الفرع**: `feat/archive-sort-unified-decision` @ `1b31e2d`
 **آخر وسم**: `post-merge-clean-state-2026-11-21`
 
 ## 📝 ملاحظة الجلسة
 
-بناء مخرجات فرز أرشيف My Passport (ناتج AlphaCode): 12 قاعدة YAML + سكريبت قراءة فقط archive_sort.py + مجلد archive_sort_alphacode (README+WORKLOG+PLAN_REVIEW). البوابة: 775 passed/1 skipped. لا تنفيذ فعلي على القرص.
+إنتاج تقارير مفصلة عن كل العمل: COMPREHENSIVE_REPORT + DISK_SCAN_REPORT + EXECUTION_PLAN + FINGERPRINT_AND_HANDOVER_REPORT + تقرير المحاكاة الفعلي dry_run_report.html (109MB، 274,851 ملف، 1.65 TB، 264,118 إجراء). البوابة 1 معلقة (نسخ crops.db خارجياً من المالك). البند 4 (قائمة الحساسيات) معلق. لا تنفيذ فعلي على القرص قبل البوابة 1.
 
 ## 📊 حالة التحقق
 
@@ -14,28 +14,25 @@
 
 ## 🔨 آخر الالتزامات
 
-- `1077e5f chore(deps): update plotly requirement from >=5.18.0 to >=7.1.0 (#86)`
-- `dc3020b chore(deps): update pytesseract requirement from >=0.3.10 to >=0.3.13 (#85)`
-- `d4694c6 chore(deps): update ollama requirement from >=0.1.0 to >=0.6.3 (#84)`
-- `f577a2c chore(deps): update watchdog requirement from >=3.0.0 to >=6.0.0 (#83)`
-- `e576c71 ci: bump actions/setup-python from 5 to 7 (#82)`
+- `1b31e2d docs(archive-sort): تصنيف حادثة LLM خارجي + سياسة نطاق + تصحيح أولوية`
+- `8abf8df docs(archive-sort): دعم قرار عبر Vyce AI للبنود السبعة`
+- `0c34159 fix(archive-sort): تصحيحات تقرير التحقق (تناقضات وثائقية)`
+- `2f39e37 docs(archive-sort): رد على المراجعة المستقلة + مجلد ثامن غير_مصنّف`
+- `4125867 feat(archive-sort): قواعد وسكريبت فرز أرشيف My Passport (ناتج AlphaCode)`
 
 ## ⚠️ تغييرات غير ملتزمة
 
 ```
-M progress.md
+M archive_sort_alphacode/WORKLOG.md
+ M progress.md
 ?? DRIVESCOPE_WORKLOG.md
-?? QUESTIONS_FOR_ARCHIVE_SORTING.md
-?? archive_sort_alphacode/
 ?? contrib/
 ?? drivescope_out/
-?? rules/archive_sort_rules.yaml
-?? scripts/archive_sort.py
 ```
 
 ## ➡️ الخطوة التالية
 
-على المالك: إجابة البنود المفتوحة السبعة + اعتماد الخطة، ثم تنفيذ المرحلة 1 (نسخ crops.db خارجياً) كبوابة أولى. المعاينة الكاملة تتطلب تشغيل السكريبت محلياً (fuseblk بطيء).
+على المالك: إكمال البوابة 1 (نسخ crops.db خارجياً + فحص سلامة + بصمات SHA-256)، إرسال قائمة الحساسيات (البند 4)، الموافقة على البنود السبعة. بعد ذلك: بدء المرحلة 5 (دفعة تجريبية 200–500 ملف).
 
 ---
 
