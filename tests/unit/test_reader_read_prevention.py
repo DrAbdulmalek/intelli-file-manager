@@ -292,7 +292,7 @@ class ReadRecorder:
 
         total = sum(count for fd, count in self._fd_bytes.items()
                     if self._fd_paths.get(fd) == target)
-        budget = self.HEADER_PROBE_BUDGET_BYTES * 4
+        budget = self.HEADER_PROBE_BUDGET_BYTES
         assert total <= budget, (
             f"انتهاك: قُرئ {total} بايت من الملف الحساس "
             f"(الميزانية {budget}) — واجهات القراءة: "
