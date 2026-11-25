@@ -354,3 +354,18 @@ def test_feedback_rejects_path_like_session_and_fingerprint(engines):
         )
     assert not feedback.log_path.exists()
     assert engine.list_rules() == []
+
+def test_apply_confirmed_sanitizes_caller_metadata(engines):
+    engine, feedback = engines
+    record = _capture(feedback, evidence={"extension": ".png"})
+    feedback.confirm(record["feedback_id"])
+    result = feedback.apply_confirmed(
+        record["feedback_id"],
+        metadata={"extension": "/private/patient-report.pdf",
+                  "name": "synthetic-sensitive-name"},
+    )
+    assert result["review_status"] == "applied"
+    rule = engine.list_rules()[0]
+    assert rule["match"]["value"] == ".png"
+    assert "/private" not in json.dumps(rule)
+    assert "synthetic-sensitive-name" not in json.dumps(rule)
