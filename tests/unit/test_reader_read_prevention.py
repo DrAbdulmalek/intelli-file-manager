@@ -202,21 +202,54 @@ class ReadRecorder:
             stream = recorder._real_os_fdopen(fd, *a, **kw)
             return _TrackedStream(stream, recorder, fd, "os.fdopen")
 
+        class TrackedFileIO(recorder._real_io_fileio):
+            """Subclass حقيقي من FileIO يحافظ على توافق RawIOBase/BufferedReader."""
+
+            def __init__(self, file, *a, **kw):
+                super().__init__(file, *a, **kw)
+                self._recorder_fd = self.fileno()
+                self._recorder_closed = False
+                try:
+                    recorder._remember_fd(self._recorder_fd, file)
+                except (TypeError, ValueError):
+                    pass
+
+            def read(self, *a, **kw):
+                data = super().read(*a, **kw)
+                recorder._record_read(self._recorder_fd, len(data) if data is not None else 0,
+                                      "io.FileIO.read")
+                return data
+
+            def readall(self):
+                data = super().readall()
+                recorder._record_read(self._recorder_fd, len(data) if data is not None else 0,
+                                      "io.FileIO.readall")
+                return data
+
+            def readinto(self, buffer):
+                count = super().readinto(buffer)
+                recorder._record_read(self._recorder_fd, count or 0, "io.FileIO.readinto")
+                return count
+
+            def readline(self, *a, **kw):
+                data = super().readline(*a, **kw)
+                recorder._record_read(self._recorder_fd, len(data) if data is not None else 0,
+                                      "io.FileIO.readline")
+                return data
+
+            def close(self):
+                try:
+                    return super().close()
+                finally:
+                    if not self._recorder_closed:
+                        self._recorder_closed = True
+                        recorder._record_close(self._recorder_fd, "io.FileIO")
+
         def spy_fileio(file, *a, **kw):
             fd = file if isinstance(file, int) else None
             path = recorder._fd_paths.get(fd) if fd is not None else file
-            if fd is None:
-                recorder.opened.append(f"io.FileIO:{file}")
-            else:
-                recorder.opened.append(f"io.FileIO:{path or fd}")
-            stream = recorder._real_io_fileio(file, *a, **kw)
-            if fd is None:
-                try:
-                    fd = stream.fileno()
-                    recorder._remember_fd(fd, path)
-                except (OSError, ValueError):
-                    fd = None
-            return _TrackedStream(stream, recorder, fd, "io.FileIO")
+            recorder.opened.append(f"io.FileIO:{path if path is not None else file}")
+            return TrackedFileIO(file, *a, **kw)
 
         def spy_path_open(path_obj, *a, **kw):
             recorder.opened.append(f"Path.open:{path_obj}")
@@ -862,3 +895,21 @@ def test_read_recorder_detects_readlines_and_pread(tmp_path):
         os.close(fd)
         with pytest.raises(AssertionError, match="قُرئ"):
             rec.assert_never_opened(str(target))
+
+
+def test_read_recorder_fileio_subclass_is_buffered_reader_compatible(tmp_path):
+    target = tmp_path / "synthetic-buffered-secret.bin"
+    target.write_bytes(b"0123456789abcdef")
+    with ReadRecorder() as rec:
+        raw = io.FileIO(target, "rb")
+        assert isinstance(raw, io.FileIO)
+        buffered = io.BufferedReader(raw, buffer_size=4)
+        assert buffered.read1(3) == b"012"
+        destination = bytearray(2)
+        assert buffered.readinto1(destination) == 2
+        assert destination == b"34"
+        buffered.close()
+        assert any(event["interface"] == "io.FileIO.readinto"
+                   for event in rec.read_events)
+        assert sum(event["bytes"] for event in rec.read_events
+                   if event["path"] == os.path.realpath(str(target))) == 5
