@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# pre-push hook (F003) — يرفض الدفع عند فشل بوابة scripts/verify.sh --quick
+# التركيب: ./scripts/install_hooks.sh — مرة واحدة بعد الاستنساخ لكل مستودع.
+# stdin يستقبل أسطر المراجع القديمة/الجديدة من git ولا يحتاجها هذا الفحص.
+exec "$(git rev-parse --show-toplevel)/scripts/verify.sh" --quick
