@@ -82,3 +82,4 @@ project_context.txt
 project_context*.md
 project_context*.txt
 web/tsconfig.tsbuildinfo
+archive_sort_alphacode/LOGS/*.html
