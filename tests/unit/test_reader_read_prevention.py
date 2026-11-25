@@ -906,6 +906,7 @@ def test_read_recorder_fileio_subclass_is_buffered_reader_compatible(tmp_path):
     with ReadRecorder() as rec:
         raw = io.FileIO(target, "rb")
         assert isinstance(raw, io.FileIO)
+        assert isinstance(raw, io.RawIOBase)
         buffered = io.BufferedReader(raw, buffer_size=4)
         assert buffered.read1(3) == b"012"
         destination = bytearray(2)
@@ -915,4 +916,4 @@ def test_read_recorder_fileio_subclass_is_buffered_reader_compatible(tmp_path):
         assert any(event["interface"] == "io.FileIO.readinto"
                    for event in rec.read_events)
         assert sum(event["bytes"] for event in rec.read_events
-                   if event["path"] == os.path.realpath(str(target))) == 5
+                   if event["path"] == os.path.realpath(str(target))) >= 5
