@@ -29,22 +29,114 @@ DICOM_PAYLOAD = b"\x00" * 128 + b"DICM" + b"x" * 64
 _READ_INTERFACES = ("builtins.open", "io.open", "os.open", "Path.open")
 
 
-class ReadRecorder:
-    """يعترض واجهات فتح الملفات ويسجل كل محاولة (ولا يمنع غير الحساس).
+class _TrackedStream:
+    """Proxy يسجل واجهات القراءة مع إبقاء سلوك كائن الملف الأصلي."""
 
-    العقد المقيس:
-      - الملف الحساس لا يُفتح عبر واجهات قراءة المحتوى
-        (builtins.open / io.open / Path.open) إطلاقاً.
-      - os.open مسموح *فقط* لفحص header DICOM الخاص بالحاجز — الحد
-        المصرّح به 4 بايتات عند الإزاحة 128؛ أي قراءة أكبر = انتهاك.
+    def __init__(self, stream, recorder, fd, label):
+        self._stream = stream
+        self._recorder = recorder
+        self._fd = fd
+        self._label = label
+
+    def read(self, *args, **kwargs):
+        data = self._stream.read(*args, **kwargs)
+        self._recorder._record_read(self._fd, len(data) if data is not None else 0,
+                                    f"{self._label}.read")
+        return data
+
+    def read1(self, *args, **kwargs):
+        method = getattr(self._stream, "read1")
+        data = method(*args, **kwargs)
+        self._recorder._record_read(self._fd, len(data) if data is not None else 0,
+                                    f"{self._label}.read1")
+        return data
+
+    def readinto(self, buffer, *args, **kwargs):
+        count = self._stream.readinto(buffer, *args, **kwargs)
+        self._recorder._record_read(self._fd, count or 0, f"{self._label}.readinto")
+        return count
+
+    def readinto1(self, buffer, *args, **kwargs):
+        method = getattr(self._stream, "readinto1")
+        count = method(buffer, *args, **kwargs)
+        self._recorder._record_read(self._fd, count or 0, f"{self._label}.readinto1")
+        return count
+
+    def readline(self, *args, **kwargs):
+        data = self._stream.readline(*args, **kwargs)
+        self._recorder._record_read(self._fd, len(data) if data is not None else 0,
+                                    f"{self._label}.readline")
+        return data
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        line = self.readline()
+        if not line:
+            raise StopIteration
+        return line
+
+    def close(self):
+        try:
+            return self._stream.close()
+        finally:
+            self._recorder._record_close(self._fd, self._label)
+
+    def __enter__(self):
+        self._stream.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            return self._stream.__exit__(*exc)
+        finally:
+            self._recorder._record_close(self._fd, self._label)
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
+class ReadRecorder:
+    """يسجل الفتح والقراءة تراكميًا؛ لا تُمحى الأدلة عند إغلاق الواصف.
+
+    os.open مسموح لفحص DICOM المحدود، لكن كل واجهة قراءة لاحقة تسجل
+    البايتات، بما فيها os.fdopen وio.FileIO المباشران.
     """
 
-    HEADER_PROBE_BUDGET_BYTES = 4  # طبقة header-based الموثقة (دليمة DICOM)
+    HEADER_PROBE_BUDGET_BYTES = 4
 
     def __init__(self):
         self.opened: list[str] = []
+        self.read_events: list[dict] = []
+        self.closed: list[dict] = []
         self._fd_paths: dict[int, str] = {}
         self._fd_bytes: dict[int, int] = {}
+        self._fd_open: dict[int, bool] = {}
+
+    def _remember_fd(self, fd, path):
+        if path is not None:
+            try:
+                normalized = os.path.realpath(os.fsdecode(path))
+            except (TypeError, ValueError):
+                normalized = str(path)
+            self._fd_paths[fd] = normalized
+            self._fd_bytes.setdefault(fd, 0)
+            self._fd_open[fd] = True
+
+    def _record_read(self, fd, count, interface):
+        if count:
+            self._fd_bytes[fd] = self._fd_bytes.get(fd, 0) + count
+            self.read_events.append({
+                "fd": fd, "bytes": count, "interface": interface,
+                "path": self._fd_paths.get(fd),
+            })
+
+    def _record_close(self, fd, interface):
+        self._fd_open[fd] = False
+        self.closed.append({"fd": fd, "interface": interface,
+                            "path": self._fd_paths.get(fd),
+                            "bytes_read": self._fd_bytes.get(fd, 0)})
 
     def __enter__(self):
         self._real_builtins_open = builtins.open
@@ -52,8 +144,9 @@ class ReadRecorder:
         self._real_os_open = os.open
         self._real_os_read = os.read
         self._real_os_close = os.close
+        self._real_os_fdopen = os.fdopen
+        self._real_io_fileio = io.FileIO
         self._real_path_open = pathlib.Path.open
-
         recorder = self
 
         def spy_open(file, *a, **kw):
@@ -66,30 +159,52 @@ class ReadRecorder:
 
         def spy_os_open(path, *a, **kw):
             fd = recorder._real_os_open(path, *a, **kw)
-            recorder._fd_paths[fd] = os.fspath(path)
-            recorder._fd_bytes[fd] = 0
+            recorder._remember_fd(fd, path)
             recorder.opened.append(f"os.open:{path}")
             return fd
 
         def spy_os_read(fd, *a, **kw):
             data = recorder._real_os_read(fd, *a, **kw)
-            recorder._fd_bytes[fd] = recorder._fd_bytes.get(fd, 0) + len(data)
+            recorder._record_read(fd, len(data), "os.read")
             return data
 
         def spy_os_close(fd):
-            recorder._fd_paths.pop(fd, None)
-            recorder._fd_bytes.pop(fd, None)
+            recorder._record_close(fd, "os.close")
             return recorder._real_os_close(fd)
 
-        def spy_path_open(self, *a, **kw):
-            recorder.opened.append(f"Path.open:{self}")
-            return recorder._real_path_open(self, *a, **kw)
+        def spy_fdopen(fd, *a, **kw):
+            path = recorder._fd_paths.get(fd)
+            recorder.opened.append(f"os.fdopen:{path or fd}")
+            stream = recorder._real_os_fdopen(fd, *a, **kw)
+            return _TrackedStream(stream, recorder, fd, "os.fdopen")
+
+        def spy_fileio(file, *a, **kw):
+            fd = file if isinstance(file, int) else None
+            path = recorder._fd_paths.get(fd) if fd is not None else file
+            if fd is None:
+                recorder.opened.append(f"io.FileIO:{file}")
+            else:
+                recorder.opened.append(f"io.FileIO:{path or fd}")
+            stream = recorder._real_io_fileio(file, *a, **kw)
+            if fd is None:
+                try:
+                    fd = stream.fileno()
+                    recorder._remember_fd(fd, path)
+                except (OSError, ValueError):
+                    fd = None
+            return _TrackedStream(stream, recorder, fd, "io.FileIO")
+
+        def spy_path_open(path_obj, *a, **kw):
+            recorder.opened.append(f"Path.open:{path_obj}")
+            return recorder._real_path_open(path_obj, *a, **kw)
 
         builtins.open = spy_open
         io.open = spy_io_open
         os.open = spy_os_open
         os.read = spy_os_read
         os.close = spy_os_close
+        os.fdopen = spy_fdopen
+        io.FileIO = spy_fileio
         pathlib.Path.open = spy_path_open
         return self
 
@@ -99,28 +214,25 @@ class ReadRecorder:
         os.open = self._real_os_open
         os.read = self._real_os_read
         os.close = self._real_os_close
+        os.fdopen = self._real_os_fdopen
+        io.FileIO = self._real_io_fileio
         pathlib.Path.open = self._real_path_open
         return False
 
     def assert_never_opened(self, sensitive_path: str):
-        """لم تُقرأ محتويات الملف الحساس عبر أي واجهة، عدا ميزانية فحص header.
-
-        - builtins/io/Path.open على الهدف = انتهاك قاطع.
-        - os.open مسموح لفحص header الحاجز فقط: مجموع البايتات المقروءة
-          عبر وصف الملف يجب أن يبقى ≤ 4 بايتات (دليمة DICOM).
-        """
-        target = str(sensitive_path)
+        """يفشل عند فتح الهدف بواجهات المحتوى أو تجاوز ميزانية رأس DICOM."""
+        target = os.path.realpath(str(sensitive_path))
         for entry in self.opened:
-            if target in entry and not entry.startswith("os.open:"):
+            if str(sensitive_path) in entry and not entry.startswith("os.open:"):
                 raise AssertionError(f"انتهاك: واجهة قراءة فتحت الملف الحساس: {entry}")
-        # ميزانية الـheader: مجموع قراءات os على وصف الملفات التي تشير للهدف
-        budget = self.HEADER_PROBE_BUDGET_BYTES * 4  # هامش: فحص الهدف + الرابط
-        total = sum(b for fd, p in self._fd_paths.items()
-                    if os.path.realpath(p) == os.path.realpath(target)
-                    for b in [self._fd_bytes.get(fd, 0)])
+
+        total = sum(count for fd, count in self._fd_bytes.items()
+                    if self._fd_paths.get(fd) == target)
+        budget = self.HEADER_PROBE_BUDGET_BYTES * 4
         assert total <= budget, (
-            f"انتهاك: قُرئ {total} بايت من الملف الحساس (الميزانية {budget}) — "
-            f"قراءة محتوى فعلية وليست فحص header"
+            f"انتهاك: قُرئ {total} بايت من الملف الحساس "
+            f"(الميزانية {budget}) — واجهات القراءة: "
+            f"{[e['interface'] for e in self.read_events if e['path'] == target]}"
         )
 
 
@@ -651,3 +763,56 @@ def test_tree_manifest_rejects_symlink_root(tmp_path):
         pytest.skip("symlink غير مدعوم")
     with pytest.raises(ManifestError):
         snapshot(str(link_root), str(tmp_path / "m.jsonl"))
+
+
+
+# ─── اختبارات ذاتية لسلامة أداة القياس ────────────────────────────────────
+
+def test_read_recorder_detects_fdopen_read_after_descriptor_close(tmp_path):
+    target = tmp_path / "synthetic-secret.bin"
+    target.write_bytes(b"S" * 128)
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        with os.fdopen(fd, "rb") as stream:
+            assert stream.read(32) == b"S" * 32
+        # يجب أن تبقى القراءة مسجلة رغم إغلاق stream والواصف.
+        assert rec._fd_bytes[fd] == 32
+        with pytest.raises(AssertionError, match="قُرئ"):
+            rec.assert_never_opened(str(target))
+
+
+def test_read_recorder_detects_fdopen_readinto(tmp_path):
+    target = tmp_path / "synthetic-secret.bin"
+    target.write_bytes(b"R" * 128)
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        with os.fdopen(fd, "rb") as stream:
+            buffer = bytearray(24)
+            assert stream.readinto(buffer) == 24
+        with pytest.raises(AssertionError, match="قُرئ"):
+            rec.assert_never_opened(str(target))
+
+
+def test_read_recorder_detects_fileio_readline_and_retains_closed_evidence(tmp_path):
+    target = tmp_path / "synthetic-secret.txt"
+    target.write_bytes(b"secret-line\\nsecond-line\\n")
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        raw = io.FileIO(fd, "r")
+        assert raw.readline() == b"secret-line\\n"
+        raw.close()
+        assert rec.closed
+        with pytest.raises(AssertionError, match="قُرئ"):
+            rec.assert_never_opened(str(target))
+
+
+def test_read_recorder_allows_bounded_header_probe(tmp_path):
+    target = tmp_path / "synthetic-dicom.dcm"
+    target.write_bytes(b"\\x00" * 128 + b"DICM" + b"x" * 16)
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        os.lseek(fd, 128, os.SEEK_SET)
+        assert os.read(fd, 4) == b"DICM"
+        os.close(fd)
+        rec.assert_never_opened(str(target))
+        assert rec._fd_bytes[fd] == 4
