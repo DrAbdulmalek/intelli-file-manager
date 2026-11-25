@@ -68,6 +68,24 @@ class _TrackedStream:
                                     f"{self._label}.readline")
         return data
 
+    def readall(self):
+        data = self._stream.readall()
+        self._recorder._record_read(self._fd, len(data) if data is not None else 0,
+                                    f"{self._label}.readall")
+        return data
+
+    def readlines(self, *args, **kwargs):
+        lines = self._stream.readlines(*args, **kwargs)
+        self._recorder._record_read(self._fd, sum(map(len, lines)),
+                                    f"{self._label}.readlines")
+        return lines
+
+    def peek(self, *args, **kwargs):
+        data = self._stream.peek(*args, **kwargs)
+        self._recorder._record_read(self._fd, len(data) if data is not None else 0,
+                                    f"{self._label}.peek")
+        return data
+
     def __iter__(self):
         return self
 
@@ -143,6 +161,7 @@ class ReadRecorder:
         self._real_io_open = io.open
         self._real_os_open = os.open
         self._real_os_read = os.read
+        self._real_os_pread = getattr(os, "pread", None)
         self._real_os_close = os.close
         self._real_os_fdopen = os.fdopen
         self._real_io_fileio = io.FileIO
@@ -166,6 +185,11 @@ class ReadRecorder:
         def spy_os_read(fd, *a, **kw):
             data = recorder._real_os_read(fd, *a, **kw)
             recorder._record_read(fd, len(data), "os.read")
+            return data
+
+        def spy_os_pread(fd, *a, **kw):
+            data = recorder._real_os_pread(fd, *a, **kw)
+            recorder._record_read(fd, len(data), "os.pread")
             return data
 
         def spy_os_close(fd):
@@ -202,6 +226,8 @@ class ReadRecorder:
         io.open = spy_io_open
         os.open = spy_os_open
         os.read = spy_os_read
+        if recorder._real_os_pread is not None:
+            os.pread = spy_os_pread
         os.close = spy_os_close
         os.fdopen = spy_fdopen
         io.FileIO = spy_fileio
@@ -213,6 +239,8 @@ class ReadRecorder:
         io.open = self._real_io_open
         os.open = self._real_os_open
         os.read = self._real_os_read
+        if self._real_os_pread is not None:
+            os.pread = self._real_os_pread
         os.close = self._real_os_close
         os.fdopen = self._real_os_fdopen
         io.FileIO = self._real_io_fileio
@@ -795,11 +823,11 @@ def test_read_recorder_detects_fdopen_readinto(tmp_path):
 
 def test_read_recorder_detects_fileio_readline_and_retains_closed_evidence(tmp_path):
     target = tmp_path / "synthetic-secret.txt"
-    target.write_bytes(b"secret-line\\nsecond-line\\n")
+    target.write_bytes(b"secret-line\nsecond-line\n")
     with ReadRecorder() as rec:
         fd = os.open(target, os.O_RDONLY)
         raw = io.FileIO(fd, "r")
-        assert raw.readline() == b"secret-line\\n"
+        assert raw.readline() == b"secret-line\n"
         raw.close()
         assert rec.closed
         with pytest.raises(AssertionError, match="قُرئ"):
@@ -808,7 +836,7 @@ def test_read_recorder_detects_fileio_readline_and_retains_closed_evidence(tmp_p
 
 def test_read_recorder_allows_bounded_header_probe(tmp_path):
     target = tmp_path / "synthetic-dicom.dcm"
-    target.write_bytes(b"\\x00" * 128 + b"DICM" + b"x" * 16)
+    target.write_bytes(b"\x00" * 128 + b"DICM" + b"x" * 16)
     with ReadRecorder() as rec:
         fd = os.open(target, os.O_RDONLY)
         os.lseek(fd, 128, os.SEEK_SET)
@@ -816,3 +844,21 @@ def test_read_recorder_allows_bounded_header_probe(tmp_path):
         os.close(fd)
         rec.assert_never_opened(str(target))
         assert rec._fd_bytes[fd] == 4
+
+
+def test_read_recorder_detects_readlines_and_pread(tmp_path):
+    target = tmp_path / "synthetic-secret-lines.txt"
+    target.write_bytes(b"first line\\nsecond line\\n")
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        with os.fdopen(fd, "rb") as stream:
+            assert stream.readlines() == [b"first line\\n", b"second line\\n"]
+        with pytest.raises(AssertionError, match="قُرئ"):
+            rec.assert_never_opened(str(target))
+
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        assert os.pread(fd, 5, 0) == b"first"
+        os.close(fd)
+        with pytest.raises(AssertionError, match="قُرئ"):
+            rec.assert_never_opened(str(target))
