@@ -206,7 +206,9 @@ class HybridSearchEngine:
         rrf_k: int = 60,
         bm25_weight: float = 0.4,
         semantic_weight: float = 0.6,
+        light_mode: bool = False,
     ):
+        self.light_mode = light_mode  # F005: الوضع الخفيف — BM25 فقط، بلا نموذج دلالي
         self.bm25 = BM25Engine(k1=bm25_k1, b=bm25_b)
         self.semantic = SemanticSearchEngineV2(model_name=semantic_model)
         self.rrf_k = rrf_k
@@ -270,8 +272,11 @@ class HybridSearchEngine:
             self.bm25.add_documents(texts_for_bm25)
             self._doc_ids.extend(doc_ids_for_bm25)
 
-            # Index into semantic engine
-            semantic_count = self.semantic.index_documents(documents)
+            # Index into semantic engine (متخطاة في الوضع الخفيف — F005)
+            if self.light_mode:
+                semantic_count = 0
+            else:
+                semantic_count = self.semantic.index_documents(documents)
 
         total = len(documents)
         logger.info(
@@ -298,8 +303,11 @@ class HybridSearchEngine:
                     doc_id = self._doc_ids[idx]
                     bm25_ranks[doc_id] = rank
 
-        # Semantic results
-        semantic_results = self.semantic.search(query, top_k=top_k * 3)
+        # Semantic results (متخطاة في الوضع الخفيف — F005: BM25 فقط)
+        if self.light_mode:
+            semantic_results = []
+        else:
+            semantic_results = self.semantic.search(query, top_k=top_k * 3)
         semantic_ranks: dict[str, int] = {}
         for rank, (doc_id, _score) in enumerate(semantic_results, start=1):
             semantic_ranks[doc_id] = rank
@@ -331,7 +339,7 @@ class HybridSearchEngine:
                 "bm25_rank": bm25_rank,
                 "semantic_rank": sem_rank,
                 "rrf_score": round(rrf_score, 6),
-                "engine": "hybrid_bm25+semantic_rrf",
+                "engine": "bm25_only_light" if self.light_mode else "hybrid_bm25+semantic_rrf",
             })
         return results
 

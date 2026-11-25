@@ -16,6 +16,10 @@ class AIEngine:
 
     def _get_ollama(self):
         """تهيئة Ollama إذا لم يتم بعد"""
+        if getattr(self.config, "light_mode", False):
+            # الوضع الخفيف (F005): بلا LLM إطلاقًا — حتى لو كان Ollama مثبتًا
+            logger.info("الوضع الخفيف مفعّل — LLM معطّل (light_mode=true)")
+            return None
         if self._ollama is None:
             try:
                 import ollama
@@ -82,6 +86,8 @@ class AIEngine:
 
         client = self._get_ollama()
         if not client:
+            if getattr(self.config, "light_mode", False):
+                return "الوضع الخفيف مفعّل — تلخيص LLM معطّل (light_mode=true)"
             return "خطأ: Ollama غير متاح"
 
         try:
@@ -129,6 +135,8 @@ class AIEngine:
         """محادثة مع المساعد الذكي"""
         client = self._get_ollama()
         if not client:
+            if getattr(self.config, "light_mode", False):
+                return "الوضع الخفيف مفعّل — مساعد LLM معطّل (light_mode=true)"
             return "خطأ: Ollama غير متاح. تأكد من تشغيله بالأمر: ollama serve"
 
         system_msg = "أنت مساعد IntelliFile الذكي. أجب بالعربية. ساعد المستخدم في إدارة الملفات."

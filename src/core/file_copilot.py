@@ -95,9 +95,11 @@ class FileCopilot:
         ollama_url: str = "http://localhost:11434",
         ai_model: str = "llama3.2",
         index_dir: str | None = None,
+        light_mode: bool = False,
     ):
         self.ollama_url = ollama_url
         self.ai_model = ai_model
+        self.light_mode = light_mode  # F005: الوضع الخفيف — بلا LLM (BM25 فقط)
         self._index_dir = Path(index_dir) if index_dir else Path.home() / ".intellifile" / "copilot_index"
         self._conversations: dict[str, Conversation] = {}
         self._active_conversation: Optional[Conversation] = None
@@ -110,7 +112,7 @@ class FileCopilot:
             return
         try:
             from .hybrid_search import HybridSearchEngine
-            self._hybrid_search = HybridSearchEngine()
+            self._hybrid_search = HybridSearchEngine(light_mode=self.light_mode)
             # Try loading existing index
             self._hybrid_search.load_index(str(self._index_dir))
             logger.info("تم تحميل HybridSearchEngine لـ FileCopilot")
@@ -127,6 +129,7 @@ class FileCopilot:
             config = Config()
             config.ai_model = self.ai_model
             config.ollama_url = self.ollama_url
+            config.light_mode = self.light_mode
             self._rag_engine = RAGEngine(config=config)
             logger.info("تم تحميل RAGEngine لـ FileCopilot")
         except Exception as exc:
@@ -310,6 +313,14 @@ class FileCopilot:
 
     def _generate(self, query: str, context: str) -> str:
         """Generate a response using Ollama with file context."""
+        if self.light_mode:
+            # الوضع الخفيف (F005): بلا LLM — عودة فورية بالمحتوى المسترجع
+            if context:
+                return (
+                    "الوضع الخفيف (بلا LLM). تم العثور على محتوى ذي صلة في الملفات:\n\n"
+                    f"{context[:1000]}"
+                )
+            return "الوضع الخفيف (بلا LLM) ولم يتم العثور على محتوى ذي صلة في الملفات."
         # Pre-check: is Ollama actually reachable? Fail fast with a clear message
         # instead of waiting for the import + Client.chat() timeout.
         try:
@@ -405,6 +416,11 @@ class FileCopilot:
 
             if not text.strip():
                 return "لم يتم العثور على محتوى نصي في الملف."
+
+            if getattr(self, "light_mode", False):
+                # الوضع الخفيف (F005): بلا LLM — مقتطف استخلاصي بدل التلخيص
+                excerpt = text[:500] + "..." if len(text) > 500 else text
+                return f"الوضع الخفيف (بلا LLM) — مقتطف من الملف:\n{excerpt}"
 
             try:
                 import ollama

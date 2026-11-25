@@ -183,6 +183,12 @@ class RAGEngine:
                 f"أجب باختصار ودقة بالعربية."
             )
 
+            if getattr(self.config, "light_mode", False):
+                # الوضع الخفيف (F005): بلا LLM — إجابة استخلاصية من المقاطع المسترجعة
+                return (
+                    f"الوضع الخفيف (بلا LLM): أقرب {len(results_text)} مقطع للسؤال:\n\n{context}"
+                )
+
             try:
                 import ollama
                 model_name = self._model or self.config.ai_model

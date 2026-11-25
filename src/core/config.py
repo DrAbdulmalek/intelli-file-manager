@@ -58,6 +58,7 @@ class Config:
     extension_map: dict = field(default_factory=lambda: dict(EXTENSION_MAP))
     ai_model: str = "llama3.2"  # نموذج الذكاء الاصطناعي الموحد
     ollama_url: str = "http://localhost:11434"
+    light_mode: bool = False  # الوضع الخفيف (F005): بلا LLM — BM25 فقط؛ يعمل كاملاً بلا Ollama
     database_path: str = str(Path.home() / ".intellifile")
     vector_db_path: str = str(Path.home() / ".intellifile" / "vectors")
     working_dir: str = str(Path.cwd())
