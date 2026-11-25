@@ -1,12 +1,12 @@
 # Session Handoff — intelli-file-manager
 
-**التاريخ**: 2026-11-25 00:47 UTC
-**الفرع**: `feat/archive-sort-unified-decision` @ `1b31e2d`
+**التاريخ**: 2026-11-25 01:12 UTC
+**الفرع**: `feat/archive-sort-unified-decision` @ `c95fbf4`
 **آخر وسم**: `post-merge-clean-state-2026-11-21`
 
 ## 📝 ملاحظة الجلسة
 
-إنتاج تقارير مفصلة عن كل العمل: COMPREHENSIVE_REPORT + DISK_SCAN_REPORT + EXECUTION_PLAN + FINGERPRINT_AND_HANDOVER_REPORT + تقرير المحاكاة الفعلي dry_run_report.html (109MB، 274,851 ملف، 1.65 TB، 264,118 إجراء). البوابة 1 معلقة (نسخ crops.db خارجياً من المالك). البند 4 (قائمة الحساسيات) معلق. لا تنفيذ فعلي على القرص قبل البوابة 1.
+أُضيف وضع التنفيذ الآمن إلى archive_sort.py (الالتزام c95fbf4): copy→verify→delete، NFC، إعادة تجربة للملفات المقفلة، أنماط حساسية، --execute يتطلب --confirm-execute. تم الرفع إلى GitHub. البوابة 1 (نسخ crops.db خارجياً) والبند 4 (قائمة الحساسيات) ما زالا معلقين — لا تنفيذ فعلي قبل إكمallerها.
 
 ## 📊 حالة التحقق
 
@@ -14,25 +14,21 @@
 
 ## 🔨 آخر الالتزامات
 
+- `c95fbf4 feat(archive-sort): إضافة وضع التنفيذ الآمن إلى archive_sort.py`
+- `755856c docs(archive-sort): رفع التقارير المفصلة وخطة التنفيذ إلى GitHub للمراجعة`
+- `b9a89a6 docs(archive-sort): إنتاج تقارير مفصلة عن كل العمل المنجز`
 - `1b31e2d docs(archive-sort): تصنيف حادثة LLM خارجي + سياسة نطاق + تصحيح أولوية`
 - `8abf8df docs(archive-sort): دعم قرار عبر Vyce AI للبنود السبعة`
-- `0c34159 fix(archive-sort): تصحيحات تقرير التحقق (تناقضات وثائقية)`
-- `2f39e37 docs(archive-sort): رد على المراجعة المستقلة + مجلد ثامن غير_مصنّف`
-- `4125867 feat(archive-sort): قواعد وسكريبت فرز أرشيف My Passport (ناتج AlphaCode)`
 
 ## ⚠️ تغييرات غير ملتزمة
 
 ```
-M archive_sort_alphacode/WORKLOG.md
- M progress.md
-?? DRIVESCOPE_WORKLOG.md
-?? contrib/
-?? drivescope_out/
+M progress.md
 ```
 
 ## ➡️ الخطوة التالية
 
-على المالك: إكمال البوابة 1 (نسخ crops.db خارجياً + فحص سلامة + بصمات SHA-256)، إرسال قائمة الحساسيات (البند 4)، الموافقة على البنود السبعة. بعد ذلك: بدء المرحلة 5 (دفعة تجريبية 200–500 ملف).
+على المالك: إكمال البوابة 1، إرسال قائمة الحساسيات (البند 4)، الموافقة على البنود السبعة. ثم بدء المرحلة 5 (دفعة تجريبية 200–500 ملف).
 
 ---
 
