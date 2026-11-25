@@ -46,7 +46,7 @@ def test_correct_creates_pending_candidate_not_applied(engines):
     engine, feedback = engines
     record = _capture(feedback, action="correct")
     assert record["review_status"] == "pending_review"
-    assert record["candidate"]["destination_category"] == "صور"
+    assert feedback.category_label(record["candidate"]["destination_category_id"]) == "صور"
     assert record["candidate"]["requires_explicit_confirmation"] is True
     # لم يُطبَّق على المحرك بعد — لا قواعد
     assert engine.list_rules() == []
@@ -87,8 +87,14 @@ def test_full_loop_correct_confirm_apply(engines):
     assert len(rules) == 1
     assert rules[0]["destination"]["category"] == "صور"
     assert rules[0]["source"]["feedback_ids"] == [record["feedback_id"]]
-    # الحالة النهائية في السجل
-    assert feedback.get_feedback(record["feedback_id"])["review_status"] == "applied"
+    # سجل Feedback يحتفظ بمعرفات الفئات فقط؛ أسماء العرض في PreferenceStore المحلي.
+    public_record = feedback.get_feedback(record["feedback_id"])
+    assert public_record["review_status"] == "applied"
+    assert "original_prediction" not in public_record
+    assert "corrected_value" not in public_record
+    log_text = feedback.log_path.read_text(encoding="utf-8")
+    assert "مستندات" not in log_text and "صور" not in log_text
+    assert "category_catalog" in engine.store.path.read_text(encoding="utf-8")
 
 
 def test_apply_requires_explicit_confirmation(engines):
@@ -253,3 +259,155 @@ def test_review_update_lines_are_append_only(engines, tmp_path):
     assert len(after) == len(before) + 1
     last = json.loads(after[-1])
     assert last["type"] == "review_update"
+
+def test_category_labels_are_opaque_in_feedback_log(engines):
+    engine, feedback = engines
+    record = _capture(feedback, corrected="صور")
+    raw = feedback.log_path.read_text(encoding="utf-8")
+    assert "مستندات" not in raw
+    assert "صور" not in raw
+    assert record["original_category_id"]
+    assert record["corrected_category_id"]
+    assert feedback.category_label(record["corrected_category_id"]) == "صور"
+    assert "صور" in engine.store.path.read_text(encoding="utf-8")
+
+
+def test_custom_categories_are_registered_in_existing_preference_store(tmp_path):
+    store = PreferenceStore(tmp_path / "prefs.json")
+    engine = PreferenceEngine(store)
+    feedback = FeedbackEngine(
+        engine, tmp_path / "feedback.jsonl",
+        allowed_categories=["مستندات", "صور العائلة"],
+    )
+    record = _capture(feedback, corrected="صور العائلة")
+    assert feedback.category_label(record["corrected_category_id"]) == "صور العائلة"
+    assert "صور العائلة" not in feedback.log_path.read_text(encoding="utf-8")
+    assert "صور العائلة" in store.path.read_text(encoding="utf-8")
+    reopened_store = PreferenceStore(store.path)
+    reopened_store.load()
+    assert reopened_store.get_category_label(record["corrected_category_id"]) == "صور العائلة"
+    assert not (tmp_path / "category_store.json").exists()
+
+
+def test_unknown_category_rejected_without_feedback_write(engines):
+    engine, feedback = engines
+    with pytest.raises(ValueError, match="category_not_in_configured_catalog"):
+        _capture(feedback, corrected="اسم شخص حساس")
+    assert not feedback.log_path.exists()
+    assert engine.list_rules() == []
+    assert engine.store.list_categories() == {}
+
+
+def test_name_only_evidence_cannot_create_learning_candidate(engines):
+    engine, feedback = engines
+    record = _capture(
+        feedback,
+        evidence={"name": "patient-report.pdf", "path": "/private/patient-report.pdf"},
+    )
+    assert record["review_status"] == "dismissed"
+    assert record["candidate"] is None
+    raw = feedback.log_path.read_text(encoding="utf-8")
+    assert "patient-report" not in raw
+    assert "/private" not in raw
+
+
+def test_dismiss_pending_feedback_prevents_application(engines):
+    engine, feedback = engines
+    record = _capture(feedback)
+    dismissed = feedback.dismiss(record["feedback_id"])
+    assert dismissed["review_status"] == "dismissed"
+    with pytest.raises(ValueError, match="explicit_confirmation_required"):
+        feedback.apply_confirmed(record["feedback_id"])
+    assert engine.list_rules() == []
+
+
+def test_confirmed_feedback_can_apply_after_restart(engines):
+    engine, feedback = engines
+    record = _capture(feedback, evidence={"extension": ".png"})
+    feedback.confirm(record["feedback_id"])
+    reopened = FeedbackEngine(engine, feedback.log_path)
+    result = reopened.apply_confirmed(record["feedback_id"])
+    assert result["review_status"] == "applied"
+    assert engine.list_rules()[0]["destination"]["category"] == "صور"
+
+def test_category_catalog_rejects_paths_and_email(tmp_path):
+    from src.core.preference_store import InvalidRuleError
+
+    store = PreferenceStore(tmp_path / "prefs.json")
+    store.load()
+    with pytest.raises(InvalidRuleError, match="category_label_invalid"):
+        store.register_category("/home/user/private")
+    with pytest.raises(InvalidRuleError, match="category_label_invalid"):
+        store.register_category("person@example.invalid")
+    assert not store.path.exists()
+
+
+def test_feedback_rejects_path_like_session_and_fingerprint(engines):
+    engine, feedback = engines
+    with pytest.raises(ValueError, match="source_session_must_be_opaque_token"):
+        feedback.capture(
+            user_action="correct", original_prediction="مستندات",
+            corrected_value="صور", session_id="/home/user", file_fingerprint="fp1",
+            evidence={"extension": ".png"},
+        )
+    with pytest.raises(ValueError, match="file_fingerprint_must_be_opaque_token"):
+        feedback.capture(
+            user_action="correct", original_prediction="مستندات",
+            corrected_value="صور", session_id="s1",
+            file_fingerprint="/private/report.pdf", evidence={"extension": ".pdf"},
+        )
+    assert not feedback.log_path.exists()
+    assert engine.list_rules() == []
+
+def test_apply_confirmed_sanitizes_caller_metadata(engines):
+    engine, feedback = engines
+    record = _capture(feedback, evidence={"extension": ".png"})
+    feedback.confirm(record["feedback_id"])
+    result = feedback.apply_confirmed(
+        record["feedback_id"],
+        metadata={"extension": ".exe",
+                  "name": "synthetic-sensitive-name"},
+    )
+    assert result["review_status"] == "applied"
+    rule = engine.list_rules()[0]
+    assert rule["match"]["value"] == ".png"
+    assert "/private" not in json.dumps(rule)
+    assert "synthetic-sensitive-name" not in json.dumps(rule)
+
+def test_legacy_feedback_public_reads_redact_free_text_and_path_like_ids(tmp_path):
+    store = PreferenceStore(tmp_path / "prefs.json")
+    engine = PreferenceEngine(store)
+    store.load()
+    legacy = {
+        "type": "feedback",
+        "feedback_id": "legacy-feedback-1",
+        "timestamp": "2026-11-24T00:00:00Z",
+        "source_session": "/home/user/private",
+        "file_fingerprint": "/home/user/private/report.pdf",
+        "original_prediction": "اسم شخص اصطناعي",
+        "corrected_value": "اسم مريض اصطناعي",
+        "user_action": "correct",
+        "source_rule_id": None,
+        "application_version": "unknown",
+        "evidence": {"name": "secret-report.pdf", "extension": "/private"},
+        "review_status": "pending_review",
+        "candidate": {
+            "match": {"kind": "name_contains", "value": "secret-report"},
+            "scope_kind": "file",
+            "scope_value": "/home/user/private/report.pdf",
+            "destination_category": "اسم مريض اصطناعي",
+        },
+    }
+    log_path = tmp_path / "feedback.jsonl"
+    log_path.write_text(json.dumps(legacy, ensure_ascii=False) + "\\n", encoding="utf-8")
+    feedback = FeedbackEngine(engine, log_path)
+    public = feedback.get_feedback("legacy-feedback-1")
+    assert "original_prediction" not in public
+    assert "corrected_value" not in public
+    assert "file_fingerprint" not in public
+    assert "source_session" not in public
+    assert public["evidence"] == {}
+    assert "match" not in public["candidate"]
+    assert "destination_category" not in public["candidate"]
+    # Existing append-only data is not rewritten or silently deleted.
+    assert "اسم مريض اصطناعي" in log_path.read_text(encoding="utf-8")

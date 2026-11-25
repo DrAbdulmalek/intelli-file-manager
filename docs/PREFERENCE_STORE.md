@@ -33,6 +33,10 @@
 | `confidence` | `{independent_sessions, total_confirmations, score}` |
 | `source` | `{origin: user_correction|alphacode|import, feedback_ids[]}` |
 
+ويحتوي المستند نفسه اختياريًا على `category_catalog`: معرفات عشوائية من 32
+محرفًا إلى أسماء فئات عرض محلية (بما فيها المخصصة). لا يُكرر Feedback JSONL
+أسماء الفئات؛ يحتفظ بمعرفاتها فقط.
+
 ## ضمانات السلامة (P0)
 
 1. **كتابة ذرّية:** ملف مؤقت في نفس المجلد + `os.replace` — لا حالة نصف مكتوبة أبدًا.

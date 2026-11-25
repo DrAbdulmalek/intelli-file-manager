@@ -30,6 +30,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import tempfile
 import threading
 import uuid
@@ -74,6 +75,26 @@ def _now_iso() -> str:
 
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+_CATEGORY_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_CATEGORY_LABEL_MAX = 100
+
+
+def _normalize_category_label(label: Any) -> Optional[str]:
+    """Accept a local display label, never a path, email, or multiline payload."""
+    if not isinstance(label, str) or any(ord(ch) < 32 for ch in label):
+        return None
+    normalized = " ".join(label.split()).strip()
+    if (
+        not normalized
+        or len(normalized) > _CATEGORY_LABEL_MAX
+        or "/" in normalized
+        or "\\" in normalized
+        or "@" in normalized
+    ):
+        return None
+    return normalized
 
 
 def new_rule_id() -> str:
@@ -208,6 +229,20 @@ class PreferenceStore:
                 errors.append(f"rule[{index}].{err}")
         if "change_log" in document and not isinstance(document["change_log"], list):
             errors.append("bad:change_log")
+        if "category_catalog" in document:
+            catalog = document["category_catalog"]
+            if not isinstance(catalog, dict):
+                errors.append("bad:category_catalog")
+            else:
+                for category_id, label in catalog.items():
+                    normalized = _normalize_category_label(label)
+                    if (
+                        not isinstance(category_id, str)
+                        or not _CATEGORY_ID_RE.fullmatch(category_id)
+                        or normalized != label
+                    ):
+                        errors.append("bad:category_catalog_entry")
+                        break
         return errors
 
     # ─── القفل ─────────────────────────────────────────────────────────────
@@ -478,6 +513,51 @@ class PreferenceStore:
             if rule.get("rule_id") == rule_id:
                 return copy.deepcopy(rule)
         return None
+
+    def register_category(self, label: str) -> str:
+        """Register a user-approved display label in this existing local store.
+
+        Feedback records retain only the opaque identifier; the label remains
+        in the local preference catalog and is never copied into feedback JSONL.
+        """
+        normalized = _normalize_category_label(label)
+        if normalized is None:
+            raise InvalidRuleError("category_label_invalid")
+        with self._thread_lock:
+            if self._read_only or self._document is None:
+                raise StoreReadOnlyError("category_catalog_read_only")
+            catalog = self._document.get("category_catalog", {})
+            for category_id, existing in catalog.items():
+                if isinstance(existing, str) and existing.casefold() == normalized.casefold():
+                    return category_id
+
+        new_id = uuid.uuid4().hex
+        with self._mutation() as doc:
+            catalog = doc.setdefault("category_catalog", {})
+            for category_id, existing in catalog.items():
+                if isinstance(existing, str) and existing.casefold() == normalized.casefold():
+                    return category_id
+            catalog[new_id] = normalized
+            self._append_change("category_registered", {"category_id": new_id})
+        return new_id
+
+    def get_category_label(self, category_id: str) -> Optional[str]:
+        if self._document is None or not isinstance(category_id, str):
+            return None
+        catalog = self._document.get("category_catalog", {})
+        label = catalog.get(category_id) if isinstance(catalog, dict) else None
+        return label if isinstance(label, str) else None
+
+    def list_categories(self) -> Dict[str, str]:
+        if self._document is None:
+            return {}
+        catalog = self._document.get("category_catalog", {})
+        if not isinstance(catalog, dict):
+            return {}
+        return {
+            key: value for key, value in catalog.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
 
     def _append_change(self, action: str, details: Dict[str, Any]) -> None:
         doc = self._require_writable()

@@ -68,11 +68,21 @@ def test_get_suggestion_null_then_learning_then_suggestion(env_paths):
                 "corrected_value": "صور", "source_session": "ui-1",
                 "file_fingerprint": "FP1", "user_confirmed": True}, state)
     body2 = json.loads(r2["result"]["content"][0]["text"])
-    assert body2["applied"]["engine_result"]["created"] is True
+    assert body2["review_status"] == "pending_review"
+    assert body2["applied"] is None
+    assert body2["preview"]["requires_explicit_confirmation"] is True
     r3 = _call("intellifile.get_suggestion",
                {"metadata": _META, "file_fingerprint": "FP2"}, state)
-    body3 = json.loads(r3["result"]["content"][0]["text"])
-    assert body3["suggestion"]["category"] == "صور"
+    assert json.loads(r3["result"]["content"][0]["text"])["suggestion"] is None
+    r4 = _call("intellifile.confirm_feedback",
+               {"feedback_id": body2["feedback_id"], "user_confirmed": True}, state)
+    body4 = json.loads(r4["result"]["content"][0]["text"])
+    assert body4["review_status"] == "applied"
+    assert body4["applied"]["engine_result"]["created"] is True
+    r5 = _call("intellifile.get_suggestion",
+               {"metadata": _META, "file_fingerprint": "FP2"}, state)
+    body5 = json.loads(r5["result"]["content"][0]["text"])
+    assert body5["suggestion"]["category"] == "صور"
 
 
 def test_record_without_explicit_confirmation_stays_pending(env_paths):
@@ -85,6 +95,10 @@ def test_record_without_explicit_confirmation_stays_pending(env_paths):
     body = json.loads(r["result"]["content"][0]["text"])
     assert body["review_status"] == "pending_review"
     assert body["applied"] is None
+    # even a false confirmation cannot create a rule
+    denied = _call("intellifile.confirm_feedback",
+                   {"feedback_id": body["feedback_id"], "user_confirmed": False}, state)
+    assert denied["result"]["isError"] is True
     # لا قاعدة تعلمت
     sg = _call("intellifile.get_suggestion",
                {"metadata": _META, "file_fingerprint": "FP9"}, state)
@@ -136,7 +150,12 @@ def test_disable_enable_and_explain_flow(env_paths):
                             "corrected_value": "صور", "source_session": "ui-1",
                             "file_fingerprint": "FP1", "user_confirmed": True},
                            state)["result"]["content"][0]["text"])
-    rule_id = rec["applied"]["engine_result"]["rule_id"]
+    assert rec["review_status"] == "pending_review"
+    assert rec["applied"] is None
+    approved = _call("intellifile.confirm_feedback",
+                     {"feedback_id": rec["feedback_id"], "user_confirmed": True}, state)
+    applied = json.loads(approved["result"]["content"][0]["text"])
+    rule_id = applied["applied"]["engine_result"]["rule_id"]
     # disable → لا اقتراح
     d = json.loads(_call("intellifile.disable_rule", {"rule_id": rule_id}, state)
                    ["result"]["content"][0]["text"])
@@ -163,10 +182,13 @@ def test_disable_enable_and_explain_flow(env_paths):
 def test_list_applicable_rules(env_paths):
     state = {}
     _init(state)
-    _call("intellifile.record_user_correction",
+    rec = json.loads(_call("intellifile.record_user_correction",
           {"metadata": _META, "original_prediction": "مستندات",
            "corrected_value": "صور", "source_session": "ui-1",
            "file_fingerprint": "FP1", "user_confirmed": True}, state)
+          ["result"]["content"][0]["text"])
+    _call("intellifile.confirm_feedback",
+          {"feedback_id": rec["feedback_id"], "user_confirmed": True}, state)
     lst = json.loads(_call("intellifile.list_applicable_rules",
                            {"metadata": _META}, state)["result"]["content"][0]["text"])
     assert lst["count"] == 1
@@ -246,3 +268,45 @@ def test_raw_file_path_never_stored_verbatim(env_paths):
                if env_paths[0].with_suffix(".json.bak").exists()
                else env_paths[0].read_text(encoding="utf-8"))
     assert "/home/user/private" not in on_disk
+    feedback_log = (env_paths[0].parent / "feedback.jsonl").read_text(encoding="utf-8")
+    assert "/home/user/private" not in feedback_log
+    assert "مستندات" not in feedback_log and "صور" not in feedback_log
+
+def test_dismiss_feedback_does_not_learn(env_paths):
+    state = {}
+    _init(state)
+    record = _call("intellifile.record_user_correction",
+                   {"metadata": _META, "original_prediction": "مستندات",
+                    "corrected_value": "صور", "source_session": "ui-1",
+                    "file_fingerprint": "FP1"}, state)
+    body = json.loads(record["result"]["content"][0]["text"])
+    dismissed = _call("intellifile.dismiss_feedback",
+                      {"feedback_id": body["feedback_id"]}, state)
+    assert json.loads(dismissed["result"]["content"][0]["text"])["review_status"] == "dismissed"
+    suggestion = _call("intellifile.get_suggestion",
+                       {"metadata": _META, "file_fingerprint": "FP2"}, state)
+    assert json.loads(suggestion["result"]["content"][0]["text"])["suggestion"] is None
+
+
+def test_feedback_log_contains_no_category_labels_or_metadata_names(env_paths):
+    state = {}
+    _init(state)
+    _call("intellifile.record_user_correction",
+          {"metadata": {"name": "synthetic-private-name.png", "extension": ".png"},
+           "original_prediction": "مستندات", "corrected_value": "صور",
+           "source_session": "ui-1", "file_fingerprint": "FP1"}, state)
+    log_path = env_paths[0].parent / "feedback.jsonl"
+    raw = log_path.read_text(encoding="utf-8")
+    assert "synthetic-private-name" not in raw
+    assert "مستندات" not in raw and "صور" not in raw
+    assert "corrected_category_id" in raw
+
+
+def test_unknown_category_is_rejected(env_paths):
+    state = {}
+    _init(state)
+    result = _call("intellifile.record_user_correction",
+                   {"metadata": _META, "original_prediction": "مستندات",
+                    "corrected_value": "اسم مريض",
+                    "source_session": "ui-1", "file_fingerprint": "FP1"}, state)
+    assert result["result"]["isError"] is True

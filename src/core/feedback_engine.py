@@ -28,12 +28,14 @@ import copy
 import hashlib
 import json
 import logging
+import re
 import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .config import CATEGORIES
 from .preference_engine import PreferenceEngine
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,12 @@ REVIEW_STATUSES = ("pending_review", "confirmed", "applied", "dismissed")
 _EVIDENCE_WHITELIST = {"extension", "mime_type", "size_bucket", "is_dir"}
 _SENSITIVE_EVIDENCE_KEYS = {"path", "name", "file_name", "content", "text",
                             "preview", "parent_dir", "file_path"}
+_SAFE_SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_SAFE_FINGERPRINT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+_SAFE_EXTENSION_RE = re.compile(r"^\.[a-z0-9][a-z0-9._+-]{0,15}$")
+_SAFE_MIME_RE = re.compile(
+    r"^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}/[a-z0-9][a-z0-9!#$&^_.+-]{0,63}$"
+)
 
 APP_VERSION = "unknown"
 
@@ -66,19 +74,35 @@ def new_feedback_id() -> str:
 
 
 def sanitize_evidence(evidence: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """قائمة بيضاء صارمة: الحقول غير المدرجة (أي مسار/اسم/محتوى) تُسقط."""
+    """Keep only bounded, machine-readable file-type evidence."""
     if not isinstance(evidence, dict):
         return {}
     clean: Dict[str, Any] = {}
     for key in _EVIDENCE_WHITELIST:
-        if key in evidence:
-            value = evidence[key]
-            if key == "extension":
-                value = str(value).lower()
-                if value and not value.startswith("."):
-                    value = "." + value
-            if isinstance(value, (str, int, float, bool)) or value is None:
+        if key not in evidence:
+            continue
+        value = evidence[key]
+        if key == "extension":
+            if not isinstance(value, str):
+                continue
+            value = value.strip().lower()
+            if value and not value.startswith("."):
+                value = "." + value
+            if value and _SAFE_EXTENSION_RE.fullmatch(value):
                 clean[key] = value
+        elif key == "mime_type":
+            if not isinstance(value, str):
+                continue
+            value = value.strip().lower()
+            if _SAFE_MIME_RE.fullmatch(value):
+                clean[key] = value
+        elif key == "size_bucket":
+            if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 10:
+                clean[key] = value
+            elif isinstance(value, str) and value in {"tiny", "small", "medium", "large", "unknown"}:
+                clean[key] = value
+        elif key == "is_dir" and isinstance(value, bool):
+            clean[key] = value
     return clean
 
 
@@ -91,14 +115,34 @@ class FeedbackEngine:
     """محرّك الملاحظات — تسجيل وتصنيف وترشيح، بلا أي عملية ملف."""
 
     def __init__(self, engine: PreferenceEngine,
-                 log_path: Optional[str | Path] = None):
+                 log_path: Optional[str | Path] = None, *,
+                 allowed_categories: Optional[List[str]] = None):
         self.engine = engine
         self.log_path = Path(log_path) if log_path else \
             engine.store.path.parent / "feedback_log.jsonl"
+        source_categories = CATEGORIES if allowed_categories is None else allowed_categories
+        self.allowed_categories = tuple(dict.fromkeys(
+            " ".join(item.split()).strip()
+            for item in source_categories
+            if isinstance(item, str) and item.strip()
+        ))
         self._thread_lock = threading.RLock()
         self._dup_signatures: set = set()
         self._index: Dict[str, Dict[str, Any]] = {}
         self._load_index()
+
+    def _validated_category(self, label: Optional[str]) -> Optional[str]:
+        if label is None or label == "":
+            return None
+        normalized = " ".join(label.split()).strip() if isinstance(label, str) else ""
+        if normalized not in self.allowed_categories:
+            raise ValueError("category_not_in_configured_catalog")
+        return normalized
+
+    def category_label(self, category_id: Optional[str]) -> Optional[str]:
+        if not category_id:
+            return None
+        return self.engine.store.get_category_label(category_id)
 
     # ─── الفهرسة من السجل ──────────────────────────────────────────────────
 
@@ -127,8 +171,10 @@ class FeedbackEngine:
         elif kind == "review_update" and record.get("feedback_id"):
             fid = record["feedback_id"]
             if fid in self._index:
-                self._index[fid]["review_status"] = record.get("review_status",
-                                                               self._index[fid]["review_status"])
+                self._index[fid]["review_status"] = record.get(
+                    "review_status", self._index[fid]["review_status"])
+                if record.get("rule_id"):
+                    self._index[fid]["applied_rule_id"] = record["rule_id"]
 
     @staticmethod
     def _signature(record: Dict[str, Any]) -> tuple:
@@ -136,7 +182,7 @@ class FeedbackEngine:
             record.get("source_session", ""),
             record.get("file_fingerprint", ""),
             record.get("user_action", ""),
-            record.get("corrected_value", ""),
+            record.get("corrected_category_id", record.get("corrected_value", "")),
         )
 
     # ─── الالتقاط ──────────────────────────────────────────────────────────
@@ -147,26 +193,44 @@ class FeedbackEngine:
                 source_rule_id: Optional[str] = None,
                 evidence: Optional[Dict[str, Any]] = None,
                 application_version: str = APP_VERSION) -> Dict[str, Any]:
-        """يلتقط ملاحظة، يصنفها، يكشف التكرار، ويرجع حالة المرشح.
-
-        لا يعدّل محرك التفضيلات هنا — التطبيق عبر apply_confirmed فقط.
-        """
+        """Capture categorical feedback without persisting display labels or payloads."""
         if user_action not in USER_ACTIONS:
-            raise ValueError(f"user_action غير معروف: {user_action} — المسموح: {USER_ACTIONS}")
-        if not session_id or not file_fingerprint:
-            raise ValueError("source_session وfile_fingerprint مطلوبان")
+            raise ValueError("unknown_user_action")
+        if not isinstance(session_id, str) or not _SAFE_SESSION_RE.fullmatch(session_id):
+            raise ValueError("source_session_must_be_opaque_token")
+        if not isinstance(file_fingerprint, str) or not _SAFE_FINGERPRINT_RE.fullmatch(file_fingerprint):
+            raise ValueError("file_fingerprint_must_be_opaque_token")
+        if source_rule_id is not None and (
+            not isinstance(source_rule_id, str)
+            or not _SAFE_SESSION_RE.fullmatch(source_rule_id)
+        ):
+            raise ValueError("source_rule_id_invalid")
+
+        original_label = self._validated_category(original_prediction)
+        corrected_label = self._validated_category(corrected_value)
+        original_category_id = (
+            self.engine.store.register_category(original_label) if original_label else None
+        )
+        corrected_category_id = (
+            self.engine.store.register_category(corrected_label) if corrected_label else None
+        )
+        safe_evidence = sanitize_evidence(evidence)
+        safe_version = (
+            application_version if isinstance(application_version, str)
+            and _SAFE_SESSION_RE.fullmatch(application_version) else APP_VERSION
+        )
         record: Dict[str, Any] = {
             "type": "feedback",
             "feedback_id": new_feedback_id(),
             "timestamp": _now_iso(),
-            "source_session": str(session_id),
+            "source_session": session_id,
             "file_fingerprint": file_fingerprint,
-            "original_prediction": str(original_prediction or ""),
+            "original_category_id": original_category_id,
             "user_action": user_action,
-            "corrected_value": str(corrected_value) if corrected_value else None,
+            "corrected_category_id": corrected_category_id,
             "source_rule_id": source_rule_id,
-            "application_version": str(application_version),
-            "evidence": sanitize_evidence(evidence),
+            "application_version": safe_version,
+            "evidence": safe_evidence,
             "review_status": "pending_review",
             "duplicate": False,
             "conflict": False,
@@ -178,54 +242,62 @@ class FeedbackEngine:
             if signature in self._dup_signatures:
                 record["duplicate"] = True
 
-        # تصنيف الفعل → حالة المراجعة والمرشح
         if user_action == "reject":
             record["review_status"] = "dismissed"
-            record["candidate"] = None  # الرفض لا تعلم
         elif user_action == "temp_override":
             record["review_status"] = "dismissed"
-            record["candidate"] = None  # مؤقت — لا قاعدة أبدية
         elif user_action == "accept":
             if source_rule_id:
-                record["review_status"] = "confirmed"  # تأكيد صريح للقاعدة المسؤولة
+                record["review_status"] = "confirmed"
             else:
-                record["review_status"] = "dismissed"  # قبول بلا قاعدة — لا شيء نتعلمه
-        else:  # correct / set_destination / file_exception / general_preference
-            if not corrected_value:
                 record["review_status"] = "dismissed"
-                record["candidate_note"] = "لا قيمة مصححة — لا مرشح"
+        else:
+            if corrected_category_id is None:
+                record["review_status"] = "dismissed"
+                record["candidate_note"] = "corrected_category_required"
             else:
-                record["candidate"] = self._candidate_from(record)
+                candidate = self._candidate_from(record)
+                if candidate is None:
+                    record["review_status"] = "dismissed"
+                    record["candidate_note"] = "safe_extension_or_mime_evidence_required"
+                else:
+                    record["candidate"] = candidate
 
         with self._thread_lock:
             self._append(record)
             self._absorb(record)
         return copy.deepcopy(record)
 
-    def _candidate_from(self, record: Dict[str, Any]) -> Dict[str, Any]:
-        """مرشح قاعدة للمراجعة البشرية — بلا تطبيق."""
-        scope_kind = "file" if record["user_action"] == "file_exception" else "global"
+    def _candidate_from(self, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Build a review candidate from safe extension/MIME evidence only."""
+        category_id = record.get("corrected_category_id")
+        category_label = self.engine.store.get_category_label(category_id)
+        if not category_id or not category_label:
+            return None
         evidence = record["evidence"]
-        match: Dict[str, Any]
         ext = evidence.get("extension")
+        mime = evidence.get("mime_type")
         if ext:
-            match = {"kind": "extension", "value": ext, "case_insensitive": True}
-        elif evidence.get("mime_type"):
-            match = {"kind": "mime", "value": evidence["mime_type"], "case_insensitive": True}
+            match: Dict[str, Any] = {"kind": "extension", "value": ext,
+                                     "case_insensitive": True}
+        elif mime:
+            match = {"kind": "mime", "value": mime, "case_insensitive": True}
         else:
-            match = {"kind": "name_contains", "value": "", "case_insensitive": True}
+            return None
+
         conflict = False
         if self.engine.active:
             for rule in self.engine.list_rules(include_disabled=True):
                 if rule["status"] != "deleted" and rule["match"] == match \
-                        and rule["destination"]["category"] != record["corrected_value"]:
+                        and rule["destination"]["category"] != category_label:
                     conflict = True
                     break
+        scope_kind = "file" if record["user_action"] == "file_exception" else "global"
         return {
             "match": match,
             "scope_kind": scope_kind,
             "scope_value": record["file_fingerprint"] if scope_kind == "file" else None,
-            "destination_category": record["corrected_value"],
+            "destination_category_id": category_id,
             "requires_explicit_confirmation": True,
             "conflict_with_existing": conflict,
             "duplicate": record["duplicate"],
@@ -242,14 +314,13 @@ class FeedbackEngine:
     # ─── المراجعة والتطبيق ─────────────────────────────────────────────────
 
     def confirm(self, feedback_id: str) -> Dict[str, Any]:
-        """موافقة صريحة من المستخدم على مرشح — يرفع الحالة إلى confirmed."""
+        """Explicitly approve a pending candidate; no rule is written here."""
         with self._thread_lock:
             base = self._index.get(feedback_id)
             if not base:
-                raise ValueError(f"feedback غير موجود: {feedback_id}")
-            if base["review_status"] not in ("pending_review",):
-                raise ValueError(
-                    f"لا يمكن تأكيد feedback بحالة {base['review_status']}")
+                raise ValueError("feedback_not_found")
+            if base.get("review_status") != "pending_review" or not base.get("candidate"):
+                raise ValueError("feedback_not_approvable")
             update = {
                 "type": "review_update",
                 "feedback_id": feedback_id,
@@ -260,27 +331,77 @@ class FeedbackEngine:
             self._absorb(update)
             return {"feedback_id": feedback_id, "review_status": "confirmed"}
 
-    def apply_confirmed(self, feedback_id: str, *,
-                        metadata: Dict[str, Any],
-                        original_category: str,
-                        session_id: str,
-                        file_fingerprint: str) -> Dict[str, Any]:
-        """يطبّق feedback مؤكَّدًا على محرك التفضيلات (الخطوة الأخيرة).
+    def dismiss(self, feedback_id: str) -> Dict[str, Any]:
+        """Dismiss a pending candidate without changing learned preferences."""
+        with self._thread_lock:
+            base = self._index.get(feedback_id)
+            if not base:
+                raise ValueError("feedback_not_found")
+            if base.get("review_status") != "pending_review":
+                raise ValueError("feedback_not_dismissible")
+            update = {
+                "type": "review_update",
+                "feedback_id": feedback_id,
+                "review_status": "dismissed",
+                "ts": _now_iso(),
+            }
+            self._append(update)
+            self._absorb(update)
+            return {"feedback_id": feedback_id, "review_status": "dismissed"}
 
-        يفشل صراحةً لو الحالة ليست confirmed — لا تطبيق دون مراجعة.
-        """
+    def apply_confirmed(self, feedback_id: str, *,
+                        metadata: Optional[Dict[str, Any]] = None,
+                        original_category: Optional[str] = None,
+                        session_id: Optional[str] = None,
+                        file_fingerprint: Optional[str] = None) -> Dict[str, Any]:
+        """Apply a confirmed candidate using only stored categorical evidence."""
         with self._thread_lock:
             record = self._index.get(feedback_id)
             if not record:
-                raise ValueError(f"feedback غير موجود: {feedback_id}")
-            if record["review_status"] != "confirmed":
-                raise ValueError(
-                    "الرفض/المؤقت/غير المراجَع لا يُطبَّق — الحالة الحالية: "
-                    f"{record['review_status']}")
+                raise ValueError("feedback_not_found")
+            if record.get("review_status") != "confirmed":
+                raise ValueError("explicit_confirmation_required")
+            if not record.get("candidate"):
+                raise ValueError("safe_candidate_required")
+
+            corrected_category = self.engine.store.get_category_label(
+                record.get("corrected_category_id")
+            )
+            if corrected_category is None:
+                # Read compatibility only for pre-v2 local records.
+                corrected_category = record.get("corrected_value")
+            corrected_category = self._validated_category(corrected_category)
+            if not corrected_category:
+                raise ValueError("corrected_category_unavailable")
+
+            safe_metadata: Dict[str, Any] = {}
+            for key in ("extension", "mime_type"):
+                value = record.get("evidence", {}).get(key)
+                if isinstance(value, str) and value:
+                    safe_metadata[key] = value
+            # The preview is authoritative. Caller-supplied metadata is retained
+            # in the signature for compatibility but cannot alter the approved match.
+            if not safe_metadata:
+                raise ValueError("safe_extension_or_mime_evidence_required")
+
+            if original_category is None:
+                original_category = self.engine.store.get_category_label(
+                    record.get("original_category_id")
+                ) or record.get("original_prediction")
+            original_category = self._validated_category(original_category)
+            if not original_category:
+                raise ValueError("original_category_unavailable")
+            session_id = session_id or record.get("source_session")
+            file_fingerprint = file_fingerprint or record.get("file_fingerprint")
+            if not isinstance(session_id, str) or not _SAFE_SESSION_RE.fullmatch(session_id):
+                raise ValueError("source_session_invalid")
+            if not isinstance(file_fingerprint, str) or not _SAFE_FINGERPRINT_RE.fullmatch(file_fingerprint):
+                raise ValueError("file_fingerprint_invalid")
+
             result = self.engine.record_correction(
-                metadata=metadata,
+                metadata=safe_metadata,
                 original_category=original_category,
-                corrected_category=record["corrected_value"],
+                corrected_category=corrected_category,
                 session_id=session_id,
                 file_fingerprint=file_fingerprint,
                 origin="alphacode" if record.get("source_session", "").startswith("alphacode:")
@@ -301,10 +422,62 @@ class FeedbackEngine:
 
     # ─── القراءة ───────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _public_record(record: Dict[str, Any]) -> Dict[str, Any]:
+        public = copy.deepcopy(record)
+        legacy_fields = False
+        for key in ("original_prediction", "corrected_value"):
+            if key in public:
+                public.pop(key, None)
+                legacy_fields = True
+        for key, pattern in (
+            ("source_session", _SAFE_SESSION_RE),
+            ("file_fingerprint", _SAFE_FINGERPRINT_RE),
+            ("source_rule_id", _SAFE_SESSION_RE),
+            ("application_version", _SAFE_SESSION_RE),
+        ):
+            value = public.get(key)
+            if value is not None and (
+                not isinstance(value, str) or not pattern.fullmatch(value)
+            ):
+                public.pop(key, None)
+                legacy_fields = True
+        if "evidence" in public:
+            public["evidence"] = sanitize_evidence(public.get("evidence"))
+        candidate = public.get("candidate")
+        if isinstance(candidate, dict):
+            if "destination_category" in candidate:
+                candidate.pop("destination_category", None)
+                legacy_fields = True
+            match = candidate.get("match")
+            if isinstance(match, dict):
+                kind = match.get("kind")
+                if kind == "extension":
+                    safe_value = sanitize_evidence({"extension": match.get("value")}).get("extension")
+                elif kind == "mime":
+                    safe_value = sanitize_evidence({"mime_type": match.get("value")}).get("mime_type")
+                else:
+                    safe_value = None
+                if safe_value is None:
+                    candidate.pop("match", None)
+                    legacy_fields = True
+                else:
+                    match["value"] = safe_value
+            scope_value = candidate.get("scope_value")
+            if scope_value is not None and (
+                not isinstance(scope_value, str)
+                or not _SAFE_FINGERPRINT_RE.fullmatch(scope_value)
+            ):
+                candidate["scope_value"] = None
+                legacy_fields = True
+        if legacy_fields:
+            public["legacy_category_values_redacted"] = True
+        return public
+
     def get_feedback(self, feedback_id: str) -> Optional[Dict[str, Any]]:
         with self._thread_lock:
             record = self._index.get(feedback_id)
-            return copy.deepcopy(record) if record else None
+            return self._public_record(record) if record else None
 
     def list_feedback(self, *, review_status: Optional[str] = None,
                       limit: int = 200) -> List[Dict[str, Any]]:
@@ -313,4 +486,4 @@ class FeedbackEngine:
         if review_status:
             records = [r for r in records if r["review_status"] == review_status]
         records.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
-        return copy.deepcopy(records[:limit])
+        return [self._public_record(record) for record in records[:limit]]

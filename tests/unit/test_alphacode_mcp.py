@@ -149,6 +149,8 @@ def test_mcp_requires_initialization_before_tools():
         "intellifile.validate_plan",
         "intellifile.get_suggestion",
         "intellifile.record_user_correction",
+        "intellifile.confirm_feedback",
+        "intellifile.dismiss_feedback",
         "intellifile.explain_rule",
         "intellifile.list_applicable_rules",
         "intellifile.confirm_rule",

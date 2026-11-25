@@ -44,15 +44,19 @@ Preference Engine Update
 - ملف JSONL مستقل (`feedback_log.jsonl`) **append-only**: السطر الأصلي لا
   يُعاد كتابته أبدًا؛ تحديثات الحالة (`review_update`) تُلحق كسطور جديدة
   والأحدث يفوز.
-- كل سجل يحمل: `feedback_id`, `timestamp`, `source_session`,
-  `file_fingerprint`, `original_prediction`, `user_action`,
-  `corrected_value`, `source_rule_id`, `application_version`, `evidence`,
-  `review_status` (`pending_review|confirmed|applied|dismissed`).
-- **بصمة الملف = sha256 للمسار** لا المسار نفسه — لا مسارات ولا أسماء
-  ولا محتوى تُخزَّن.
-- **الأدلة بقائمة بيضاء:** `sanitize_evidence` يحتفظ بـ
-  `extension/mime_type/size_bucket/is_dir` فقط؛ أي `path/name/content/text`
-  يُسقط قبل الكتابة. لا يُسجل محتوى الملفات الطبية أو الشخصية أبدًا.
+- كل سجل جديد يحمل: `feedback_id`, `timestamp`, معرف جلسة تقني،
+  `file_fingerprint` مبهم، `original_category_id`, `corrected_category_id`,
+  `user_action`, `source_rule_id`, `application_version`, أدلة نوعية محدودة،
+  وحالة المراجعة. **لا تُكتب أسماء فئات العرض أو نصوص التصحيح في Feedback JSONL.**
+- أسماء الفئات (بما فيها الفئات المخصصة) تُسجَّل محليًا داخل `PreferenceStore`
+  القائم في `category_catalog` وتُربط بمعرفات عشوائية؛ لا يُنشأ مخزن جديد.
+- **بصمة الملف = sha256 للمسار** لا المسار نفسه؛ لا تُسجّل المسارات أو أسماء
+  الملفات أو محتواها أو hash محتواها في Feedback.
+- **الأدلة بقائمة بيضاء:** `sanitize_evidence` يحتفظ بامتداد/نوع MIME/حجم
+  تصنيفي/علامة مجلد بعد تحقق صارم؛ تُسقط حقول `path/name/content/text`.
+- تصحيح AlphaCode مرحلتان: `record_user_correction` يعرض معاينة معلقة فقط؛
+  `confirm_feedback` يتطلب موافقة منفصلة صريحة، و`dismiss_feedback` يلغي المرشح.
+  القاعدة المطبقة تبقى قابلة للتعطيل/إعادة التفعيل أو التراجع عبر PreferenceStore.
 
 ## التكامل مع المصنف (لا يكسر السلوك القديم)
 
