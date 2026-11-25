@@ -11,9 +11,10 @@ venv/
 .env.staging
 *.env.*
 
-# Logs
+# Logs — keep locally, not pushed (except archive_sort_alphacode reports)
 *.log
 LOGS/
+!archive_sort_alphacode/LOGS/
 
 # Coverage reports
 .coverage
