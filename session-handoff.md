@@ -1,32 +1,36 @@
 # Session Handoff — intelli-file-manager
 
-**التاريخ**: 2026-11-25 08:57 UTC
-**الفرع**: `feat/archive-sort-unified-decision` @ `f8f7500`
+**التاريخ**: 2026-11-25 19:46 UTC
+**الفرع**: `feat/archive-sort-unified-decision` @ `6b56b59`
 **آخر وسم**: `post-merge-clean-state-2026-11-21`
 
 ## 📝 ملاحظة الجلسة
 
-جلسة تحقق مستقلة (Z.ai — verifier فقط وفق REPO_POLICY: بلا تعديل كود ولا دفع). فُتح PR #95 من هذا الفرع إلى main كقناة للبوابة 2 (Ref #93). البوابة على الرأس f8f7500: pytest tests/unit → 788 passed / 1 skipped. الفرع تقدم أثناء الجلسة (af5d3ba→f8f7500: وضع --deep للتحليل العميق). من فجوات مراجعة handoff 2026-11-25: P3 (PR) أُغلق بـ#95، ودليل P2 (نتيجة pytest) مُوثق؛ P0 (تدوير مفتاح Vyce) وبوابة 1 والبند 4 ما زالا على المالك.
+القرارات النهائية (2026-11-26): crops.db = D→C (B يفوز 24، id=156 يُحسم يدويًا). س9=نعم (4 قواعد فرعية). س12-14=نعم (لا توسيع دون مراجعة). البوابة 1 مغلقة (integrity ok, 55,124, baseline ae795513). البند 4 معتمد (1,552 ملف). الـdeep scan مكتمل (SHA-256=8a531618). Metric 6: سلة_تحقق=11,514 (mp3_:6030, jpg_:5412, png_:62, jpeg_:10). Phase 5: بدء trial batch (200-500 ملف).
 
 ## 📊 حالة التحقق
 
-| الفحص | النتيجة | المخرج |
-|-------|---------|--------|
-| pytest-unit | ✅ | `tests/unit/test_voice_controller.py ..........................           [100%]
-
-===================` |
+لم تُشغَّل بوابات التحقق (--no-tests).
 
 ## 🔨 آخر الالتزامات
 
-- `f8f7500 feat(archive-sort): وضع التحليل العميق للمحتوى عند الفرز (--deep) — نصوص وصور وصوت محلياً`
-- `af5d3ba docs(archive-sort): خطة الفرز والتعامل اللازمة مع الملفات — مبنية على تحليل التقرير الفعلي`
-- `f173ac3 fix(archive-sort): توجيه سكريبت التنفيذ الجذري إلى مجموعة القواعد الموحدة`
-- `4ee9edc fix(archive-sort): تعديلات مراجعة تقرير المحاكاة الفعلي (274,851 ملف)`
-- `61fae0f docs(archive-sort): تحديث progress.md و session-handoff.md بعد إضافة وضع التنفيذ الآمن`
+- `6b56b59 feat(archive-sort): دمج وضع التحليل العميق (--deep) مع وضع التنفيذ (--execute)`
+- `fdfc090 fix(archive-sort): استيراد Optional المفقود في scripts/archive_sort.py (F821)`
+- `be41d1f fix(archive-sort): تدهور رشيق للصوت بلا mutagen — تصنيف بالامتداد لا unsupported`
+- `ffef0f4 fix(ci): تثبيت requirements-deep.txt في workflowَي CI`
+- `cfdcfd0 docs(session): تحديث progress.md و session-handoff.md — جلسة التحقق 2026-11-25 وفتح PR #95`
+
+## ⚠️ تغييرات غير ملتزمة
+
+```
+M progress.md
+?? archive_sort_alphacode/LOGS/dry_run_deep_pilot.html
+?? archive_sort_alphacode/LOGS/dry_run_report_v3_deep.html
+```
 
 ## ➡️ الخطوة التالية
 
-على المالك: (1) تدوير مفتاح Vyce وتسجيل إغلاق الحادثة، (2) بوابة 1 — نسختا crops.db الخارجيتان + التحقق الرباعي، (3) قائمة الحساسيات (البند 4) بوضع strict، (4) اعتماد البنود السبعة عبر PR #95. جلسة التنفيذ (Mistral وفق REPO_POLICY) هي التي تستبدل session-handoff.md بهذا الملف وتدفع؛ وُلد هنا بلا استبدال ولا دفع.
+Phase 5: trial batch 200-500 ملف — UndoLog + SHA-256 before/after + copy→verify→delete + --sensitive v1 + --batch-size 500. لا تلمس crops.db.
 
 ---
 

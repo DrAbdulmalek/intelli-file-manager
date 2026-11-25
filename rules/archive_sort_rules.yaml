@@ -408,10 +408,10 @@ rules:  # ═══════════════════════�
   #     قرار مالك بندي. حتى التفعيل: الوسوم تُكتب في الميتاداتا والتقرير
   #     دون أي تغيير وجهات.
   # ═══════════════════════════════════════════════════════════════════════
-  - name: Screenshots sub-sort (needs owner approval)
+  - name: Screenshots sub-sort (enabled per owner decision 2026-11-26)
     description: لقطات الشاشة (بلا EXIF كاميرا + نمط الاسم/الأبعاد) إلى وسائط/لقطات_شاشة
     priority: 620
-    enabled: false
+    enabled: true
     conditions:
       - field: has_tag
         op: eq
@@ -422,10 +422,10 @@ rules:  # ═══════════════════════�
       - type: tag
         value: sub-sorted
 
-  - name: Camera photos sub-sort (needs owner approval)
+  - name: Camera photos sub-sort (enabled per owner decision 2026-11-26)
     description: صور الكاميرا (EXIF صانع/موديل) إلى وسائط/صور_كاميرا
     priority: 619
-    enabled: false
+    enabled: true
     conditions:
       - field: has_tag
         op: eq
@@ -436,10 +436,10 @@ rules:  # ═══════════════════════�
       - type: tag
         value: sub-sorted
 
-  - name: Music sub-sort (needs owner approval)
+  - name: Music sub-sort (enabled per owner decision 2026-11-26)
     description: الصوتيات الموسومة بوسوم فنان/ألبوم إلى وسائط/موسيقى
     priority: 618
-    enabled: false
+    enabled: true
     conditions:
       - field: has_tag
         op: eq
@@ -450,10 +450,10 @@ rules:  # ═══════════════════════�
       - type: tag
         value: sub-sorted
 
-  - name: Voice recordings sub-sort (needs owner approval)
+  - name: Voice recordings sub-sort (enabled per owner decision 2026-11-26)
     description: التسجيلات الصوتية (بلا وسوم + مدة/امتداد هاتف) إلى وسائط/تسجيلات_صوتية
     priority: 617
-    enabled: false
+    enabled: true
     conditions:
       - field: has_tag
         op: eq

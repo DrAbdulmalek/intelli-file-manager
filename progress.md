@@ -1,3 +1,29 @@
+
+- **تحديث (قرارات نهائية 2026-11-26 — Phase 5 جاهز)**:
+  - **id=156 حُل**: B (toolkit) يفوز — label 'i'→'-' (تصحيح OCR)، x1 193→2224, x2 2385→2308 (تحسين إحداثيات)، verified 0→1. تعديل مقصود، ليس تلفاً.
+  - **Metric 6 مُتحقق**: سلة_تحقق = 11,514 ملف — Suspected partial mp3_: 6,030 + jpg_: 5,412 + png_: 62 + jpeg_: 10. صفر تكرارات (وضع fast). 5 عينات مسارات فعلية.
+  - **crops.db resolution**: D (investigate) → C (directed merge: B يفوز 24، id=156 يُحسم يدويًا). B (55,141) كأساس.
+  - **س9**: نعم — 4 قواعد فرعية (screenshots/camera/music/voice) مفعّلة.
+  - **س12-14**: نعم — لا توسيع دون مراجعة تقرير المرحلة السابقة. SHA-256 + أرقام مجمعة فقط.
+  - **البوابة 1**: مغلقة (integrity ok · 55,124 · baseline ae79551386c765e5d79f3e0f2a12537887db95c5003ca76ca480f9f8bb9a8091).
+  - **البند 4**: معتمد (1,552 ملف، أنماط v1).
+  - **البنود السبعة**: معتمدة.
+  - **الـdeep scan**: مكتمل (SHA-256=8a5316183d03ad090fe03490488db5b2bb357ca365c4772f3b82c30468326a93).
+  - **Phase 5**: بدء trial batch (200-500 ملف) — UndoLog + SHA-256 before/after + copy→verify→delete + --sensitive v1 + --batch-size 500.
+
+
+- **تحديث (قرارات نهائية 2026-11-26 — Phase 5 جاهز)**:
+  - **id=156 حُل**: B (toolkit) يفوز — label 'i'→'-' (تصحيح OCR)، x1 193→2224, x2 2385→2308 (تحسين إحداثيات)، verified 0→1. تعديل مقصود، ليس تلفاً.
+  - **Metric 6 مُتحقق**: سلة_ verifying = 11,514 ملف — Suspected partial mp3_: 6,030 + jpg_: 5,412 + png_: 62 + jpeg_: 10. صفر تكرارات (وضع fast). 5 عينات مسارات فعلية.
+  - **crops.db resolution**: D (investigate) → C (directed merge: B يفوز 24، id=156 يُحسم يدويًا). B (55,141) كأساس.
+  - **س9**: نعم — 4 قواعد فرعية (screenshots/camera/music/voice) مفعّلة (enabled: true).
+  - **س12-14**: نعم — لا توسيع دون مراجعة تقرير المرحلة السابقة. SHA-256 + أرقام مجمعة فقط.
+  - **البوابة 1**: مغلقة (integrity ok · 55,124 · baseline ae79551386c765e5d79f3e0f2a12537887db95c5003ca76ca480f9f8bb9a8091).
+  - **البند 4**: معتمد (1,552 ملف، أنماط v1).
+  - **البنود السبعة**: معتمدة.
+  - **الـdeep scan**: مكتمل (SHA-256=8a5316183d03ad090fe03490488db5b2bb357ca365c4772f3b82c30468326a93).
+  - **Phase 5**: بدء trial batch (200-500 ملف) — UndoLog + SHA-256 before/after + copy→verify→delete + --sensitive v1 + --batch-size 500.
+
 # Progress — intelli-file-manager
 
 > سجل تراكمي للجلسات — الأحدث في الأعلى، مدخل لكل جلسة.
