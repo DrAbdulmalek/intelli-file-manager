@@ -325,3 +325,31 @@ def test_confirmed_feedback_can_apply_after_restart(engines):
     result = reopened.apply_confirmed(record["feedback_id"])
     assert result["review_status"] == "applied"
     assert engine.list_rules()[0]["destination"]["category"] == "صور"
+
+def test_category_catalog_rejects_paths_and_email(tmp_path):
+    from src.core.preference_store import InvalidRuleError
+
+    store = PreferenceStore(tmp_path / "prefs.json")
+    with pytest.raises(InvalidRuleError, match="category_label_invalid"):
+        store.register_category("/home/user/private")
+    with pytest.raises(InvalidRuleError, match="category_label_invalid"):
+        store.register_category("person@example.invalid")
+    assert not store.path.exists()
+
+
+def test_feedback_rejects_path_like_session_and_fingerprint(engines):
+    engine, feedback = engines
+    with pytest.raises(ValueError, match="source_session_must_be_opaque_token"):
+        feedback.capture(
+            user_action="correct", original_prediction="مستندات",
+            corrected_value="صور", session_id="/home/user", file_fingerprint="fp1",
+            evidence={"extension": ".png"},
+        )
+    with pytest.raises(ValueError, match="file_fingerprint_must_be_opaque_token"):
+        feedback.capture(
+            user_action="correct", original_prediction="مستندات",
+            corrected_value="صور", session_id="s1",
+            file_fingerprint="/private/report.pdf", evidence={"extension": ".pdf"},
+        )
+    assert not feedback.log_path.exists()
+    assert engine.list_rules() == []
