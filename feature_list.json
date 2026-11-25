@@ -14,7 +14,7 @@
     {
       "id": "F002",
       "title": "تفعيل الذاكرة عبر الجلسات (Mem0 MCP)",
-      "status": "pending",
+      "status": "blocked",
       "priority": "medium",
       "depends_on": [
         "F001"
@@ -24,7 +24,7 @@
     {
       "id": "F003",
       "title": "ربط بوابة pre-push بـ scripts/verify.sh --quick",
-      "status": "pending",
+      "status": "done",
       "priority": "low",
       "depends_on": [
         "F001"
@@ -34,7 +34,7 @@
     {
       "id": "F004",
       "title": "منع الاستيراد المباشر لمحركات OCR خارج ocr_gateway (بوابة grep آلية)",
-      "status": "pending",
+      "status": "done",
       "priority": "high",
       "depends_on": [
         "F001"
@@ -44,7 +44,7 @@
     {
       "id": "F005",
       "title": "وضع خفيف بلا LLM (BM25 فقط)",
-      "status": "pending",
+      "status": "done",
       "priority": "medium",
       "depends_on": [
         "F001"

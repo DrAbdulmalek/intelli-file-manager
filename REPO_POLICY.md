@@ -39,21 +39,21 @@ These policies apply to **all repositories** under `DrAbdulmalek`. Violations wi
 
 | Agent | Role | Permissions |
 |-------|------|-------------|
-| **Mistral (Vibe)** | Sole execution agent | Read/Write to all repos |
-| **Z.ai** | Verifier only | Read-only (NO coding) |
+| **Z.ai** | Sole execution agent (owner decision 2026-11-25) | Read/Write to all repos |
+| **Mistral (Vibe)** | Discontinued — no access (owner decision 2026-11-25) | None |
 | **Other AIs** | Forbidden | No access |
 
 **Enforcement:**
-- Only Mistral (Vibe) may modify repositories
-- Z.ai may only: verify, cross-check, smoke test, release QA
+- Only Z.ai may modify repositories (sole execution agent — owner decision 2026-11-25)
+- Mistral (Vibe) is discontinued: no access, no new sessions
 - Any other AI session on these repos must be terminated immediately
+- The owner reviews and approves every merge via PRs (unchanged)
 
 ### Parallel Work Restriction
 
 **NO parallel AI sessions on the same repository.**
 
-- If Mistral is working on intelli-file-manager, Z.ai may NOT work on it
-- Z.ai may work on omni-medical-suite while Mistral works on intelli-file-manager
+- One execution session per repository at a time (Z.ai is the sole execution agent since 2026-11-25)
 - Coordination required via shared work log
 
 ---
@@ -212,3 +212,7 @@ These policies apply to **all repositories** under `DrAbdulmalek`. Violations wi
 **Approver:** DrAbdulmalek
 **Review Date:** 2026-07-22
 **Effective Date:** 2026-07-22
+
+**تعديل 2026-11-25 (قرار المالك):** إيقاف Mistral (Vibe) نهائيًا وتعيين Z.ai
+المنفّذ الوحيد لجميع المستودعات. اعتماد الدمج يبقى للمالك وحده عبر PR
+مسودة، وبوابات الجودة والاختبارات سارية بلا تغيير.
