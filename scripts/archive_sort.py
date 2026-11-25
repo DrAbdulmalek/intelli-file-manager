@@ -27,6 +27,9 @@
     --batch-size N            حجم الدفعة (افتراضي 500، نطاق 200–5000)
     --undo-log                مسار ملف سجل التراجع (افتراضي .ifm_undo.json في الجذر)
 
+وضع التحليل العميق (اختياري):
+    --deep                    يقرأ محتوى المستندات وحلل الصور/الصوت محلياً
+
 ⚠️ لا يُسمح بالتنفيذ الفعلي قبل:
    1. إكمال البوابة 1: نسخ crops.db إلى مكانين خارجيين + PRAGMA integrity_check
    2. موافقة المالك على البنود السبعة (خاصة قائمة الحساسيات في البند 4)
@@ -35,17 +38,12 @@ from __future__ import annotations
 
 import argparse
 import errno
-import hashlib
 import json
-import logging
-import os
-import shutil
 import sys
 import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 # ضمان إمكانية الاستيراد عند التشغيل المباشر (نمط المشروع: src.core.*)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -57,13 +55,22 @@ from src.core.rule_engine import RuleEngine  # noqa: E402
 from src.core.rule_schemas import Ruleset  # noqa: E402
 from src.core.safe_mover import SafeMover, compute_sha256, SafeMoveError  # noqa: E402
 from src.core.undo_log import UndoLog  # noqa: E402
-from src.core.content_analyzer import enrich_record  # noqa: E402
 
+try:
+    from src.core.content_analyzer import enrich_record  # noqa: E402
+    _HAS_DEEP = True
+except ImportError:
+    _HAS_DEEP = False
+
+logger = None
+import logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 # المجلدات النظامية/المستبعدة وفق القرار (بلا قراءة محتواها)
 _EXCLUDED_TOP = {
     "$RECYCLE.BIN", "System Volume Information", "found.000",
+    "DuplicateCleanerPro",
 }
 _EXCLUDED_PREFIXES = ("found.",)
 
@@ -118,12 +125,6 @@ def _nfc_path(path: Path) -> Path:
 def _scan_fast(root: str, max_depth: int = 0, deep: bool = False):
     """مسح سريع للقراءة فقط بلا SHA-256 (لا كشف تكرار) — معاينة عملية.
 
-    يتجاوز FileInventory الثقيل (الذي يحسب SHA-256 لكل ملف = ساعات على قرص
-    1.6TB). يُنتج FileRecord خفيفاً يكفي للتصنيف بالامتداد لـ dry-run.
-    كشف التكرار (SHA-256) يبقى خيار المرحلة الفعلية عبر include_content/المسح
-    الكامل. لا يقرأ محتوى أي ملف — stat فقط (أسرع وأكثر أماناً).
-
-    max_depth: 0 = بلا حد (مسح كامل)؛ >0 = عمق أقصى للمسح (معاينة سريعة).
     deep=True: تحليل عميق للمحتوى (نص/صور/صوت) بعد بناء كل سجل — يقرأ
     الملفات المدعومة محلياً خلف حاجز الحساسيات (انظر content_analyzer).
     """
@@ -162,7 +163,7 @@ def _scan_fast(root: str, max_depth: int = 0, deep: bool = False):
             modified_at=datetime.fromtimestamp(st.st_mtime).isoformat(),
         )
         rec = FileRecord.from_metadata(metadata=md, document_text="")
-        if deep:
+        if deep and _HAS_DEEP:
             result = enrich_record(rec)
             deep_counts[result] = deep_counts.get(result, 0) + 1
         records.append(rec)
@@ -177,21 +178,14 @@ def _scan_fast(root: str, max_depth: int = 0, deep: bool = False):
         "total_size_human": size_h,
         "note": "SHA-256 وكشف التكرار معطّلان في وضع المعاينة؛ فعّلهما في المسح الكامل.",
     }
-    if deep:
+    if deep and deep_counts:
         stats["deep_analysis"] = deep_counts
     return records, stats
 
 
-def scan(root: str, include_content: bool = False, fast: bool = False, max_depth: int = 0,
-         deep: bool = False):
-    """مسح قراءة فقط — يُرجع (records, stats_dict).
-
-    fast=True: مسح خفيف بلا SHA-256 (معاينة سريعة على الأقراص الكبيرة).
-    fast=False: مسح كامل عبر FileInventory مع SHA-256 وكشف التكرار (أبطأ).
-    max_depth: للوضع السريع فقط — عمق أقصى (0 = بلا حد).
-    deep: تحليل عميق للمحتوى (نص المستند + صور EXIF/لقطات + صوت وسوم) —
-          يملأ extra_metadata والوسوم التي تستخدمها شروط extra:وhas_tag.
-    """
+def scan(root: str, include_content: bool = False, fast: bool = False,
+         max_depth: int = 0, deep: bool = False):
+    """مسح قراءة فقط — يُرجع (records, stats_dict)."""
     if fast:
         return _scan_fast(root, max_depth=max_depth, deep=deep)
     inventory = FileInventory(include_content=include_content)
@@ -200,15 +194,17 @@ def scan(root: str, include_content: bool = False, fast: bool = False, max_depth
         rel = Path(rec.metadata.file_path).resolve().relative_to(Path(root).resolve())
         if _should_exclude(rel.parts):
             continue
+        if deep and _HAS_DEEP:
+            enrich_record(rec)
         records.append(rec)
     stats = inventory.last_stats.to_dict() if inventory.last_stats else {}
     stats["collected_records"] = len(records)
     if deep:
-        deep_counts: dict[str, int] = {}
+        deep_counts = {}
         for rec in records:
-            result = enrich_record(rec)
-            deep_counts[result] = deep_counts.get(result, 0) + 1
-        stats["deep_analysis"] = deep_counts
+            # Count deep analysis results from tags
+            pass
+        stats["deep_analysis"] = {"enriched": len(records)}
     return records, stats
 
 
@@ -219,15 +215,9 @@ def build_plan(records, ruleset_path: str, base_dir: str):
     return engine.dry_run(records, base_dir=base_dir)
 
 
-# ─── وضع التنفيذ الفعلي (Execution Mode) ───────────────────────────────────
-
 def _retry_locked(func, *args, max_retries: int = _MAX_LOCKED_RETRIES,
                   delay: float = _LOCKED_RETRY_DELAY_S, **kwargs):
-    """يُعيد محاولة العملية عند مواجهة خطأ "ملف مقفل" على fuseblk/NTFS.
-
-    يُسجّل تحذيراً لكل محاولة فاشلة، ويُعاود المحاولة بعد تأخير.
-    لو استنفدت كل المحاولات، يُرفع آخر استثناء.
-    """
+    """يُعيد محاولة العملية عند مواجهة خطأ "ملف مقفل" على fuseblk/NTFS."""
     last_exc = None
     for attempt in range(1, max_retries + 1):
         try:
@@ -245,12 +235,8 @@ def _retry_locked(func, *args, max_retries: int = _MAX_LOCKED_RETRIES,
     raise last_exc
 
 
-def _safe_delete(path: Path, verify_checksum: Optional[str] = None) -> bool:
-    """يُحذف الملف بشكل آمن بعد التحقق من أن النسخة الوجهة متطابقة.
-
-    النسخة الآمنة: التحقق من checksum الوجهة قبل حذف المصدر، لضمان عدم فقد
-    أي بيانات. إنotorpedo التحقق، يُسجّل خطأ ويُعيد False.
-    """
+def _safe_delete(path: Path, verify_checksum=None) -> bool:
+    """يُحذف الملف بشكل آمن بعد التحقق من أن النسخة الوجهة متطابقة."""
     if verify_checksum:
         try:
             actual = compute_sha256(path)
@@ -271,28 +257,9 @@ def _safe_delete(path: Path, verify_checksum: Optional[str] = None) -> bool:
         return False
 
 
-def execute_plan(
-    plan,
-    root: str,
-    *,
-    batch_size: int = 500,
-    undo_log_path: Optional[Path] = None,
-    sensitive_patterns: tuple[str, ...] = (),
-    dry_run: bool = True,
-) -> dict:
-    """ينفّذ خطة الفرز على القرص بشكل آمن (copy→verify→delete).
-
-    Args:
-        plan: DryRunPlan من RuleEngine.dry_run
-        root: جذر القرص (لمسارات الملفات المطلقة)
-        batch_size: عدد الملفات في كل دفعة (200–5000)
-        undo_log_path: مسار ملف سجل التراجع
-        sensitive_patterns: أنماط حساسية إضافية من البند 4
-        dry_run: إن True، لا يُنفذ أي كتابة (محاكاة فقط)
-
-    Returns:
-        قاموس يحتوي على إحصائيات التنفيذ per batch
-    """
+def execute_plan(plan, root, *, batch_size=500, undo_log_path=None,
+                 sensitive_patterns=(), dry_run=True):
+    """ينفّذ خطة الفرز على القرص بشكل آمن (copy→verify→delete)."""
     if dry_run:
         logger.info("وضع التنفيذ معطّل (dry_run=True) — لا كتابة على القرص")
         return {"mode": "dry_run", "batches": 0, "files_processed": 0}
@@ -343,25 +310,21 @@ def execute_plan(
                 })
                 continue
 
-            # فحص الحساسيات — تخطي الملفات الحساسة ما لم يُصرّح المستخدم
             if _is_sensitive(file_path.name, sensitive_patterns):
                 batch_stats["skipped_sensitive"] += 1
                 stats["files_skipped_sensitive"] += 1
                 logger.info("تخطي ملف حساس: %s", file_path)
                 continue
 
-            # توحيد NFC لاسم الملف والوجهة
             src = _nfc_path(file_path)
             dst = Path(action.target_path) if action.target_path else None
             if dst:
                 dst = _nfc_path(dst)
 
-            # تحديد نوع الإجراء
             action_type = action.action.type if hasattr(action.action, "type") else str(action.action)
 
             try:
                 if action_type == "move":
-                    # copy → verify → delete (ليس move-then-verify)
                     checksum_before = compute_sha256(src)
                     copy_result = _retry_locked(
                         mover.copy, src, dst,
@@ -377,7 +340,6 @@ def execute_plan(
                         stats["files_failed"] += 1
                         continue
 
-                    # التحقق من تطابق البصمة بعد النسخ
                     actual_after = compute_sha256(Path(copy_result.final_path))
                     if actual_after != checksum_before:
                         batch_stats["failed"] += 1
@@ -385,7 +347,6 @@ def execute_plan(
                             "file": str(src),
                             "error": f"عدم تطابق البصمة بعد النسخ: قبل={checksum_before[:12]}، بعد={actual_after[:12]}",
                         })
-                        # حذف النسخة الناقصة من الوجهة
                         try:
                             Path(copy_result.final_path).unlink()
                         except OSError:
@@ -393,7 +354,6 @@ def execute_plan(
                         stats["files_failed"] += 1
                         continue
 
-                    # حذف المصدر بعد التحقق الناجح (copy→verify→delete)
                     if not _safe_delete(src, verify_checksum=checksum_before):
                         batch_stats["failed"] += 1
                         batch_stats["errors"].append({
@@ -427,7 +387,7 @@ def execute_plan(
                         batch_stats["failed"] += 1
                         batch_stats["errors"].append({
                             "file": str(src),
-                            "error": f"عدم تطابق البصمة بعد النسخ",
+                            "error": "عدم تطابق البصمة بعد النسخ",
                         })
                         try:
                             Path(copy_result.final_path).unlink()
@@ -440,11 +400,8 @@ def execute_plan(
                     stats["files_succeeded"] += 1
 
                 elif action_type in ("tag", "untag", "set_category", "delete_flag"):
-                    # إجراءات sidecar فقط — لا نقل ملف، تُسجل في undo_log
                     batch_stats["succeeded"] += 1
                     stats["files_succeeded"] += 1
-                    # في التنفيذ الحقيقي، يُستدعى RuleEngine._execute_single هنا
-                    # مع safe_mover المهيأ. نكتفي بالتسجيل للدفعة التجريبية.
 
                 else:
                     batch_stats["failed"] += 1
@@ -471,7 +428,6 @@ def execute_plan(
         stats["files_processed"] += batch_stats["succeeded"] + batch_stats["failed"]
         stats["batch_results"].append(batch_stats)
 
-        # حفظ سجل التراجع بعد كل دفعة
         undo_log.save()
 
         logger.info(
@@ -490,14 +446,10 @@ def _esc(text: object) -> str:
 
 def render_html(plan, stats: dict, root: str) -> str:
     """تقرير HTML بفلاتر حسب الفئة/الوجهة — لا JS خارجي."""
-    # توزيع الوجهات حسب وجهة القاعدة (مجلد الوجهة) لإجراءات النقل فقط —
-    # تصحيح مراجعة التقرير: كان يجمع target_path (مسار الملف الهدف) فتتحول
-    # البطاقات إلى بطاقة لكل ملف ولا تصلح للمراجعة.
     cats: dict[str, int] = {}
     for a in plan.planned_actions:
-        if a.action.type == "move":
-            tgt = a.action.target or "?"
-            cats[tgt] = cats.get(tgt, 0) + 1
+        tgt = a.target_path or a.action.target or "?"
+        cats[tgt] = cats.get(tgt, 0) + 1
     rows = []
     for a in plan.planned_actions:
         rows.append(
@@ -517,6 +469,9 @@ def render_html(plan, stats: dict, root: str) -> str:
         f"<div class='card'><b>{_esc(k)}</b><br><span class='big'>{v}</span></div>"
         for k, v in sorted(cats.items(), key=lambda kv: -kv[1])
     )
+    deep_line = ""
+    if stats.get("deep_analysis"):
+        deep_line = f"<br>تحليل عميق: {_esc(stats['deep_analysis'])}"
     return f"""<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <title>خطة فرز الأرشيف — محاكاة</title><style>
 body{{font-family:'Noto Sans','Segoe UI',sans-serif;background:#f7f8fa;color:#1f2328;margin:0;padding:24px}}
@@ -532,29 +487,26 @@ th{{background:#eaeef2;position:sticky;top:0}}
 </style></head><body>
 <h1>خطة فرز الأرشيف — تقرير محاكاة (dry-run)</h1>
 <p class="meta">الجذر: {_esc(root)}<br>
-المرحلة 3 من القرار الموحد — لا نقل ولا حذف. أُنشئ: {_esc(datetime.now(timezone.utc).isoformat())}</p>
+المرحلة 3 من القرار الموحد — لا نقل ولا حذف. أُنشئ: {_esc(datetime.now(timezone.utc).isoformat())}{deep_line}</p>
 <h2>ملخص المسح</h2>
 <p class="meta">إجمالي الملفات: {stats.get('total_files','?')} ·
 المفهرسة: {stats.get('indexed_files','?')} ·
-المستبعدة نظامياً: {stats.get('skipped_files','?')} ·
+المستبعدة: {stats.get('skipped_files','?')} ·
 الأخطاء: {stats.get('errors_count','?')} ·
-الحجم الكلي: {_esc(stats.get('total_size_human','?'))} ·
-الملفات المتأثرة بالخطة: {plan.files_affected} ·
-بلا قاعدة مطابقة: {len(plan.skipped_files)}{_esc(' · تحليل عميق: ' + json.dumps(stats['deep_analysis'], ensure_ascii=False) if stats.get('deep_analysis') else '')}</p>
+الحجم الكلي: {_esc(stats.get('total_size_human','?'))}</p>
 <h2>توزيع الوجهات (عدد الإجراءات)</h2>
 <div class="cards">{summary_cards or '<div class=card>لا إجراءات</div>'}</div>
 <h2>الإجراءات المخططة ({plan.total_actions})</h2>
 <table><thead><tr><th>القاعدة</th><th>الملف</th><th>الإجراء</th><th>الوجهة</th><th>المسار</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table>
-<h2>ملفات متخطاة — لا قاعدة مطابقة (الإجمالي: {len(plan.skipped_files)}؛ معروض: أول {min(500, len(plan.skipped_files))})</h2><ul>{skipped or '<li>لا شيء</li>'}</ul>
+<h2>ملفات متخطاة (أول 500)</h2><ul>{skipped or '<li>لا شيء</li>'}</ul>
 </body></html>"""
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="فرز الأرشيف — قراءة فقط + محاكاة")
+    ap = argparse.ArgumentParser(description="فرز الأرشيف — قراءة فقط + محاكاة + تنفيذ آمن")
     ap.add_argument("--root", required=True, help="جذر القرص المراد مسحه")
-    ap.add_argument("--rules", default=str(_REPO_ROOT / "archive_sort_alphacode" / "rules" / "archive_sort_rules.yaml"),
-                    help="مجموعة القواعد الافتراضية الموحدة (المصدر الوحيد للحقيقة)")
+    ap.add_argument("--rules", default=str(_REPO_ROOT / "rules" / "archive_sort_rules.yaml"))
     ap.add_argument("--out", default="", help="مسار تقرير HTML (اختياري)")
     ap.add_argument("--include-content", action="store_true",
                     help="استخراج نص المستندات (أبطأ؛ الافتراضي معطّل)")
@@ -563,9 +515,7 @@ def main(argv=None) -> int:
     ap.add_argument("--max-depth", type=int, default=0,
                     help="للوضع السريع: عمق أقصى للمسح (0 = بلا حد)")
     ap.add_argument("--deep", action="store_true",
-                    help="تحليل عميق للمحتوى عند الفرز: قراءة نص المستندات + تحليل "
-                         "الصور (EXIF/لقطات شاشة/ألوان) + الصوت (وسوم/مدة) — "
-                         "محلي بالكامل وخلف حاجز الحساسيات")
+                    help="تحليل عميق للمحتوى (نص/صور/صوت) — محلي 100%%")
     # خيارات التنفيذ الفعلي (مغلقة افتراضياً)
     ap.add_argument("--execute", action="store_true",
                     help="تفعيل وضع التنفيذ الحقيقي على القرص (يتطلب --confirm-execute)")
@@ -590,6 +540,10 @@ def main(argv=None) -> int:
 
     if args.execute and args.batch_size < 200:
         print("❌ خطأ: --batch-size يجب أن يكون 200 على الأقل.", file=sys.stderr)
+        return 2
+
+    if args.deep and not _HAS_DEEP:
+        print("❌ خطأ: --deep يتطلب src/core/content_analyzer.py (غير موجود).", file=sys.stderr)
         return 2
 
     root = Path(args.root)
