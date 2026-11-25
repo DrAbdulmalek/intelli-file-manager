@@ -430,10 +430,46 @@ class FeedbackEngine:
             if key in public:
                 public.pop(key, None)
                 legacy_fields = True
+        for key, pattern in (
+            ("source_session", _SAFE_SESSION_RE),
+            ("file_fingerprint", _SAFE_FINGERPRINT_RE),
+            ("source_rule_id", _SAFE_SESSION_RE),
+            ("application_version", _SAFE_SESSION_RE),
+        ):
+            value = public.get(key)
+            if value is not None and (
+                not isinstance(value, str) or not pattern.fullmatch(value)
+            ):
+                public.pop(key, None)
+                legacy_fields = True
+        if "evidence" in public:
+            public["evidence"] = sanitize_evidence(public.get("evidence"))
         candidate = public.get("candidate")
-        if isinstance(candidate, dict) and "destination_category" in candidate:
-            candidate.pop("destination_category", None)
-            legacy_fields = True
+        if isinstance(candidate, dict):
+            if "destination_category" in candidate:
+                candidate.pop("destination_category", None)
+                legacy_fields = True
+            match = candidate.get("match")
+            if isinstance(match, dict):
+                kind = match.get("kind")
+                if kind == "extension":
+                    safe_value = sanitize_evidence({"extension": match.get("value")}).get("extension")
+                elif kind == "mime":
+                    safe_value = sanitize_evidence({"mime_type": match.get("value")}).get("mime_type")
+                else:
+                    safe_value = None
+                if safe_value is None:
+                    candidate.pop("match", None)
+                    legacy_fields = True
+                else:
+                    match["value"] = safe_value
+            scope_value = candidate.get("scope_value")
+            if scope_value is not None and (
+                not isinstance(scope_value, str)
+                or not _SAFE_FINGERPRINT_RE.fullmatch(scope_value)
+            ):
+                candidate["scope_value"] = None
+                legacy_fields = True
         if legacy_fields:
             public["legacy_category_values_redacted"] = True
         return public
