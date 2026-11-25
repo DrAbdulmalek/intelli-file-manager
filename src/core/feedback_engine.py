@@ -105,6 +105,7 @@ def sanitize_evidence(evidence: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             clean[key] = value
     return clean
 
+
 def fingerprint_path(path: str) -> str:
     """بصمة المسار (sha256) — يسمح بالتفرد دون تسجيل المسار نفسه."""
     return hashlib.sha256(str(path).encode("utf-8")).hexdigest()
@@ -138,7 +139,7 @@ class FeedbackEngine:
             raise ValueError("category_not_in_configured_catalog")
         return normalized
 
-    def category_label(self, category_id: Optional[str]) -> Optional[str>:
+    def category_label(self, category_id: Optional[str]) -> Optional[str]:
         if not category_id:
             return None
         return self.engine.store.get_category_label(category_id)
