@@ -330,6 +330,7 @@ def test_category_catalog_rejects_paths_and_email(tmp_path):
     from src.core.preference_store import InvalidRuleError
 
     store = PreferenceStore(tmp_path / "prefs.json")
+    store.load()
     with pytest.raises(InvalidRuleError, match="category_label_invalid"):
         store.register_category("/home/user/private")
     with pytest.raises(InvalidRuleError, match="category_label_invalid"):
