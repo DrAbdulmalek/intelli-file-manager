@@ -130,15 +130,15 @@ class FeedbackEngine:
         self._index: Dict[str, Dict[str, Any]] = {}
         self._load_index()
 
-    def _register_category(self, label: Optional[str]) -> Optional[str]:
-        if not label:
+    def _validated_category(self, label: Optional[str]) -> Optional[str]:
+        if label is None or label == "":
             return None
         normalized = " ".join(label.split()).strip() if isinstance(label, str) else ""
         if normalized not in self.allowed_categories:
             raise ValueError("category_not_in_configured_catalog")
-        return self.engine.store.register_category(normalized)
+        return normalized
 
-    def category_label(self, category_id: Optional[str]) -> Optional[str]:
+    def category_label(self, category_id: Optional[str]) -> Optional[str>:
         if not category_id:
             return None
         return self.engine.store.get_category_label(category_id)
@@ -205,8 +205,14 @@ class FeedbackEngine:
         ):
             raise ValueError("source_rule_id_invalid")
 
-        original_category_id = self._register_category(original_prediction) if original_prediction else None
-        corrected_category_id = self._register_category(corrected_value) if corrected_value else None
+        original_label = self._validated_category(original_prediction)
+        corrected_label = self._validated_category(corrected_value)
+        original_category_id = (
+            self.engine.store.register_category(original_label) if original_label else None
+        )
+        corrected_category_id = (
+            self.engine.store.register_category(corrected_label) if corrected_label else None
+        )
         safe_evidence = sanitize_evidence(evidence)
         safe_version = (
             application_version if isinstance(application_version, str)
