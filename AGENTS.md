@@ -141,6 +141,10 @@ git checkout -b feat/my-feature
 # بوابة الجودة قبل كل التزام
 ./scripts/verify.sh
 
+# تركيب بوابة pre-push (مرة واحدة بعد الاستنساخ — F003):
+# رفض الدفع عند فشل verify.sh --quick
+./scripts/install_hooks.sh
+
 # تسليم الجلسة (نهاية كل جلسة)
 python3 scripts/session_handoff.py --note "..." --next "..."
 

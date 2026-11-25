@@ -4,21 +4,22 @@ import logging
 from pathlib import Path
 from typing import Dict, Any
 
-# الخدمة المركزية الموحدة (بوابة OCR الوحيدة) — محركات ocr-core: Paddle ثم Tesseract
-from . import ocr_service
+# البوابة التعاقدية الموحدة (ocr_gateway → التنفيذ في ocr_service) — F004
+from . import ocr_gateway
 
 logger = logging.getLogger(__name__)
 
 # راية توافق خلفي (كانت تُصدَّر من هذه الوحدة سابقًا)
-OCR_CORE_AVAILABLE = ocr_service.ocr_core_available()
+OCR_CORE_AVAILABLE = ocr_gateway.ocr_core_available()
 
 
 class EnhancedMultimodalProcessor:
     """معالج متعدد الوسائط — طبقة رفيعة فوق الخدمة المركزية (ocr_service).
 
-    تكييف ما بعد PR#47 (النزع إلى 62 سطرًا) مع بوابة ocr_service:
+    تكييف ما بعد PR#47 (النزع إلى 62 سطرًا) مع بوابة ocr_gateway
+    (التنفيذ في ocr_service):
     - المحركات والتراجع الرشيق (Paddle → Tesseract → pytesseract المباشر)
-      تُدار مركزيًا في ocr_service — لا تُنشأ محركات هنا.
+      تُدار مركزيًا في ocr_service — لا تُنشأ محركات هنا ولا استيراد مباشر.
     - عقد النتيجة محفوظ حرفيًا لكل المستهلكين:
       {path, type, success, extracted_text, confidence, engine_used,
        needs_review, [warning], [error]}
@@ -41,17 +42,14 @@ class EnhancedMultimodalProcessor:
         path = Path(filepath)
         result: Dict[str, Any] = {"path": str(path), "type": "image", "success": False}
 
-        if not OCR_CORE_AVAILABLE:
-            # بلا ocr-core يبقى التراجع الرشيق الداخلي لـ pytesseract فقط؛
-            # إن غاب هو أيضًا فلا OCR إطلاقًا — رسالة صريحة كما في السابق.
-            try:
-                import pytesseract  # noqa: F401
-            except ImportError:
-                result["error"] = "محرك OCR غير متاح. يرجى تثبيت ocr-core."
-                return result
+        if not OCR_CORE_AVAILABLE and not ocr_gateway.any_engine_available():
+            # بلا ocr-core ولا pytesseract فلا OCR إطلاقًا — رسالة صريحة كما في
+            # السابق؛ فحص التوفر عبر البوابة (لا استيراد مباشر للمحركات — F004).
+            result["error"] = "محرك OCR غير متاح. يرجى تثبيت ocr-core."
+            return result
 
         try:
-            res = ocr_service.ocr_image(str(path))
+            res = ocr_gateway.ocr_image(str(path))
 
             if not res.get("ocr_success"):
                 result["extracted_text"] = res.get("extracted_text", "")

@@ -114,8 +114,8 @@ class SmartFileClassifier:
                     return ""
             elif ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"):
                 try:
-                    from .ocr_service import ocr_image
-                    res = ocr_image(filepath, max_chars=5000)
+                    from . import ocr_gateway
+                    res = ocr_gateway.ocr_image(filepath, max_chars=5000)
                     return res.get("extracted_text") or path.name
                 except Exception:
                     return path.name
