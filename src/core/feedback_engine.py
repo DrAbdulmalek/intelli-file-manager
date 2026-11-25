@@ -370,7 +370,8 @@ class FeedbackEngine:
             if corrected_category is None:
                 # Read compatibility only for pre-v2 local records.
                 corrected_category = record.get("corrected_value")
-            if not isinstance(corrected_category, str) or not corrected_category:
+            corrected_category = self._validated_category(corrected_category)
+            if not corrected_category:
                 raise ValueError("corrected_category_unavailable")
 
             safe_metadata: Dict[str, Any] = {}
@@ -379,10 +380,10 @@ class FeedbackEngine:
                 if isinstance(value, str) and value:
                     safe_metadata[key] = value
             if isinstance(metadata, dict):
-                for key in ("extension", "mime_type", "content_type"):
-                    value = metadata.get(key)
-                    if isinstance(value, str) and value:
-                        safe_metadata["mime_type" if key == "content_type" else key] = value
+                supplied = dict(metadata)
+                if "mime_type" not in supplied and "content_type" in supplied:
+                    supplied["mime_type"] = supplied["content_type"]
+                safe_metadata.update(sanitize_evidence(supplied))
             if not safe_metadata:
                 raise ValueError("safe_extension_or_mime_evidence_required")
 
@@ -390,7 +391,8 @@ class FeedbackEngine:
                 original_category = self.engine.store.get_category_label(
                     record.get("original_category_id")
                 ) or record.get("original_prediction")
-            if not isinstance(original_category, str) or not original_category:
+            original_category = self._validated_category(original_category)
+            if not original_category:
                 raise ValueError("original_category_unavailable")
             session_id = session_id or record.get("source_session")
             file_fingerprint = file_fingerprint or record.get("file_fingerprint")
