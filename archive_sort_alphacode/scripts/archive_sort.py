@@ -39,6 +39,7 @@ for _p in (_SRC_ROOT, _REPO_ROOT):
 from src.core.file_inventory import FileInventory  # noqa: E402
 from src.core.rule_engine import RuleEngine  # noqa: E402
 from src.core.rule_schemas import Ruleset  # noqa: E402
+from src.core.content_analyzer import enrich_record  # noqa: E402
 
 # المجلدات النظامية/المستبعدة وفق القرار (بلا قراءة محتواها)
 _EXCLUDED_TOP = {
@@ -60,7 +61,7 @@ def _should_exclude(rel_parts: tuple[str, ...]) -> bool:
     return False
 
 
-def _scan_fast(root: str, max_depth: int = 0):
+def _scan_fast(root: str, max_depth: int = 0, deep: bool = False):
     """مسح سريع للقراءة فقط بلا SHA-256 (لا كشف تكرار) — معاينة عملية.
 
     يتجاوز FileInventory الثقيل (الذي يحسب SHA-256 لكل ملف = ساعات على قرص
@@ -69,6 +70,8 @@ def _scan_fast(root: str, max_depth: int = 0):
     الكامل. لا يقرأ محتوى أي ملف — stat فقط (أسرع وأكثر أماناً).
 
     max_depth: 0 = بلا حد (مسح كامل)؛ >0 = عمق أقصى للمسح (معاينة سريعة).
+    deep=True: تحليل عميق للمحتوى (نص/صور/صوت) بعد بناء كل سجل — يقرأ
+    الملفات المدعومة محلياً خلف حاجز الحساسيات (انظر content_analyzer).
     """
     from src.db.schemas import FileCategory, FileMetadata, FileRecord
     root_p = Path(root).resolve()
@@ -77,6 +80,7 @@ def _scan_fast(root: str, max_depth: int = 0):
     total_size = 0
     excluded = 0
     stat_errors = 0
+    deep_counts: dict[str, int] = {}
     for p in root_p.rglob("*"):
         if p.is_symlink() or not p.is_file():
             continue
@@ -103,7 +107,11 @@ def _scan_fast(root: str, max_depth: int = 0):
             extension=ext, category=cat,
             modified_at=datetime.fromtimestamp(st.st_mtime).isoformat(),
         )
-        records.append(FileRecord.from_metadata(metadata=md, document_text=""))
+        rec = FileRecord.from_metadata(metadata=md, document_text="")
+        if deep:
+            result = enrich_record(rec)
+            deep_counts[result] = deep_counts.get(result, 0) + 1
+        records.append(rec)
     size_h = f"{total_size/1e12:.2f} TB" if total_size >= 1e12 else f"{total_size/1e9:.2f} GB"
     stats = {
         "mode": "fast (no-sha256)",
@@ -115,18 +123,23 @@ def _scan_fast(root: str, max_depth: int = 0):
         "total_size_human": size_h,
         "note": "SHA-256 وكشف التكرار معطّلان في وضع المعاينة؛ فعّلهما في المسح الكامل.",
     }
+    if deep:
+        stats["deep_analysis"] = deep_counts
     return records, stats
 
 
-def scan(root: str, include_content: bool = False, fast: bool = False, max_depth: int = 0):
+def scan(root: str, include_content: bool = False, fast: bool = False, max_depth: int = 0,
+         deep: bool = False):
     """مسح قراءة فقط — يُرجع (records, stats_dict).
 
     fast=True: مسح خفيف بلا SHA-256 (معاينة سريعة على الأقراص الكبيرة).
     fast=False: مسح كامل عبر FileInventory مع SHA-256 وكشف التكرار (أبطأ).
     max_depth: للوضع السريع فقط — عمق أقصى (0 = بلا حد).
+    deep: تحليل عميق للمحتوى (نص المستند + صور EXIF/لقطات + صوت وسوم) —
+          يملأ extra_metadata والوسوم التي تستخدمها شروط extra:وhas_tag.
     """
     if fast:
-        return _scan_fast(root, max_depth=max_depth)
+        return _scan_fast(root, max_depth=max_depth, deep=deep)
     inventory = FileInventory(include_content=include_content)
     records = []
     for rec in inventory.scan(root, recursive=True):
@@ -136,6 +149,12 @@ def scan(root: str, include_content: bool = False, fast: bool = False, max_depth
         records.append(rec)
     stats = inventory.last_stats.to_dict() if inventory.last_stats else {}
     stats["collected_records"] = len(records)
+    if deep:
+        deep_counts: dict[str, int] = {}
+        for rec in records:
+            result = enrich_record(rec)
+            deep_counts[result] = deep_counts.get(result, 0) + 1
+        stats["deep_analysis"] = deep_counts
     return records, stats
 
 
@@ -203,7 +222,7 @@ th{{background:#eaeef2;position:sticky;top:0}}
 الأخطاء: {stats.get('errors_count','?')} ·
 الحجم الكلي: {_esc(stats.get('total_size_human','?'))} ·
 الملفات المتأثرة بالخطة: {plan.files_affected} ·
-بلا قاعدة مطابقة: {len(plan.skipped_files)}</p>
+بلا قاعدة مطابقة: {len(plan.skipped_files)}{_esc(' · تحليل عميق: ' + json.dumps(stats['deep_analysis'], ensure_ascii=False) if stats.get('deep_analysis') else '')}</p>
 <h2>توزيع الوجهات (عدد الإجراءات)</h2>
 <div class="cards">{summary_cards or '<div class=card>لا إجراءات</div>'}</div>
 <h2>الإجراءات المخططة ({plan.total_actions})</h2>
@@ -224,6 +243,10 @@ def main(argv=None) -> int:
                     help="مسح سريع بلا SHA-256 (معاينة عملية على الأقراص الكبيرة)")
     ap.add_argument("--max-depth", type=int, default=0,
                     help="للوضع السريع: عمق أقصى للمسح (0 = بلا حد)")
+    ap.add_argument("--deep", action="store_true",
+                    help="تحليل عميق للمحتوى عند الفرز: قراءة نص المستندات + تحليل "
+                         "الصور (EXIF/لقطات شاشة/ألوان) + الصوت (وسوم/مدة) — "
+                         "محلي بالكامل وخلف حاجز الحساسيات")
     args = ap.parse_args(argv)
 
     root = Path(args.root)
@@ -232,7 +255,7 @@ def main(argv=None) -> int:
         return 2
 
     records, stats = scan(str(root), include_content=args.include_content,
-                          fast=args.fast, max_depth=args.max_depth)
+                          fast=args.fast, max_depth=args.max_depth, deep=args.deep)
     plan = build_plan(records, args.rules, base_dir=str(root))
 
     if args.out:
