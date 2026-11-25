@@ -519,7 +519,8 @@ th{{background:#eaeef2;position:sticky;top:0}}
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="فرز الأرشيف — قراءة فقط + محاكاة")
     ap.add_argument("--root", required=True, help="جذر القرص المراد مسحه")
-    ap.add_argument("--rules", default=str(_REPO_ROOT / "rules" / "archive_sort_rules.yaml"))
+    ap.add_argument("--rules", default=str(_REPO_ROOT / "archive_sort_alphacode" / "rules" / "archive_sort_rules.yaml"),
+                    help="مجموعة القواعد الافتراضية الموحدة (المصدر الوحيد للحقيقة)")
     ap.add_argument("--out", default="", help="مسار تقرير HTML (اختياري)")
     ap.add_argument("--include-content", action="store_true",
                     help="استخراج نص المستندات (أبطأ؛ الافتراضي معطّل)")
