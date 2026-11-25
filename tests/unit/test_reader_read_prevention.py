@@ -206,6 +206,11 @@ class ReadRecorder:
             """Subclass حقيقي من FileIO يحافظ على توافق RawIOBase/BufferedReader."""
 
             def __init__(self, file, *a, **kw):
+                fd_hint = file if isinstance(file, int) else None
+                path_hint = recorder._fd_paths.get(fd_hint) if fd_hint is not None else file
+                recorder.opened.append(
+                    f"io.FileIO:{path_hint if path_hint is not None else file}"
+                )
                 super().__init__(file, *a, **kw)
                 self._recorder_fd = self.fileno()
                 self._recorder_closed = False
@@ -249,12 +254,6 @@ class ReadRecorder:
                         self._recorder_closed = True
                         recorder._record_close(self._recorder_fd, "io.FileIO")
 
-        def spy_fileio(file, *a, **kw):
-            fd = file if isinstance(file, int) else None
-            path = recorder._fd_paths.get(fd) if fd is not None else file
-            recorder.opened.append(f"io.FileIO:{path if path is not None else file}")
-            return TrackedFileIO(file, *a, **kw)
-
         def spy_path_open(path_obj, *a, **kw):
             recorder.opened.append(f"Path.open:{path_obj}")
             return recorder._real_path_open(path_obj, *a, **kw)
@@ -267,7 +266,7 @@ class ReadRecorder:
             os.pread = spy_os_pread
         os.close = spy_os_close
         os.fdopen = spy_fdopen
-        io.FileIO = spy_fileio
+        io.FileIO = TrackedFileIO
         pathlib.Path.open = spy_path_open
         return self
 
