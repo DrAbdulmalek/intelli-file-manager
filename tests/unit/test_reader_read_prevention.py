@@ -848,11 +848,11 @@ def test_read_recorder_allows_bounded_header_probe(tmp_path):
 
 def test_read_recorder_detects_readlines_and_pread(tmp_path):
     target = tmp_path / "synthetic-secret-lines.txt"
-    target.write_bytes(b"first line\\nsecond line\\n")
+    target.write_bytes(b"first line\nsecond line\n")
     with ReadRecorder() as rec:
         fd = os.open(target, os.O_RDONLY)
         with os.fdopen(fd, "rb") as stream:
-            assert stream.readlines() == [b"first line\\n", b"second line\\n"]
+            assert stream.readlines() == [b"first line\n", b"second line\n"]
         with pytest.raises(AssertionError, match="قُرئ"):
             rec.assert_never_opened(str(target))
 
