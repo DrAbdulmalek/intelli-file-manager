@@ -29,7 +29,7 @@ class MultimodalProcessor:
     def _check_ocr(self):
         """توفر OCR — الخدمة المركزية (ocr-core) تتكفل بالمحركات والتراجع الرشيق."""
         try:
-            from . import ocr_service  # noqa: F401
+            from . import ocr_gateway  # noqa: F401
             self._ocr_available = True
         except Exception:
             self._ocr_available = False
@@ -58,10 +58,10 @@ class MultimodalProcessor:
             # فقط نُسجّل الخطأ لو لم نحصل على أي ميتاداتا
             result["error"] = basic["error"]
 
-        # OCR — عبر الخدمة المركزية (ocr-core)؛ العقد القديم محفوظ
+        # OCR — عبر البوابة التعاقدية (ocr_gateway → ocr-core)؛ العقد القديم محفوظ
         if self._ocr_available:
-            from .ocr_service import ocr_image
-            ocr_res = ocr_image(filepath)
+            from . import ocr_gateway
+            ocr_res = ocr_gateway.ocr_image(filepath)
             for key in ("extracted_text", "ocr_success", "ocr_error",
                         "ocr_engine", "ocr_confidence", "ocr_postprocess"):
                 if key in ocr_res:

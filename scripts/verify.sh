@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # verify.sh — بوابة التحقق قبل الالتزام (Harness Engineering v2.0)
 #
-# يتحقق من: (1) لا أسرار متتبَّعة (2) بوابة جودة المشروع.
+# يتحقق من: (1) لا أسرار متتبَّعة (2) بوابة جودة المشروع
+#           (3) بوابة استيرادات OCR — intelli-file-manager فقط (F004).
 # القاعدة الصفرية: عند فشل هذه البوابة → توقف، لا "تصلح بسرعة".
 #
 # الاستخدام:
@@ -102,6 +103,25 @@ gate_surya_engine() {
     fi
 }
 
+# بوابة استيرادات OCR (intelli-file-manager فقط) — F004: محركات OCR
+# (pytesseract/paddleocr/easyocr/rapidocr/surya/ocr_core) تُستورد حصراً
+# داخل البوابة المركزية src/core/ocr_service.py (الاسم التعاقدي: ocr_gateway)؛
+# أي استيراد مباشر لها في src/ خارجها يُحمرّ البوابة.
+GATE3_NAME=""; GATE3_OK=1; GATE3_OUT=""
+gate_ocr_imports() {
+    GATE3_NAME="ocr-imports-gateway"
+    local hits
+    hits="$(git ls-files 'src/' | grep '\.py$' | grep -v -x 'src/core/ocr_service.py' \
+        | xargs -r grep -l -E '^[[:space:]]*(from|import)[[:space:]]+(pytesseract|paddleocr|easyocr|rapidocr|surya|ocr_core)([[:space:]]|\.)' 2>/dev/null || true)"
+    if [[ -n "$hits" ]]; then
+        GATE3_OK=0
+        GATE3_OUT="استيراد مباشر خارج البوابة: $(echo "$hits" | head -3 | tr '\n' ' ')"
+    else
+        GATE3_OK=1
+        GATE3_OUT="صفر استيراد مباشر لمحركات OCR خارج src/core/ocr_service.py"
+    fi
+}
+
 if [[ $QUICK -eq 0 ]]; then
     case "$PROJECT" in
         ocr-core|translation-core|marathon-suite)
@@ -125,6 +145,7 @@ if [[ $QUICK -eq 0 ]]; then
             ;;
         intelli-file-manager)
             gate_pytest "tests/unit"
+            gate_ocr_imports
             ;;
         omni-medical-suite)
             gate_pytest "tests/" --collect-only
@@ -164,6 +185,11 @@ if [[ -n "$GATE2_NAME" ]]; then
     add_check "gate:$GATE2_NAME" "$( [[ $GATE2_OK -eq 1 ]] && echo pass || echo fail )" "$GATE2_OUT"
 fi
 
+# بوابة استيرادات OCR (intelli-file-manager — F004)
+if [[ -n "$GATE3_NAME" ]]; then
+    add_check "gate:$GATE3_NAME" "$( [[ $GATE3_OK -eq 1 ]] && echo pass || echo fail )" "$GATE3_OUT"
+fi
+
 # طبقة الذاكرة: ملاحظة إخبارية دائمًا (غيابها لا يحمرّ البوابة)
 MEM_NOTE="غير مفعلة في هذا المستودع — تخطي"
 if [[ -f memory/decisions.md && -f memory/lessons.md && -f memory/constraints.md ]]; then
@@ -176,7 +202,7 @@ add_check "memory-layer" "pass" "$MEM_NOTE"
 # ─────────────────────────────────────────────
 # 3. النتيجة
 # ─────────────────────────────────────────────
-PASSED=$(( ( SECRETS_OK && GATE_OK && GATE2_OK ) ? 1 : 0 ))
+PASSED=$(( ( SECRETS_OK && GATE_OK && GATE2_OK && GATE3_OK ) ? 1 : 0 ))
 
 if [[ "$FORMAT" == "json" ]]; then
     echo "{"

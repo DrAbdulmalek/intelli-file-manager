@@ -72,6 +72,22 @@ def tesseract_available() -> bool:
     return any(getattr(e, "name", "") == "tesseract" and e.available() for e in _get_engines())
 
 
+def pytesseract_available() -> bool:
+    """توفر pytesseract مباشرة (مسار legacy بلا ocr-core)."""
+    try:
+        import pytesseract  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def any_engine_available() -> bool:
+    """هل يوجد أي محرك OCR قابل للاستخدام (ocr-core أو pytesseract legacy)؟"""
+    if _get_engines():
+        return True
+    return pytesseract_available()
+
+
 def _legacy_pytesseract(filepath: str) -> dict:
     """مسار ما قبل المركزية — يبقى فقط للتثبيتات بلا ocr-core."""
     # حاجز دفاعي داخلي (مراجعة جلسة ChatGPT، المرحلة 2): كل منفذ قراءة
