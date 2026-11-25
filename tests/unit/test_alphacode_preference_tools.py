@@ -306,6 +306,7 @@ def test_unknown_category_is_rejected(env_paths):
     state = {}
     _init(state)
     result = _call("intellifile.record_user_correction",
-                   {"metadata": _META, "corrected_value": "اسم مريض",
+                   {"metadata": _META, "original_prediction": "مستندات",
+                    "corrected_value": "اسم مريض",
                     "source_session": "ui-1", "file_fingerprint": "FP1"}, state)
     assert result["result"]["isError"] is True
