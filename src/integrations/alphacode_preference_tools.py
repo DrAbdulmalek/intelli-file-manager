@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
 """أدوات تفضيلات التصنيف لجسر AlphaCode (MCP) — محلي بالكامل (P2)
 
-توسّع الخادم الموجود ``alphacode_mcp_server`` بسبع أدوات تعمل على
+توسّع الخادم الموجود ``alphacode_mcp_server`` بتسع أدوات تعمل على
 مخزن التفضيلات المحلي فقط، دون أي أداة نقل/حذف/تنفيذ:
 
-    intellifile.get_suggestion / record_user_correction / explain_rule /
-    list_applicable_rules / confirm_rule / disable_rule / enable_rule
+    get_suggestion / record_user_correction / confirm_feedback /
+    dismiss_feedback / explain_rule / list_applicable_rules /
+    confirm_rule / disable_rule / enable_rule
 
 حدود الأمان (متطلب المهمة §8):
   - النقل stdio محلي: هوية العميل = مستخدم نظام التشغيل صاحب الأنبوب —
     لا منفذ شبكي يُفتح إطلاقًا (أقصر من "localhost فقط").
   - لا shell، لا subprocess، لا عمليات ملف، لا cloud fallback.
   - لا يُقرأ محتوى أي ملف؛ الميتاداتا التي يرسلها العميل فقط.
-  - ``record_user_correction`` يُنشئ feedback + مرشحًا للمراجعة؛ التطبيق
-    الفعلي يتطلب ``user_confirmed=true`` صريحًا من الإنسان عبر العميل —
-    بلا هذا العلم تبقى الملاحظة pending_review ولا تتعلم.
+  - ``record_user_correction`` يعيد معاينة معلقة فقط؛ لا يطبق قاعدة.
+    يتطلب التطبيق استدعاءً منفصلًا لـ``confirm_feedback`` مع
+    ``user_confirmed=true``; ويمكن إلغاء المرشح عبر ``dismiss_feedback``.
   - سجل عمليات مُجرَّد (اختياري عبر IFM_ADAPTER_OPS_LOG): الوقت/الأداة/
     النتيجة فقط — بلا حقول payload.
 """
@@ -122,7 +123,7 @@ def _require_session(args: Dict[str, Any]) -> str:
     if not isinstance(session, str):
         raise PreferenceIntegrationError("source_session is required")
     session = session.strip()
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", session):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,117}", session):
         raise PreferenceIntegrationError("source_session must be an opaque token")
     return session
 
@@ -237,8 +238,8 @@ class PreferenceToolkit:
         session = _require_session(args)
         fingerprint = self._fingerprint(args)
         original = args.get("original_prediction")
-        if not isinstance(original, str):
-            original = ""
+        if not isinstance(original, str) or not original.strip():
+            raise PreferenceIntegrationError("original_prediction is required")
         corrected = args.get("corrected_value")
         if not isinstance(corrected, str) or not corrected.strip():
             raise PreferenceIntegrationError("corrected_value is required")
@@ -397,7 +398,7 @@ PREFERENCE_TOOLS = [
                 "file_fingerprint": {"type": "string"},
                 "file_path": {"type": "string"},
             },
-            "required": ["metadata", "corrected_value", "source_session"],
+            "required": ["metadata", "original_prediction", "corrected_value", "source_session"],
             "additionalProperties": False,
         },
         "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
