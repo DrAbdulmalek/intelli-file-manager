@@ -24,6 +24,8 @@ jobs:
         # pyaudio لا ينشر عجلات لينكس على PyPI -> يحتاج portaudio.h للبناء من المصدر
         sudo apt-get update -qq && sudo apt-get install -y -qq portaudio19-dev
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # التحليل العميق (--deep) يعتمد mutagen/Pillow/pypdf المعلنة في requirements-deep.txt
+        if [ -f requirements-deep.txt ]; then pip install -r requirements-deep.txt; fi
         pip install pytest pytest-asyncio httpx
 
     # fail-closed: غياب الاختبارات فشل — لا "No tests found" يخفيه
