@@ -379,11 +379,8 @@ class FeedbackEngine:
                 value = record.get("evidence", {}).get(key)
                 if isinstance(value, str) and value:
                     safe_metadata[key] = value
-            if isinstance(metadata, dict):
-                supplied = dict(metadata)
-                if "mime_type" not in supplied and "content_type" in supplied:
-                    supplied["mime_type"] = supplied["content_type"]
-                safe_metadata.update(sanitize_evidence(supplied))
+            # The preview is authoritative. Caller-supplied metadata is retained
+            # in the signature for compatibility but cannot alter the approved match.
             if not safe_metadata:
                 raise ValueError("safe_extension_or_mime_evidence_required")
 
