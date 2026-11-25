@@ -361,7 +361,7 @@ def test_apply_confirmed_sanitizes_caller_metadata(engines):
     feedback.confirm(record["feedback_id"])
     result = feedback.apply_confirmed(
         record["feedback_id"],
-        metadata={"extension": "/private/patient-report.pdf",
+        metadata={"extension": ".exe",
                   "name": "synthetic-sensitive-name"},
     )
     assert result["review_status"] == "applied"
