@@ -55,6 +55,7 @@ from src.core.rule_engine import RuleEngine  # noqa: E402
 from src.core.rule_schemas import Ruleset  # noqa: E402
 from src.core.safe_mover import SafeMover, compute_sha256, SafeMoveError  # noqa: E402
 from src.core.undo_log import UndoLog  # noqa: E402
+from src.core.rule_schemas import UndoEntry, ActionType  # noqa: E402
 
 try:
     from src.core.content_analyzer import enrich_record  # noqa: E402
@@ -365,6 +366,17 @@ def execute_plan(plan, root, *, batch_size=500, undo_log_path=None,
 
                     batch_stats["succeeded"] += 1
                     stats["files_succeeded"] += 1
+                    # UndoLog: record the move
+                    undo_log.append(UndoEntry(
+                        action_type=ActionType.MOVE.value,
+                        file_path=str(src),
+                        file_path_after=str(dst),
+                        rule_name=action.rule_name if hasattr(action, 'rule_name') else "",
+                        checksum_before=checksum_before,
+                        checksum_after=actual_after,
+                        success=True,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ))
 
                 elif action_type == "copy":
                     checksum_before = compute_sha256(src)
@@ -402,6 +414,20 @@ def execute_plan(plan, root, *, batch_size=500, undo_log_path=None,
                 elif action_type in ("tag", "untag", "set_category", "delete_flag"):
                     batch_stats["succeeded"] += 1
                     stats["files_succeeded"] += 1
+                    # UndoLog: record the sidecar action
+                    tags = []
+                    if action.action.tags:
+                        tags = list(action.action.tags)
+                    undo_log.append(UndoEntry(
+                        action_type=action_type,
+                        file_path=str(src),
+                        file_path_after=str(src),
+                        rule_name=action.rule_name if hasattr(action, 'rule_name') else "",
+                        tags_added=tags if action_type == "tag" else [],
+                        tags_removed=tags if action_type == "untag" else [],
+                        success=True,
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ))
 
                 else:
                     batch_stats["failed"] += 1
@@ -546,10 +572,37 @@ def main(argv=None) -> int:
         print("❌ خطأ: --deep يتطلب src/core/content_analyzer.py (غير موجود).", file=sys.stderr)
         return 2
 
-    root = Path(args.root)
+    root = Path(args.root).resolve()
     if not root.is_dir():
         print(f"خطأ: المسار غير موجود أو ليس مجلداً: {root}", file=sys.stderr)
-        return 2
+
+    # حماية ضد المسح الذاتي: --out و--undo-log و--log يجب أن تكون خارج --root
+    for opt_name, opt_val in (("--out", args.out), ("--undo-log", args.undo_log), ("--log", getattr(args, "log", ""))):
+        if not opt_val:
+            continue
+        try:
+            opt_path = Path(opt_val).resolve()
+        except (OSError, ValueError):
+            continue
+        try:
+            if opt_path.is_relative_to(root):
+                print(
+                    f"❌ خطأ: مسار الإخراج داخل الجذر — قد يُمسح ويُنقل أثناء التنفيذ.\n"
+                    f"   {opt_name}={opt_val} يقع داخل {root}.\n"
+                    f"   انقل {opt_name} و --undo-log خارج --root.",
+                    file=sys.stderr,
+                )
+                return 2
+        except (ValueError, AttributeError):
+            # Python <3.9 fallback
+            if str(opt_path).startswith(str(root)):
+                print(
+                    f"❌ خطأ: مسار الإخراج داخل الجذر — قد يُمسح ويُنقل أثناء التنفيذ.\n"
+                    f"   {opt_name}={opt_val} يقع داخل {root}.\n"
+                    f"   انقل {opt_name} و --undo-log خارج --root.",
+                    file=sys.stderr,
+                )
+                return 2
 
     records, stats = scan(str(root), include_content=args.include_content,
                           fast=args.fast, max_depth=args.max_depth, deep=args.deep)

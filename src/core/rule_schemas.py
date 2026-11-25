@@ -429,6 +429,7 @@ class UndoEntry:
     # checksum للنسخة المنشأة في عمليات copy (يحمي التراجع: إن عُدّل
     # الملف بعد النسخ يُرفض حذفه — جولة DeepSeek 11). متوافق خلفياً:
     # from_dict يفلتر المفاتيح، والقيم القديمة تُترك None
+    checksum_before: str = ""
     checksum_after: Optional[str] = None
     # معرّف الدفعة التي نُفِّذ فيها الإجراء (P1) — تسمح بالتراجع عن دفعة
     # كاملة عبر UndoLog.rollback_batch. فارغ للسجلات القديمة؛ توافق خلفي
