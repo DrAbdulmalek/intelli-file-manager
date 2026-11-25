@@ -946,18 +946,24 @@ def test_read_recorder_fdopen_proxy_preserves_common_stream_contract(tmp_path):
 
 def test_read_recorder_does_not_record_failed_close_as_closed(tmp_path):
     """فشل close لا ينتج دليلاً زائفاً على إغلاق الواصف."""
+    class FailingCloseStream:
+        closed = False
+
+        def close(self):
+            if not self.closed:
+                raise OSError("synthetic close failure")
+
     target = tmp_path / "fdopen-close-failure.txt"
     target.write_bytes(b"payload")
     with ReadRecorder() as rec:
         fd = os.open(target, os.O_RDONLY)
+        fake_stream = FailingCloseStream()
+        rec._real_os_fdopen = lambda *_a, **_kw: fake_stream
         stream = os.fdopen(fd, "rb")
-        real_close = stream._stream.close
-        def fail_close():
-            raise OSError("synthetic close failure")
-        stream._stream.close = fail_close
         with pytest.raises(OSError, match="synthetic close failure"):
             stream.close()
         assert not rec.closed
-        stream._stream.close = real_close
+        fake_stream.closed = True
         stream.close()
         assert rec.closed
+        os.close(fd)
