@@ -261,7 +261,13 @@ def analyze_file(file_path: str, ext: str, file_size: int) -> Tuple[Dict[str, ob
         if ext in _AUDIO_EXT:
             if file_size > MAX_AUDIO_BYTES:
                 return {}, [], "skip_size"
-            info = analyze_audio(p, ext)
+            try:
+                info = analyze_audio(p, ext)
+            except ImportError:
+                # تدهور رشيق (وضع --deep): بلا mutagen (requirements-deep غير
+                # مثبتة) يبقى الملف صوتًا بحكم الامتداد — بلا ميتاداتا، مع
+                # إشارة صريحة لغياب المكتبة بدل "unsupported" المضلل.
+                return {"audio_kind": "unknown", "mutagen_missing": True}, [], "audio"
             tags = []
             kind = info.get("audio_kind")
             if kind == "music":

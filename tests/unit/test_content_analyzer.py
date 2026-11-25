@@ -9,6 +9,7 @@
     و extra بمفتاح فرعي.
 """
 import contextlib
+import sys
 
 import pytest
 
@@ -113,6 +114,26 @@ def test_audio_wav_duration(tmp_path):
     assert result == "audio"
     assert extra["duration_seconds"] >= 0.9
     assert extra["audio_kind"] in ("voice_recording", "unknown")
+
+
+def test_audio_without_mutagen_still_classified_audio(tmp_path, monkeypatch):
+    """بلا mutagen (requirements-deep غير مثبتة): صوت بحكم الامتداد، لا unsupported.
+
+    تدهور رشيق موثق: النتيجة audio مع وسم صريح mutagen_missing، بلا ميتاداتا.
+    """
+    import wave
+    p = tmp_path / "rec.wav"
+    with contextlib.closing(wave.open(str(p), "w")) as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(8000)
+        w.writeframes(b"\x00\x00" * 8000)  # ثانية واحدة
+    monkeypatch.setitem(sys.modules, "mutagen", None)  # import mutagen → ImportError
+    extra, _, result = analyze_file(str(p), "wav", p.stat().st_size)
+    assert result == "audio"
+    assert extra.get("mutagen_missing") is True
+    assert extra.get("audio_kind") == "unknown"
+    assert "duration_seconds" not in extra
 
 
 # ─── الحاجز: الملف الحساس لا يُقرأ محتواه إطلاقاً ──────────────────────────
