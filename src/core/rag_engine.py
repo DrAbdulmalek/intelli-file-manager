@@ -4,6 +4,7 @@ import re
 from typing import List
 from pathlib import Path
 from .sensitive_barrier import is_sensitive_path
+from src.plugins.pii_gate import gate_text_for_indexing
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,13 @@ class RAGEngine:
 
             # تسوية النص العربي لتحسين البحث
             text = _normalize_arabic(text)
+
+            # بوابة PII (عقد PR #80): لا يدخل نص شخصي إلى ChromaDB —
+            # block: حجب (نص فارغ => يوقف الاستيعاب)، mask: إخفاء ثم فهرسة
+            text = gate_text_for_indexing(text, source=str(path))
+            if not text:
+                logger.info(f"بوابة PII حجبت استيعاب {path.name} — لم يُفهرس شيء")
+                return 0
 
             chunks = self._chunk_text(text, chunk_size)
             collection = self._client.get_or_create_collection(

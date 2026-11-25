@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — Integration Fixes (ربط بوابة PII + ترتيب التعريف — 2026-11-25)
+
+### أُصلح
+- **ربط بوابة PII فعليًا في `RAGEngine.ingest_file`** (`src/core/rag_engine.py`):
+  الإضافة كانت موجودة (`src/plugins/pii_gate.py`) مع تعليمات ربط صريحة في
+  ترويستها لكن الربط لم يُنفذ — أي نص شخصي كان يدخل ChromaDB دون حاجز.
+  الآن: `gate_text_for_indexing(text, source=...)` بعد التسوية العربية وقبل
+  التقسيم، مع حارس `return 0` عند الحجب (وضع block). اختبارات دائمة ×3:
+  mask يخفي ولا يفهرس PII خام، block يحجب كليًا، والنص النظيف يمر بلا
+  إيجاب كاذب (`tests/unit/test_pii_gate_wiring.py`).
+- **رفع `_SAFE_CATEGORY_RE` فوق `create_app()`** (`src/api/server.py`):
+  كان التعريف في أسفل الملف بعد `app = create_app()` (بند P0-5 من
+  `docs/REVIEW.md`) — أي استخدام أثناء بناء التطبيق يوقعت NameError.
+  الآن تعريف على مستوى الوحدة يسبق الاستدعاء، مع اختبارين يثبتان الترتيب
+  والوظيفة (عربي/لاتيني يقبل، `../escape` يرفض).
+
+### التحقق
+- 58 اختبار PII/حساسية (الجديد ×5 + plugin ×26 + reader ×27) ناجحة.
+- 168 وحدة + 61 + 8 تكامل snippets — ناجحة. ruff (E9,F63,F7,F82,F821) نظيف.
+- إقلاع حي: `uvicorn src.api.server:app` — `/openapi.json` 200 بـ36 مسارًا.
+
+---
+
 ## [Unreleased] — Review Follow-up (F19 متابعة ٢ — PR #78)
 
 ### أُصلح
