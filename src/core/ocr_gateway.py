@@ -18,15 +18,18 @@ from __future__ import annotations
 
 from . import ocr_service
 
+# ملاحظة F822: الأسماء أدناه لا تُعرَّف باستيراد ثابت على مستوى الوحدة بل يوفرها
+# `__getattr__` الديناميكي (PEP 562) عند كل وصول — وهذا مقصود ليصل أي monkeypatch
+# على ocr_service عبر البوابة. لذلك يُكفى الفحص الساكن بـnoqa على كل سطر.
 __all__ = [
-    "any_engine_available",
-    "enhance_image",
-    "ocr_core_available",
-    "ocr_image",
-    "paddle_available",
-    "pytesseract_available",
-    "reset_caches",
-    "tesseract_available",
+    "any_engine_available",  # noqa: F822
+    "enhance_image",  # noqa: F822
+    "ocr_core_available",  # noqa: F822
+    "ocr_image",  # noqa: F822
+    "paddle_available",  # noqa: F822
+    "pytesseract_available",  # noqa: F822
+    "reset_caches",  # noqa: F822
+    "tesseract_available",  # noqa: F822
 ]
 
 
