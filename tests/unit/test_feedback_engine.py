@@ -283,6 +283,9 @@ def test_custom_categories_are_registered_in_existing_preference_store(tmp_path)
     assert feedback.category_label(record["corrected_category_id"]) == "صور العائلة"
     assert "صور العائلة" not in feedback.log_path.read_text(encoding="utf-8")
     assert "صور العائلة" in store.path.read_text(encoding="utf-8")
+    reopened_store = PreferenceStore(store.path)
+    reopened_store.load()
+    assert reopened_store.get_category_label(record["corrected_category_id"]) == "صور العائلة"
     assert not (tmp_path / "category_store.json").exists()
 
 
@@ -292,6 +295,7 @@ def test_unknown_category_rejected_without_feedback_write(engines):
         _capture(feedback, corrected="اسم شخص حساس")
     assert not feedback.log_path.exists()
     assert engine.list_rules() == []
+    assert engine.store.list_categories() == {}
 
 
 def test_name_only_evidence_cannot_create_learning_candidate(engines):
@@ -369,3 +373,41 @@ def test_apply_confirmed_sanitizes_caller_metadata(engines):
     assert rule["match"]["value"] == ".png"
     assert "/private" not in json.dumps(rule)
     assert "synthetic-sensitive-name" not in json.dumps(rule)
+
+def test_legacy_feedback_public_reads_redact_free_text_and_path_like_ids(tmp_path):
+    store = PreferenceStore(tmp_path / "prefs.json")
+    engine = PreferenceEngine(store)
+    store.load()
+    legacy = {
+        "type": "feedback",
+        "feedback_id": "legacy-feedback-1",
+        "timestamp": "2026-11-24T00:00:00Z",
+        "source_session": "/home/user/private",
+        "file_fingerprint": "/home/user/private/report.pdf",
+        "original_prediction": "اسم شخص اصطناعي",
+        "corrected_value": "اسم مريض اصطناعي",
+        "user_action": "correct",
+        "source_rule_id": None,
+        "application_version": "unknown",
+        "evidence": {"name": "secret-report.pdf", "extension": "/private"},
+        "review_status": "pending_review",
+        "candidate": {
+            "match": {"kind": "name_contains", "value": "secret-report"},
+            "scope_kind": "file",
+            "scope_value": "/home/user/private/report.pdf",
+            "destination_category": "اسم مريض اصطناعي",
+        },
+    }
+    log_path = tmp_path / "feedback.jsonl"
+    log_path.write_text(json.dumps(legacy, ensure_ascii=False) + "\\n", encoding="utf-8")
+    feedback = FeedbackEngine(engine, log_path)
+    public = feedback.get_feedback("legacy-feedback-1")
+    assert "original_prediction" not in public
+    assert "corrected_value" not in public
+    assert "file_fingerprint" not in public
+    assert "source_session" not in public
+    assert public["evidence"] == {}
+    assert "match" not in public["candidate"]
+    assert "destination_category" not in public["candidate"]
+    # Existing append-only data is not rewritten or silently deleted.
+    assert "اسم مريض اصطناعي" in log_path.read_text(encoding="utf-8")
