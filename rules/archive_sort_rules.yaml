@@ -1,7 +1,7 @@
 # =============================================================================
 # Archive Sort Ruleset — مبني على القرار الموحد لفرز الأرشيف (2026-11-24)
 # المسار المستهدف: /run/media/xorthomson/My Passport/  (NTFS — fuseblk)
-# الأداة: intelli-file-manager | المرجع: GitHub main = 5a96a05 (الإصدار 1.7)
+# الأداة: intelli-file-manager | المرجع: فرع feat/archive-sort-unified-decision
 # =============================================================================
 # هذا الملف يُستهلك عبر Ruleset.from_yaml() ثم RuleEngine.dry_run() للإنتاج
 # خطة محاكاة (HTML) بلا أي كتابة على القرص. لا يُنفَّذ فعلياً قبل اعتماد
@@ -21,13 +21,54 @@
 # لذلك القواعد الأكثر تحديداً (الأعلى أولوية) تسبق القواعد العامة. الحقول
 # المتاحة للشروط: extension, category, file_name, file_path, parent_dir,
 # file_size, mime_type, content_type, is_duplicate, has_tag, has_exif, extra.
-# لا يدعم المحرك شرط "أكبر من X وأصغر من Y" في قاعدة واحدة (شرط واحد لكل
-# حقل)، لذا يُطبَّق النطاق [400MB, 500MB] عبر قاعدة وسيطة + القاعدة العامة.
+# لا يدعم المحرك شرط "أكبر من X وأصغر من Y" في قاعدة واحدة (شرط واحد لكل حقل).
+# عتبة الثقل الموحدة المعتمدة: 500MB فقط (لا نطاق وسيط — تصحيح تعليق سابق).
+#
+# تعديلات مراجعة تقرير المحاكاة الفعلي (2026-11-25، 274,851 ملف / 264,118 إجراء):
+#   * صفحات الويب html/htm/mhtml → أرشيف_مؤرخ (كانت: html→مستودعات_كود، htm→غير_مصنّف)
+#     تنفيذاً لتعديل «فلاتر HTML» المعتمد — خارج دفعات وثائق ومستودعات الكود.
+#   * إلغاء النقل الفردي لملفات .git (كان يخطط 363 ملفاً كلها إلى مسار واحد
+#     مستودعات_كود/<الاسم> = تصادم إلزامي) → وسم فقط، والمستودع يُنقل كتلة
+#     واحدة (دليل كامل) في مرحلة مستودعات مستقلة، تنفيذاً لتعديل المراجعة 4.
+#   * فئة أنظمة (exe/dll/msi…) كانت بلا قاعدة → 11,446 ملفاً متخطى؛ الآن أرشيف_مؤرخ.
+#   * فئة خطوط كانت بلا قاعدة → غير_مصنّف بوسم للقرار البشري.
+#   * امتدادات التنزيل الجزئي المشتبهة (mp3_/jpg_/jpeg_/png_) → سلة_تحقق (المشتبهة).
+#   * نسخة قاعدة البيانات الاحتياطية crops_backup_* → أرشيف_مؤرخ (الإعفاء للحية فقط).
+#
+# وضع التحليل العميق (--deep، 2026-11-25): عند تشغيل السكريبت بهذا الوسم يقرأ
+# المحرك محتوى المستندات (نص/PDF/Office/ODT/EPUB) ويحلل الصور (EXIF/كشف
+# لقطات الشاشة/ألوان سائدة/رمادي) والصوت (وسوم ID3/المدة — عبر mutagen بلا
+# حاجة لـ ffprobe) محلياً بالكامل وخلف حاجز الحساسيات (الملف الحساس لا يُفتح
+# محتواه إطلاقاً — يُوسم sensitive-no-deep فقط). يملأ extra_metadata (مثل
+# image_kind, width, height, dominant_colors, duration_seconds, audio_kind,
+# content_lang, doc_type) ووسوم الملفات: screenshot، camera-photo،
+# music-tagged، voice-recording، grayscale-image، deep:ar/deep:en، doc:<نوع>.
+# استهلاكها في القواعد: has_tag (eq + اسم الوسم) أو extra بمفتاح فرعي
+# (مثال: field: extra, op: eq, value: screenshot, key: image_kind).
+# قواعد الفرز الفرعي للوسائط في نهاية الملف معطلة افتراضياً — تفعيلها ينشئ
+# مجلدات فرعية داخل وسائط وهو توسيع للقرار الموحد يحتاج اعتماد المالك أولاً.
 # =============================================================================
 
 name: Archive Sort — Unified Decision Nov 2026
 description: قواعد فرز قرص My Passport وفق القرار الموحد (محاكاة إلزامية قبل التنفيذ)
 rules:  # ═══════════════════════════════════════════════════════════════════════
+  # (0) نسخة قاعدة البيانات الاحتياطية — أرشيف لا بيانات حية
+  #     (مراجعة التقرير: crops_backup_2026-11-24.db كانت تذهب إلى غير_مصنّف؛
+  #      الإعفاء بالاسم الأصلي للقاعدة الحية فقط)
+  - name: Database backup files
+    description: نسخ crops.db الاحتياطية إلى أرشيف_مؤرخ بوسم db-backup
+    priority: 1010
+    enabled: true
+    conditions:
+      - field: file_name
+        op: contains
+        value: crops_backup
+    actions:
+      - type: move
+        target: أرشيف_مؤرخ
+      - type: tag
+        value: db-backup
+
   # (1) بيانات_حية — exemption: crops.db الحية لا تُعاد تسميتها ولا تُؤرشف
   #     القرار: نقل لا نسخ بعد تأمين نسختين خارجيتين؛ تبقى باسمها.
   # ═══════════════════════════════════════════════════════════════════════
@@ -46,11 +87,14 @@ rules:  # ═══════════════════════�
         value: بيانات_حية
 
   # ═══════════════════════════════════════════════════════════════════════
-  # (1b) كتلة برمجية: مستودع يحوي .git يُنقل كوحدة كاملة إلى مستودعات_كود
-  #      (تعديل المراجعة المستقلة 4 — .git ككتلة واحدة).
+  # (1b) كتلة برمجية: مستودع يحوي .git يُوسم فقط — لا نقل فردي.
+  #      مراجعة التقرير أثبتت التصادم: 363 ملفاً باسم __init__.py و226 باسم
+  #      index.html كانت كلها تنتهي إلى مسار واحد مستودعات_كود/<الاسم>.
+  #      القرار 4 (المراجعة المستقلة): المستودع كتلة واحدة تُنقل كدليل كامل
+  #      في «مرحلة المستودعات» المستقلة (نقل دليل عبر SafeMover)، لا ملف-ملف.
   # ═══════════════════════════════════════════════════════════════════════
   - name: Code block with .git
-    description: مستودع يحوي .git — يُنقل كوحدة كاملة إلى مستودعات_كود
+    description: ملفات داخل مستودع (.git) — وسم فقط، النقل كتلة كاملة في مرحلة المستودعات
     priority: 980
     enabled: true
     conditions:
@@ -58,10 +102,10 @@ rules:  # ═══════════════════════�
         op: contains
         value: .git
     actions:
-      - type: move
-        target: مستودعات_كود
       - type: set_category
         value: برمجة
+      - type: tag
+        value: repo-block-no-individual-move
 
   # ═══════════════════════════════════════════════════════════════════════
   # (2) سلة_تحقق — المكررات ( SHA-256 مطابق ) لا تُحذف، المحتفظ به المرجع
@@ -81,8 +125,116 @@ rules:  # ═══════════════════════�
         value: duplicate
 
   # ═══════════════════════════════════════════════════════════════════════
-  # (3) أرشيف_مؤرخ — الملفات الثقيلة فوق العتبة (500MB) أولاً
-  #     النطاق [400MB,500MB] عبر قاعدة وسيطة أقل أولوية؛ >500MB هنا.
+  # (2b) صفحات الويب المحفوظة — أرشيف_مؤرخ بوسم web-page (فلاتر HTML المعتمدة)
+  #      مراجعة التقرير: 4,929 ملف html كانت → مستودعات_كود، و24,219 ملف htm
+  #      كانت → غير_مصنّف. الآن جميعها أرشيف_مؤرخ (دون لمس ما داخل .git —
+  #      قاعدة الكتلة 980 أسبق).
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Web pages html
+    description: صفحات .html المحفوظة إلى أرشيف_مؤرخ
+    priority: 890
+    enabled: true
+    conditions:
+      - field: extension
+        op: eq
+        value: html
+    actions:
+      - type: move
+        target: أرشيف_مؤرخ
+      - type: tag
+        value: web-page
+
+  - name: Web pages htm
+    description: صفحات .htm المحفوظة إلى أرشيف_مؤرخ
+    priority: 889
+    enabled: true
+    conditions:
+      - field: extension
+        op: eq
+        value: htm
+    actions:
+      - type: move
+        target: أرشيف_مؤرخ
+      - type: tag
+        value: web-page
+
+  - name: Web pages mhtml
+    description: صفحات .mhtml المحفوظة إلى أرشيف_مؤرخ
+    priority: 888
+    enabled: true
+    conditions:
+      - field: extension
+        op: eq
+        value: mhtml
+    actions:
+      - type: move
+        target: أرشيف_مؤرخ
+      - type: tag
+        value: web-page
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (2c) تنزيلات جزئية مشتبهة — سلة_تحقق (لا حذف؛ مراجعة بشرية)
+  #      مراجعة التقرير: 11,514 ملفاً بامتدادات مزدوجة النهاية (mp3_ 6,030،
+  #      jpg_ 5,412، png_ 62، jpeg_ 10) كانت تسقط في غير_مصنّف.
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Suspected partial mp3_
+    description: ملفات mp3_ المشتبه بأنها تنزيلات جزئية إلى سلة_تحقق
+    priority: 880
+    enabled: true
+    conditions:
+      - field: extension
+        op: eq
+        value: mp3_
+    actions:
+      - type: move
+        target: سلة_تحقق
+      - type: tag
+        value: suspected-partial
+
+  - name: Suspected partial jpg_
+    description: ملفات jpg_ المشتبه بأنها تنزيلات جزئية إلى سلة_تحقق
+    priority: 879
+    enabled: true
+    conditions:
+      - field: extension
+        op: eq
+        value: jpg_
+    actions:
+      - type: move
+        target: سلة_تحقق
+      - type: tag
+        value: suspected-partial
+
+  - name: Suspected partial jpeg_
+    description: ملفات jpeg_ المشتبه بأنها تنزيلات جزئية إلى سلة_تحقق
+    priority: 878
+    enabled: true
+    conditions:
+      - field: extension
+        op: eq
+        value: jpeg_
+    actions:
+      - type: move
+        target: سلة_تحقق
+      - type: tag
+        value: suspected-partial
+
+  - name: Suspected partial png_
+    description: ملفات png_ المشتبه بأنها تنزيلات جزئية إلى سلة_تحقق
+    priority: 877
+    enabled: true
+    conditions:
+      - field: extension
+        op: eq
+        value: png_
+    actions:
+      - type: move
+        target: سلة_تحقق
+      - type: tag
+        value: suspected-partial
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (3) أرشيف_مؤرخ — الملفات الثقيلة فوق العتبة الموحدة (500MB)
   # ═══════════════════════════════════════════════════════════════════════
   - name: Heavy files over 500MB
     description: ملفات أكبر من 500 ميجابايت إلى أرشيف_مؤرخ (عتبة موحدة قابلة للضبط)
@@ -97,6 +249,37 @@ rules:  # ═══════════════════════�
         target: أرشيف_مؤرخ
       - type: tag
         value: heavy-file
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (3b) فئة أنظمة وخطوط — كانتا بلا قاعدة (11,446 ملفاً متخطى في التقرير)
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: System binaries to archive
+    description: الملفات التنفيذية والمكتبات (exe/dll/msi…) إلى أرشيف_مؤرخ
+    priority: 795
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: أنظمة
+    actions:
+      - type: move
+        target: أرشيف_مؤرخ
+      - type: tag
+        value: system-file
+
+  - name: Fonts to unsorted for decision
+    description: ملفات الخطوط إلى غير_مصنّف بوسم خطوط-للقرار البشري
+    priority: 794
+    enabled: true
+    conditions:
+      - field: category
+        op: eq
+        value: خطوط
+    actions:
+      - type: move
+        target: غير_مصنّف
+      - type: tag
+        value: fonts-need-decision
 
   # ═══════════════════════════════════════════════════════════════════════
   # (4) مستودعات_كود — ملفات التوثيق الملازمة (README/CHANGELOG) أولاً
@@ -217,3 +400,66 @@ rules:  # ═══════════════════════�
     actions:
       - type: move
         target: غير_مصنّف
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # (8) فرز فرعي للوسائط بالتحليل العميق — معطلة بانتظار اعتماد المالك
+  #     تعمل فقط مع --deep (وسوم content_analyzer). تفعيل أي منها يعني
+  #     إنشاء مجلد فرعي داخل وسائط = توسيع للقرار الموحد (8 مجلدات) →
+  #     قرار مالك بندي. حتى التفعيل: الوسوم تُكتب في الميتاداتا والتقرير
+  #     دون أي تغيير وجهات.
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: Screenshots sub-sort (needs owner approval)
+    description: لقطات الشاشة (بلا EXIF كاميرا + نمط الاسم/الأبعاد) إلى وسائط/لقطات_شاشة
+    priority: 620
+    enabled: false
+    conditions:
+      - field: has_tag
+        op: eq
+        value: screenshot
+    actions:
+      - type: move
+        target: وسائط/لقطات_شاشة
+      - type: tag
+        value: sub-sorted
+
+  - name: Camera photos sub-sort (needs owner approval)
+    description: صور الكاميرا (EXIF صانع/موديل) إلى وسائط/صور_كاميرا
+    priority: 619
+    enabled: false
+    conditions:
+      - field: has_tag
+        op: eq
+        value: camera-photo
+    actions:
+      - type: move
+        target: وسائط/صور_كاميرا
+      - type: tag
+        value: sub-sorted
+
+  - name: Music sub-sort (needs owner approval)
+    description: الصوتيات الموسومة بوسوم فنان/ألبوم إلى وسائط/موسيقى
+    priority: 618
+    enabled: false
+    conditions:
+      - field: has_tag
+        op: eq
+        value: music-tagged
+    actions:
+      - type: move
+        target: وسائط/موسيقى
+      - type: tag
+        value: sub-sorted
+
+  - name: Voice recordings sub-sort (needs owner approval)
+    description: التسجيلات الصوتية (بلا وسوم + مدة/امتداد هاتف) إلى وسائط/تسجيلات_صوتية
+    priority: 617
+    enabled: false
+    conditions:
+      - field: has_tag
+        op: eq
+        value: voice-recording
+    actions:
+      - type: move
+        target: وسائط/تسجيلات_صوتية
+      - type: tag
+        value: sub-sorted
