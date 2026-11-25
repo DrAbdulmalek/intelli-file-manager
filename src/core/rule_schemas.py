@@ -245,6 +245,17 @@ def _get_field_value(metadata: dict, field_name: str, key: Optional[str] = None)
 
 def _evaluate_condition(cond: Condition, metadata: dict) -> bool:
     """يقيّم شرطًا واحدًا ضد قاموس الميتاداتا"""
+    # has_tag معالجة خاصة: قيمة الشرط هي اسم الوسم المطلوب في tags.
+    # (إصلاح: كانت تعتمد مفتاح _tag_to_check الذي لا يضخه أحد فلا تطابق أبداً)
+    if cond.field == "has_tag":
+        tags = metadata.get("tags", []) or []
+        if cond.op == ConditionOp.EXISTS.value:
+            return bool(tags)
+        if cond.op == ConditionOp.EQ.value:
+            if "_tag_to_check" in metadata:  # توافق مع الواجهة القديمة
+                return metadata.get("_tag_to_check") in tags
+            return str(cond.value) in tags
+        return False
     field_value = _get_field_value(metadata, cond.field, cond.key)
     op = cond.op
     target = cond.value
