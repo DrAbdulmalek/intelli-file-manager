@@ -95,11 +95,17 @@ class _TrackedStream:
             raise StopIteration
         return line
 
+    @property
+    def __class__(self):
+        # يجعل isinstance(proxy, type(real_stream)) متوافقاً في الاستخدام المعتاد.
+        # type(proxy) يبقى _TrackedStream؛ لا يمكن لهذا الـproxy ضمان تطابق الهوية.
+        return self._stream.__class__
+
     def close(self):
-        try:
-            return self._stream.close()
-        finally:
+        result = self._stream.close()
+        if getattr(self._stream, "closed", False):
             self._recorder._record_close(self._fd, self._label)
+        return result
 
     def __enter__(self):
         self._stream.__enter__()
@@ -109,7 +115,8 @@ class _TrackedStream:
         try:
             return self._stream.__exit__(*exc)
         finally:
-            self._recorder._record_close(self._fd, self._label)
+            if getattr(self._stream, "closed", False):
+                self._recorder._record_close(self._fd, self._label)
 
     def __getattr__(self, name):
         return getattr(self._stream, name)
@@ -193,8 +200,9 @@ class ReadRecorder:
             return data
 
         def spy_os_close(fd):
+            result = recorder._real_os_close(fd)
             recorder._record_close(fd, "os.close")
-            return recorder._real_os_close(fd)
+            return result
 
         def spy_fdopen(fd, *a, **kw):
             path = recorder._fd_paths.get(fd)
@@ -917,3 +925,39 @@ def test_read_recorder_fileio_subclass_is_buffered_reader_compatible(tmp_path):
                    for event in rec.read_events)
         assert sum(event["bytes"] for event in rec.read_events
                    if event["path"] == os.path.realpath(str(target))) >= 5
+
+
+def test_read_recorder_fdopen_proxy_preserves_common_stream_contract(tmp_path):
+    """proxy يحافظ على واجهات الملف الشائعة وisinstance، مع بقاء type(proxy) مختلفاً."""
+    target = tmp_path / "fdopen-contract.txt"
+    target.write_bytes(b"alpha\\nbeta\\n")
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        stream = os.fdopen(fd, "rb")
+        assert isinstance(stream, io.BufferedReader)
+        assert stream.name == fd
+        assert stream.mode == "rb"
+        assert stream.read(5) == b"alpha"
+        assert stream.closed is False
+        stream.close()
+        assert stream.closed is True
+        assert rec._fd_bytes[fd] == 5
+
+
+def test_read_recorder_does_not_record_failed_close_as_closed(tmp_path):
+    """فشل close لا ينتج دليلاً زائفاً على إغلاق الواصف."""
+    target = tmp_path / "fdopen-close-failure.txt"
+    target.write_bytes(b"payload")
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        stream = os.fdopen(fd, "rb")
+        real_close = stream._stream.close
+        def fail_close():
+            raise OSError("synthetic close failure")
+        stream._stream.close = fail_close
+        with pytest.raises(OSError, match="synthetic close failure"):
+            stream.close()
+        assert not rec.closed
+        stream._stream.close = real_close
+        stream.close()
+        assert rec.closed
