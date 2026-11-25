@@ -20,8 +20,9 @@ from . import ocr_service
 
 # ملاحظة F822: الأسماء أدناه لا تُعرَّف باستيراد ثابت على مستوى الوحدة بل يوفرها
 # `__getattr__` الديناميكي (PEP 562) عند كل وصول — وهذا مقصود ليصل أي monkeypatch
-# على ocr_service عبر البوابة. لذلك يُكفى الفحص الساكن بـnoqa على كل سطر.
-__all__ = [
+# على ocr_service عبر البوابة. noqa على سطر الإعلان لـpyflakes (flake8 يسند
+# المخالفات كلها لسطر __all__) وعلى كل عنصر لـruff الذي يسندها للعناصر.
+__all__ = [  # noqa: F822
     "any_engine_available",  # noqa: F822
     "enhance_image",  # noqa: F822
     "ocr_core_available",  # noqa: F822
