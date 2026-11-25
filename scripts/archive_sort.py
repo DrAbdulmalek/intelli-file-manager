@@ -45,6 +45,7 @@ import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 # ضمان إمكانية الاستيراد عند التشغيل المباشر (نمط المشروع: src.core.*)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
