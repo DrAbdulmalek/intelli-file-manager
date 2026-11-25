@@ -23,10 +23,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from src.core.config import CATEGORIES, Config
 from src.core.feedback_engine import FeedbackEngine, fingerprint_path
 from src.core.preference_engine import PreferenceEngine, Suggestion
 from src.core.preference_store import PreferenceStore
@@ -41,6 +43,8 @@ MAX_METADATA_VALUE_LEN = 200
 _PREFERENCE_TOOL_NAMES = (
     "intellifile.get_suggestion",
     "intellifile.record_user_correction",
+    "intellifile.confirm_feedback",
+    "intellifile.dismiss_feedback",
     "intellifile.explain_rule",
     "intellifile.list_applicable_rules",
     "intellifile.confirm_rule",
@@ -115,9 +119,12 @@ def _clean_metadata(metadata: Any) -> Dict[str, Any]:
 
 def _require_session(args: Dict[str, Any]) -> str:
     session = args.get("source_session")
-    if not isinstance(session, str) or not session.strip():
+    if not isinstance(session, str):
         raise PreferenceIntegrationError("source_session is required")
-    return session.strip()[:MAX_SESSION_LEN]
+    session = session.strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", session):
+        raise PreferenceIntegrationError("source_session must be an opaque token")
+    return session
 
 
 def _require_rule_id(args: Dict[str, Any]) -> str:
@@ -131,9 +138,19 @@ class PreferenceToolkit:
     """جسر بين أدوات MCP ومحرك التفضيلات — بلا أي عملية ملف."""
 
     def __init__(self, store_path: Optional[Path] = None,
-                 feedback_path: Optional[Path] = None):
+                 feedback_path: Optional[Path] = None,
+                 allowed_categories: Optional[list[str]] = None):
         self.store_path = store_path or _default_store_path()
         self.feedback_path = feedback_path or _default_feedback_path(self.store_path)
+        if allowed_categories is None:
+            try:
+                allowed_categories = Config.load().categories
+            except Exception:
+                allowed_categories = CATEGORIES
+        self.allowed_categories = tuple(
+            dict.fromkeys(item.strip() for item in allowed_categories
+                          if isinstance(item, str) and item.strip())
+        )
         self._engine: Optional[PreferenceEngine] = None
         self._feedback: Optional[FeedbackEngine] = None
 
@@ -146,7 +163,10 @@ class PreferenceToolkit:
     @property
     def feedback(self) -> FeedbackEngine:
         if self._feedback is None:
-            self._feedback = FeedbackEngine(self.engine, self.feedback_path)
+            self._feedback = FeedbackEngine(
+                self.engine, self.feedback_path,
+                allowed_categories=list(self.allowed_categories),
+            )
         return self._feedback
 
     # ─── المعالجات ─────────────────────────────────────────────────────────
@@ -169,6 +189,10 @@ class PreferenceToolkit:
             return self._get_suggestion(args)
         if tool_name == "intellifile.record_user_correction":
             return self._record_user_correction(args)
+        if tool_name == "intellifile.confirm_feedback":
+            return self._confirm_feedback(args)
+        if tool_name == "intellifile.dismiss_feedback":
+            return self._dismiss_feedback(args)
         if tool_name == "intellifile.explain_rule":
             return self._explain_rule(args)
         if tool_name == "intellifile.list_applicable_rules":
@@ -183,8 +207,8 @@ class PreferenceToolkit:
 
     def _fingerprint(self, args: Dict[str, Any]) -> str:
         fp = args.get("file_fingerprint")
-        if isinstance(fp, str) and fp.strip():
-            return fp.strip()[:64]
+        if isinstance(fp, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", fp.strip()):
+            return fp.strip()
         path = args.get("file_path")
         if isinstance(path, str) and path.strip():
             return fingerprint_path(path)  # تجزئة — المسار نفسه لا يُخزَّن
@@ -208,48 +232,74 @@ class PreferenceToolkit:
         }
 
     def _record_user_correction(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a pending preview only; a separate call is required to apply."""
         metadata = _clean_metadata(args.get("metadata"))
         session = _require_session(args)
         fingerprint = self._fingerprint(args)
         original = args.get("original_prediction")
+        if not isinstance(original, str):
+            original = ""
         corrected = args.get("corrected_value")
         if not isinstance(corrected, str) or not corrected.strip():
             raise PreferenceIntegrationError("corrected_value is required")
         corrected = corrected.strip()[:MAX_CATEGORY_LEN]
-        user_confirmed = args.get("user_confirmed") is True  # موافقة صريحة إلزامية
+
+        safe_metadata = {
+            "extension": metadata.get("extension"),
+            "mime_type": metadata.get("mime_type") or metadata.get("content_type"),
+        }
+        safe_metadata = {key: value for key, value in safe_metadata.items()
+                         if isinstance(value, str) and value.strip()}
+        if not safe_metadata:
+            raise PreferenceIntegrationError(
+                "a safe extension or MIME type is required for learning"
+            )
+
         record = self.feedback.capture(
             user_action="correct",
-            original_prediction=str(original) if isinstance(original, str) else "",
+            original_prediction=original,
             session_id=f"alphacode:{session}",
             file_fingerprint=fingerprint,
             corrected_value=corrected,
-            evidence={
-                "extension": metadata.get("extension"),
-                "mime_type": metadata.get("mime_type") or metadata.get("content_type"),
-            },
+            evidence=safe_metadata,
             source_rule_id=args.get("source_rule_id"),
         )
-        applied = None
-        if user_confirmed and record["review_status"] == "pending_review":
-            self.feedback.confirm(record["feedback_id"])
-            applied = self.feedback.apply_confirmed(
-                record["feedback_id"],
-                metadata=metadata,
-                original_category=str(original) if isinstance(original, str) else "",
-                session_id=f"alphacode:{session}",
-                file_fingerprint=fingerprint,
-            )
+        candidate = record.get("candidate") or {}
         return {
             "feedback_id": record["feedback_id"],
-            "review_status": self.feedback.get_feedback(
-                record["feedback_id"])["review_status"],
-            "applied": applied,
-            "duplicate": record["duplicate"],
-            "candidate_conflict": record.get("candidate", {}).get(
-                "conflict_with_existing", False)
-            if record.get("candidate") else False,
-            "note": "بلا user_confirmed=true تبقى الملاحظة بانتظار المراجعة البشرية",
+            "review_status": record["review_status"],
+            "applied": None,
+            "preview": {
+                "original_category": original or None,
+                "corrected_category": corrected,
+                "match": candidate.get("match"),
+                "conflict": bool(candidate.get("conflict_with_existing", False)),
+                "requires_explicit_confirmation": True,
+                "file_operations": False,
+            },
+            "note": "لم تُطبّق القاعدة؛ راجع المعاينة ثم استدعِ confirm_feedback بموافقة صريحة",
         }
+
+    def _confirm_feedback(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        feedback_id = args.get("feedback_id")
+        if not isinstance(feedback_id, str) or not feedback_id.strip():
+            raise PreferenceIntegrationError("feedback_id is required")
+        if args.get("user_confirmed") is not True:
+            raise PreferenceIntegrationError("explicit_user_confirmation_required")
+        self.feedback.confirm(feedback_id.strip())
+        applied = self.feedback.apply_confirmed(feedback_id.strip())
+        return {
+            "feedback_id": feedback_id.strip(),
+            "review_status": applied["review_status"],
+            "applied": applied,
+            "note": "تم تطبيق قاعدة تفضيل محلية بعد موافقة منفصلة؛ لم تُنفّذ أي عملية ملف",
+        }
+
+    def _dismiss_feedback(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        feedback_id = args.get("feedback_id")
+        if not isinstance(feedback_id, str) or not feedback_id.strip():
+            raise PreferenceIntegrationError("feedback_id is required")
+        return self.feedback.dismiss(feedback_id.strip())
 
     def _explain_rule(self, args: Dict[str, Any]) -> Dict[str, Any]:
         rule_id = _require_rule_id(args)
@@ -333,17 +383,19 @@ PREFERENCE_TOOLS = [
     },
     {
         "name": "intellifile.record_user_correction",
-        "description": "Record a human classification correction. Creates a pending review candidate; applies to learning ONLY when user_confirmed=true (explicit human approval). Mutates the local preference store, never files.",
+        "description": "Record a human classification correction and return a safe preview. Never applies a rule in this call; use confirm_feedback as a separate explicit approval step. Mutates local feedback only, never files.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "metadata": _PREF_METADATA_SCHEMA,
                 "original_prediction": {"type": "string"},
-                "corrected_value": {"type": "string"},
+                "corrected_value": {
+                    "type": "string",
+                    "description": "Must match a configured category; this call creates a pending preview only.",
+                },
                 "source_session": {"type": "string"},
                 "file_fingerprint": {"type": "string"},
                 "file_path": {"type": "string"},
-                "user_confirmed": {"type": "boolean", "default": False},
             },
             "required": ["metadata", "corrected_value", "source_session"],
             "additionalProperties": False,
@@ -406,6 +458,31 @@ PREFERENCE_TOOLS = [
             "type": "object",
             "properties": {"rule_id": {"type": "string"}},
             "required": ["rule_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
+    },
+    {
+        "name": "intellifile.confirm_feedback",
+        "description": "Apply one previously previewed feedback candidate only after a separate explicit human approval. Mutates local preferences, never files.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "feedback_id": {"type": "string"},
+                "user_confirmed": {"type": "boolean"},
+            },
+            "required": ["feedback_id", "user_confirmed"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
+    },
+    {
+        "name": "intellifile.dismiss_feedback",
+        "description": "Dismiss a pending feedback candidate without changing learned preferences.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"feedback_id": {"type": "string"}},
+            "required": ["feedback_id"],
             "additionalProperties": False,
         },
         "annotations": {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False},
