@@ -150,7 +150,12 @@ def test_disable_enable_and_explain_flow(env_paths):
                             "corrected_value": "صور", "source_session": "ui-1",
                             "file_fingerprint": "FP1", "user_confirmed": True},
                            state)["result"]["content"][0]["text"])
-    rule_id = rec["applied"]["engine_result"]["rule_id"]
+    assert rec["review_status"] == "pending_review"
+    assert rec["applied"] is None
+    approved = _call("intellifile.confirm_feedback",
+                     {"feedback_id": rec["feedback_id"], "user_confirmed": True}, state)
+    applied = json.loads(approved["result"]["content"][0]["text"])
+    rule_id = applied["applied"]["engine_result"]["rule_id"]
     # disable → لا اقتراح
     d = json.loads(_call("intellifile.disable_rule", {"rule_id": rule_id}, state)
                    ["result"]["content"][0]["text"])
@@ -177,10 +182,13 @@ def test_disable_enable_and_explain_flow(env_paths):
 def test_list_applicable_rules(env_paths):
     state = {}
     _init(state)
-    _call("intellifile.record_user_correction",
+    rec = json.loads(_call("intellifile.record_user_correction",
           {"metadata": _META, "original_prediction": "مستندات",
            "corrected_value": "صور", "source_session": "ui-1",
            "file_fingerprint": "FP1", "user_confirmed": True}, state)
+          ["result"]["content"][0]["text"])
+    _call("intellifile.confirm_feedback",
+          {"feedback_id": rec["feedback_id"], "user_confirmed": True}, state)
     lst = json.loads(_call("intellifile.list_applicable_rules",
                            {"metadata": _META}, state)["result"]["content"][0]["text"])
     assert lst["count"] == 1
@@ -260,6 +268,9 @@ def test_raw_file_path_never_stored_verbatim(env_paths):
                if env_paths[0].with_suffix(".json.bak").exists()
                else env_paths[0].read_text(encoding="utf-8"))
     assert "/home/user/private" not in on_disk
+    feedback_log = (env_paths[0].parent / "feedback.jsonl").read_text(encoding="utf-8")
+    assert "/home/user/private" not in feedback_log
+    assert "مستندات" not in feedback_log and "صور" not in feedback_log
 
 def test_dismiss_feedback_does_not_learn(env_paths):
     state = {}
