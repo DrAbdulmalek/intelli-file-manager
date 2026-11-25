@@ -43,6 +43,8 @@ jobs:
           pip install --upgrade pip
           pip install pytest pytest-cov pytest-asyncio httpx ruff mypy
           pip install -r requirements.txt
+          # التحليل العميق (--deep): mutagen/Pillow/pypdf من requirements-deep.txt
+          if [ -f requirements-deep.txt ]; then pip install -r requirements-deep.txt; fi
 
       # fail-closed على أخطاء الكود الجسيمة (syntax/undefined) دون فرض
       # إعادة كتابة أنماط الكود كلها دفعة واحدة (UP/BLE ممنوعة مؤقتاً)
