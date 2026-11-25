@@ -967,3 +967,18 @@ def test_read_recorder_does_not_record_failed_close_as_closed(tmp_path):
         stream.close()
         assert rec.closed
         os.close(fd)
+
+
+def test_read_recorder_fdopen_text_mode_preserves_text_stream_contract(tmp_path):
+    """وضع النص يحافظ على TextIOWrapper وقراءة الأسطر وسياق with."""
+    target = tmp_path / "fdopen-text-contract.txt"
+    target.write_text("alpha\\nbeta\\n", encoding="utf-8")
+    with ReadRecorder() as rec:
+        fd = os.open(target, os.O_RDONLY)
+        with os.fdopen(fd, "r", encoding="utf-8") as stream:
+            assert isinstance(stream, io.TextIOWrapper)
+            assert stream.read(5) == "alpha"
+            assert stream.readline() == "\\n"
+            assert stream.closed is False
+        assert stream.closed is True
+        assert rec._fd_bytes[fd] == 6
