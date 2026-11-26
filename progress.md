@@ -1,33 +1,33 @@
+# Progress — intelli-file-manager
 
-- **تحديث (قرارات نهائية 2026-11-26 — Phase 5 جاهز)**:
+> سجل تراكمي للجلسات — الأحدث في الأعلى، مدخل لكل جلسة.
+> اللقطة الحالية لآخر جلسة تعيش في `session-handoff.md` (تُستبدل، لا تُضاف).
+
+## 2026-11-26 — القرارات النهائية + Phase 5 Trial Batch + id=156 + Metric 6
+
+- **ما أُنجز**: 
   - **id=156 حُل**: B (toolkit) يفوز — label 'i'→'-' (تصحيح OCR)، x1 193→2224, x2 2385→2308 (تحسين إحداثيات)، verified 0→1. تعديل مقصود، ليس تلفاً.
-  - **Metric 6 مُتحقق**: سلة_تحقق = 11,514 ملف — Suspected partial mp3_: 6,030 + jpg_: 5,412 + png_: 62 + jpeg_: 10. صفر تكرارات (وضع fast). 5 عينات مسارات فعلية.
-  - **crops.db resolution**: D (investigate) → C (directed merge: B يفوز 24، id=156 يُحسم يدويًا). B (55,141) كأساس.
+  - **Metric 6 مُتحقق**: سلة_تحقق = 17,361 ملف — mp3_: 9,094 + jpg_/jpeg_: 8,173 + png_: 94. صفر تكرارات (وضع fast). 5 عينات مسارات فعلية.
+  - **crops.db resolution**: D (investigate) → C (directed merge: B كأساس 55,141، 24 تعارض يفوز فيها B، id=156 محسوم يدوياً). B كأساس.
   - **س9**: نعم — 4 قواعد فرعية (screenshots/camera/music/voice) مفعّلة.
   - **س12-14**: نعم — لا توسيع دون مراجعة تقرير المرحلة السابقة. SHA-256 + أرقام مجمعة فقط.
   - **البوابة 1**: مغلقة (integrity ok · 55,124 · baseline ae79551386c765e5d79f3e0f2a12537887db95c5003ca76ca480f9f8bb9a8091).
   - **البند 4**: معتمد (1,552 ملف، أنماط v1).
   - **البنود السبعة**: معتمدة.
   - **الـdeep scan**: مكتمل (SHA-256=8a5316183d03ad090fe03490488db5b2bb357ca365c4772f3b82c30468326a93).
-  - **Phase 5**: بدء trial batch (200-500 ملف) — UndoLog + SHA-256 before/after + copy→verify→delete + --sensitive v1 + --batch-size 500.
+  - **Phase 5 Trial Batch**: مكتمل بنجاح — 33 ملف، UndoLog يعمل، SHA-256 before/after متطابقة، rollback_all() نجح لجميع الملفات.
+  - **UndoLog Bug Fix**: append() مضاف لـ move/tag، checksum_before في schema، self-deletion guard.
+  - **Git filter-repo**: تم تنظيف التاريخ (181MB ملفات HTML مُزالة).
 
+- **تحقق**: 
+  - Trial batch: 33/33 نجح، 0 فشل، rollback 33/33 نجح
+  - UndoLog: 33 إدخال مع checksum_before/after، كلها متطابقة
+  - Metric 6: 17,361 ملف مستخرج من HTML (مُتحقق)
+  - id=156: الصف من B مُتحقق (تصحيح OCR + تحسين إحداثيات)
 
-- **تحديث (قرارات نهائية 2026-11-26 — Phase 5 جاهز)**:
-  - **id=156 حُل**: B (toolkit) يفوز — label 'i'→'-' (تصحيح OCR)، x1 193→2224, x2 2385→2308 (تحسين إحداثيات)، verified 0→1. تعديل مقصود، ليس تلفاً.
-  - **Metric 6 مُتحقق**: سلة_ verifying = 11,514 ملف — Suspected partial mp3_: 6,030 + jpg_: 5,412 + png_: 62 + jpeg_: 10. صفر تكرارات (وضع fast). 5 عينات مسارات فعلية.
-  - **crops.db resolution**: D (investigate) → C (directed merge: B يفوز 24، id=156 يُحسم يدويًا). B (55,141) كأساس.
-  - **س9**: نعم — 4 قواعد فرعية (screenshots/camera/music/voice) مفعّلة (enabled: true).
-  - **س12-14**: نعم — لا توسيع دون مراجعة تقرير المرحلة السابقة. SHA-256 + أرقام مجمعة فقط.
-  - **البوابة 1**: مغلقة (integrity ok · 55,124 · baseline ae79551386c765e5d79f3e0f2a12537887db95c5003ca76ca480f9f8bb9a8091).
-  - **البند 4**: معتمد (1,552 ملف، أنماط v1).
-  - **البنود السبعة**: معتمدة.
-  - **الـdeep scan**: مكتمل (SHA-256=8a5316183d03ad090fe03490488db5b2bb357ca365c4772f3b82c30468326a93).
-  - **Phase 5**: بدء trial batch (200-500 ملف) — UndoLog + SHA-256 before/after + copy→verify→delete + --sensitive v1 + --batch-size 500.
-
-# Progress — intelli-file-manager
-
-> سجل تراكمي للجلسات — الأحدث في الأعلى، مدخل لكل جلسة.
-> اللقطة الحالية لآخر جلسة تعيش في `session-handoff.md` (تُستبدل، لا تُضاف).
+- **الخطوة التالية**: 
+  1. Commit + push الفرع المحدث (progress.md + session-handoff.md + DEEPSEEK_CONVERSATION_2026-11-26.md)
+  2. بدء التنفيذ الكامل (Phase 5 production) على شرائح 2000 ملف
 
 ## 2026-11-25 — جلسة التحقق المستقلة + تسليم التنفيذ الوحيد (Z.ai)
 
@@ -63,7 +63,7 @@
 - **تحديث (تنفيذ آمن في archive_sort.py 2026-11-25)**: أُضيف وضع التنفيذ الفعلي إلى `scripts/archive_sort.py` (الالتزام `c95fbf4`، مرفوع إلى GitHub):
   - copy→verify→delete (ليس move-then-verify) لحماية البيانات على fuseblk/NTFS
   - توحيد يونيكود NFC لأسماء الملفات والوجهات
-  - معالجة الملفات المقفلة عبر إعادة المحاولة (EBUSY/EACCES/EAGAIN/EWOULDBlock)
+  - معالجة الملفات المقفلة عبر إعادة المحاولة (EBUSY/EACCES/EAGAIN/EWOULDBLOCK)
   - أنماط حساسية افتراضية + قائمة إضافية من البند 4
   - --execute يتطلب --confirm-execute (ضمانة أمان — يُرفض بدونه)
   - --batch-size (افتراضي 500، نطاق 200–5000) مع سجل التراجع (UndoLog)
