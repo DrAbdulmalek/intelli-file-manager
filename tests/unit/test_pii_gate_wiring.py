@@ -9,10 +9,21 @@
 """
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture
+def pii_gate_module():
+    """اعزل الوضع العام للبوابة وأعده حتى عند فشل أي assertion."""
+    from src.plugins import pii_gate
+
+    previous_mode = pii_gate.get_mode()
+    try:
+        yield pii_gate
+    finally:
+        pii_gate.set_mode(previous_mode)
 
 
 # ---------------------------------------------------------------------------
@@ -51,9 +62,8 @@ PII_TEXT = (
 
 
 @pytest.mark.unit
-def test_pii_gate_wired_into_ingest_file_mask(tmp_path, monkeypatch):
-    from src.plugins import pii_gate
-    pii_gate.set_mode("mask")
+def test_pii_gate_wired_into_ingest_file_mask(tmp_path, pii_gate_module):
+    pii_gate_module.set_mode("mask")
     f = tmp_path / "report.txt"
     f.write_text(PII_TEXT, encoding="utf-8")
 
@@ -61,17 +71,15 @@ def test_pii_gate_wired_into_ingest_file_mask(tmp_path, monkeypatch):
     chunks = engine.ingest_file(str(f))
 
     assert chunks > 0, "وضع mask يجب أن يفهرس النص بعد الإخفاء"
-    stored = "\n".join(doc for docs in client.collection.added for doc in docs)
+    stored = "\\n".join(doc for docs in client.collection.added for doc in docs)
     assert "doctor@example.com" not in stored, "بريد خام تسرب إلى الفهرس!"
     assert "0512345678" not in stored, "هاتف خام تسرب إلى الفهرس!"
     assert "[PII:" in stored, "الإخفاء لم يُطبَّق (لا عنصر نائب)"
-    pii_gate.set_mode(pii_gate.DEFAULT_MODE)
 
 
 @pytest.mark.unit
-def test_pii_gate_wired_into_ingest_file_block(tmp_path, monkeypatch):
-    from src.plugins import pii_gate
-    pii_gate.set_mode("block")
+def test_pii_gate_wired_into_ingest_file_block(tmp_path, pii_gate_module):
+    pii_gate_module.set_mode("block")
     f = tmp_path / "report.txt"
     f.write_text(PII_TEXT, encoding="utf-8")
 
@@ -80,23 +88,20 @@ def test_pii_gate_wired_into_ingest_file_block(tmp_path, monkeypatch):
 
     assert chunks == 0, "وضع block يجب أن يحجب الفهرسة كلياً"
     assert client.collection.added == [], "دخل نص محجوب إلى ChromaDB!"
-    pii_gate.set_mode(pii_gate.DEFAULT_MODE)
 
 
 @pytest.mark.unit
-def test_pii_gate_clean_text_passes_through(tmp_path, monkeypatch):
+def test_pii_gate_clean_text_passes_through(tmp_path, pii_gate_module):
     """النص النظيف بلا PII يُفهرس كما هو (لا حجب زائف)."""
-    from src.plugins import pii_gate
-    pii_gate.set_mode("block")
+    pii_gate_module.set_mode("block")
     f = tmp_path / "clean.txt"
     f.write_text("الجرعة اليومية 500 ملغ بعد الطعام.", encoding="utf-8")
 
     engine, client = _engine_with_stub_client()
     chunks = engine.ingest_file(str(f))
     assert chunks > 0, "نص نظيف حُجب خطأً (إيجاب كاذب)"
-    stored = "\n".join(doc for docs in client.collection.added for doc in docs)
+    stored = "\\n".join(doc for docs in client.collection.added for doc in docs)
     assert "500" in stored
-    pii_gate.set_mode(pii_gate.DEFAULT_MODE)
 
 
 # ---------------------------------------------------------------------------
