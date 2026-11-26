@@ -6,6 +6,16 @@
 
 
 
+### 2026-11-27 — 🔴 Security Incident + Containment (metadata only)
+
+- **Incident:** credential filenames (email_password_Expiry format) were printed in a model-provider session during P0.6 diagnostics. Exposed to provider logs. Full detail (hashes/counts only, no secrets) in `SECURITY_INCIDENT.md`.
+- **Scope:** fiinote_export = 4 files (3 unique + 1 dup); *fiinote* = 4 files (2 unique, notes only, no rotation); Vault = 1 file, ~318 accounts, 4-col CSV browser export, **unencrypted btrfs**; API Key file = docs-only (sk-=0). 6 unique credential contents + 1 unknown 5th source (Vault hash unique).
+- **Prior "0 passwords" was a pattern-coverage gap, NOT absence.**
+- **Rotations:** PENDING (owner manual). **Vault decision:** PENDING.
+- **Quarantine / deny-by-default:** NOT DONE — blocked on rotation confirmation (P0.8 preconditions unmet).
+- **Originals:** unchanged, no deletion.
+- **Phase 1:** remains BLOCKED (8/8 gate; see SECURITY_INCIDENT.md).
+
 ### 2026-11-27 — ⚠️ Contradictions to Resolve Before Phase 1 (مسجّلة، لا تُحلّ الآن)
 
 أربع تناقضات بين ادعاءات سابقة والتحقق الفعلي. **خارج نطاق P0** — يجب حلّها قبل أي دفعة Phase 1 حتى لا تُنسى:
