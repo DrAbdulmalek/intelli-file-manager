@@ -9,6 +9,7 @@
   - حاجز الأمان: overwrite غير موجود، والحساسية غير قابلة للتجاوز بالتفضيلات
 """
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -246,28 +247,29 @@ def test_undo_last_rollback_failure_not_success(tmp_path):
     server = _server(tmp_path)
     from src.core.rule_schemas import UndoEntry
     from src.core.undo_log import UndoLog
+    from tests.fs_failures import blocked_parent
 
     log_path = tmp_path / ".ifm_undo.json"
     ul = UndoLog(log_path)
-    # الوجهة الأصلية داخل دليل قراءة-فقط → SafeMover يفشل فعلاً
-    # (التضارب بدليل موجود يأخذ لاحقة فينجح — لذا القراءة-فقط حتمية)
-    import os
-    ro = tmp_path / "ro_parent"
-    ro.mkdir()
+    # حقن فشل حتمي لأي uid: الأب «ملف عادي» لا دليل → النقل إليه يفشل.
+    # (التضارب بدليل موجود يأخذ لاحقة فينجح؛ وchmod 0o555 يتجاوزه الجذر
+    #  فينجح التراجع ويَسقط الاختبار — انظر tests/fs_failures.py)
+    blocked = blocked_parent(tmp_path)
     dest_file = tmp_path / "file.txt"
     dest_file.write_text("X", encoding="utf-8")
-    ul.append(UndoEntry(action_type="move", file_path=str(ro / "target.txt"),
+    ul.append(UndoEntry(action_type="move", file_path=str(blocked / "target.txt"),
                         file_path_after=str(dest_file), success=True))
     ul.save()
-    os.chmod(ro, 0o555)
-    try:
-        got = _structured(server, "undo_last", {"undo_log_path": str(log_path)})
-    finally:
-        os.chmod(ro, 0o755)
+
+    got = _structured(server, "undo_last", {"undo_log_path": str(log_path)})
 
     assert got["success"] is False
     assert got["recovery_required"] is False
     assert "فشل التراجع" in got["error"]
+    # تقوية: السجل بقي محفوظاً قابلاً لإعادة المحاولة، ولا فقد لبيانات المستخدم
+    assert got["restored_path"] == ""
+    assert len(UndoLog(log_path).entries) == 1
+    assert dest_file.read_text(encoding="utf-8") == "X"
 
 
 def test_query_action_log_filters(tmp_path):
@@ -362,3 +364,161 @@ def test_stdio_end_to_end_initialize_and_list(tmp_path):
     finally:
         if proc.poll() is None:
             proc.kill()
+
+
+# ─── 5) حد الخصوصية لسجل MCP Feedback ──────────────────────────────────────
+
+def test_feedback_record_schema_rejects_free_form_fields(tmp_path):
+    server = _server(tmp_path)
+    response = server.handle_request(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    )
+    tool = next(
+        item for item in response["result"]["tools"]
+        if item["name"] == "feedback_record"
+    )
+    assert "note" not in tool["inputSchema"]["properties"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+
+def test_feedback_record_tool_rejects_note_without_storing_it(tmp_path):
+    server = _server(tmp_path)
+    response = server.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "feedback_record",
+                "arguments": {
+                    "token": "safe-token",
+                    "signal": "negative",
+                    "note": "synthetic private path",
+                },
+            },
+        }
+    )
+    assert response["result"]["isError"] is True
+    assert server.store.events_for_token("safe-token") == []
+
+
+def test_feedback_store_rejects_legacy_free_form_payloads(tmp_path):
+    store = FeedbackStore(tmp_path / "feedback.db")
+    base = ("safe-token", "safe_move_file", "outcome")
+    with pytest.raises(ValueError, match="free-form"):
+        store.record(*base, note="synthetic /private/report.pdf")
+    with pytest.raises(ValueError, match="free-form"):
+        store.record(*base, inputs={"src": "/synthetic/private/report.dcm"})
+    with pytest.raises(ValueError, match="free-form"):
+        store.record(*base, outcome={"text": "synthetic medical narrative"})
+    assert store.events_for_token("safe-token") == []
+
+
+def test_feedback_store_rejects_path_like_identifiers(tmp_path):
+    store = FeedbackStore(tmp_path / "feedback.db")
+    with pytest.raises(ValueError, match="bounded categorical token"):
+        store.record("/synthetic/private/report.pdf", "safe_move_file", "outcome")
+    with pytest.raises(ValueError, match="bounded categorical token"):
+        store.record("safe-token", "safe_move_file", "outcome",
+                     context="/synthetic/private")
+
+
+def test_new_token_never_persists_inputs_or_outcome(tmp_path):
+    server = _server(tmp_path)
+    token = server._new_token(
+        "safe_move_file",
+        {"src": "/synthetic/private/report.dcm"},
+        {"text": "synthetic patient narrative"},
+    )
+    events = server.store.events_for_token(token)
+    assert len(events) == 1
+    assert set(events[0]) == {"token", "tool", "signal", "ts"}
+    columns = {
+        row[1]
+        for row in server.store._conn.execute("PRAGMA table_info(feedback_events)")
+    }
+    assert {"note", "inputs_json", "outcome_json"}.isdisjoint(columns)
+    stored_row = server.store._conn.execute(
+        "SELECT * FROM feedback_events WHERE token=?", (token,)
+    ).fetchone()
+    assert "/synthetic/private" not in repr(stored_row)
+    assert "synthetic patient narrative" not in repr(stored_row)
+
+
+def test_legacy_feedback_schema_is_preserved_but_payloads_are_not_exposed(tmp_path):
+    db_path = tmp_path / "legacy-feedback.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        """CREATE TABLE feedback_events (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               token TEXT NOT NULL,
+               tool TEXT NOT NULL,
+               signal TEXT NOT NULL,
+               note TEXT DEFAULT '',
+               context TEXT DEFAULT '',
+               condition_key TEXT DEFAULT '',
+               preferred_action TEXT DEFAULT '',
+               inputs_json TEXT DEFAULT '{}',
+               outcome_json TEXT DEFAULT '{}',
+               ts TEXT NOT NULL
+           )"""
+    )
+    conn.execute(
+        """INSERT INTO feedback_events
+           (token, tool, signal, note, context, condition_key, preferred_action,
+            inputs_json, outcome_json, ts)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "legacy-token",
+            "safe_move_file",
+            "outcome",
+            "/synthetic/legacy/report.pdf",
+            "safe_move_file",
+            "",
+            "",
+            '{"src":"/synthetic/legacy/report.pdf"}',
+            '{"text":"synthetic legacy text"}',
+            "2026-11-24T00:00:00+00:00",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    store = FeedbackStore(db_path)
+    legacy_events = store.events_for_token("legacy-token")
+    assert len(legacy_events) == 1
+    assert "note" not in legacy_events[0]
+    old_row = store._conn.execute(
+        "SELECT note, inputs_json, outcome_json FROM feedback_events WHERE token=?",
+        ("legacy-token",),
+    ).fetchone()
+    assert old_row[0] == "/synthetic/legacy/report.pdf"
+
+    store.record("new-token", "safe_move_file", "outcome", context="safe_move_file")
+    new_row = store._conn.execute(
+        "SELECT note, inputs_json, outcome_json FROM feedback_events WHERE token=?",
+        ("new-token",),
+    ).fetchone()
+    assert tuple(new_row) == ("", "{}", "{}")
+
+
+def test_feedback_record_rejects_non_string_fields(tmp_path):
+    server = _server(tmp_path)
+    invalid_arguments = [
+        {"token": None, "signal": "negative"},
+        {"token": "safe-token", "signal": ["negative"]},
+        {"token": "safe-token", "signal": "negative", "context": ["/synthetic/path"]},
+        {"token": "safe-token", "signal": "negative", "condition": {"path": "/synthetic/path"}},
+        {"token": "safe-token", "signal": "negative", "preferred_action": ["suffix"]},
+    ]
+    for arguments in invalid_arguments:
+        response = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "feedback_record", "arguments": arguments},
+            }
+        )
+        assert response["result"]["isError"] is True
+    assert server.store.events_for_token("safe-token") == []

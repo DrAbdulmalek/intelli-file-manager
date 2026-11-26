@@ -304,26 +304,23 @@ class TestIFMController:
         # F19 متابعة: فشل التراجع (إجراء ناجح الأصل، v2) لا يُعرض نجاحاً
         from src.desktop.controllers.ifm_controller import IFMController
         from src.core.rule_schemas import UndoEntry
+        from tests.fs_failures import blocked_parent
 
         c = IFMController(base_dir=tmp_path, ruleset_path=None)
-        # الوجهة الأصلية داخل دليل قراءة-فقط → SafeMover يفشل فعلاً
-        # (التضارب بدليل موجود يأخذ لاحقة فينجح — لذا القراءة-فقط حتمية)
-        ro = tmp_path / "ro_parent"
-        ro.mkdir()
+        # حقن فشل حتمي لأي uid: الأب «ملف عادي» لا دليل → النقل إليه يفشل.
+        # (التضارب بدليل موجود يأخذ لاحقة فينجح؛ وchmod 0o555 يتجاوزه الجذر
+        #  فينجح التراجع ويَسقط الاختبار — انظر tests/fs_failures.py)
+        blocked = blocked_parent(tmp_path)
         dest_file = tmp_path / "file.txt"
         dest_file.write_text("X", encoding="utf-8")
         c.undo_log.append(UndoEntry(action_type="move",
-                                    file_path=str(ro / "target.txt"),
+                                    file_path=str(blocked / "target.txt"),
                                     file_path_after=str(dest_file),
                                     timestamp="t", success=True))
         results, errors = [], []
         c.undo_finished.connect(lambda e, s, msg: results.append((e, s, msg)))
         c.error.connect(lambda title, msg: errors.append((title, msg)))
-        os.chmod(ro, 0o555)
-        try:
-            c.undo_last()
-        finally:
-            os.chmod(ro, 0o755)
+        c.undo_last()
         _process_events(qapp)
         assert len(results) == 1 and results[0][1] is False  # لا نجاح
         assert "فشل التراجع" in results[0][2]
@@ -331,6 +328,7 @@ class TestIFMController:
         recent = c.action_log.list_entries(limit=1)
         assert recent and recent[0].success is False  # ActionLog لا يكتب نجاحاً
         assert any("فشل التراجع" in t for t, _ in errors)
+        assert dest_file.read_text(encoding="utf-8") == "X"  # لا فقد بيانات
 
     def test_undo_last_ambiguous_legacy_not_reported_as_success(self, qapp, tmp_path):
         # F19 متابعة: السجل القديم الملتبس لا يُعرض نجاحاً — عنوان الاسترداد

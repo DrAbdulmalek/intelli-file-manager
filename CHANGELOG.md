@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] — Review Follow-up (F19 متابعة ٢ — PR #78)
 
+## [Unreleased] — حقن فشل حتمي مستقل عن uid (F006)
+
+### أُصلح
+- **اختبار F19 «فشل التراجع لا يُعرض نجاحاً» كان متذبذباً بحسب uid**
+  (`tests/unit/test_mcp_feedback.py` + `tests/integration/test_desktop_ux.py`):
+  حقن الفشل بـ`os.chmod(ro_parent, 0o555)` لا يمنع الجذر (uid 0) من الكتابة
+  في POSIX، فينجح التراجع فعلاً ويَسقط الاختبار رغم سلامة المنتج — مُثبت
+  بنفس الكود على `main`: فشل كجذر، نجاح كمستخدم عادي (65534). الحالة تظهر
+  في أي حاوية Docker/devcontainer تعمل بالجذر. **لا تغيير في كود المنتج.**
+
+### أُضيف
+- `tests/fs_failures.py`: `blocked_parent()` — حقن فشل حتمي لأي uid via
+  ملف عادي في مسار الأب → `FileExistsError` عند `dst.parent.mkdir`، قبل أي
+  تعديل على القرص (لا فقد بيانات، لا mock، لا اعتماد على بتات mode).
+  و`is_root()` لتخطٍ صريح في الاختبارات التي تقيس الصلاحيات نفسها.
+- `tests/unit/test_fs_failure_injection.py` (7 اختبارات): حراسة الآلية،
+  رفض استبدال مسار قائم، فشل النقل لأي uid، عقد UndoLog تحت الفشل (السجل
+  محفوظ + ثبات عبر save/load)، توقف `rollback_all` عند أول فشل (F15)،
+  إبلاغ MCP بالفشل، وإثبات executable أن `chmod` لا يمنع الجذر.
+- تقوية التأكدات في الاختبارين المُصلَحين: `restored_path` فارغ، السجل
+  محفوظ قابلاً لإعادة المحاولة، ومحتوى ملف المستخدم لم يُفقد.
+
+### أُصلح
+- **F19 متابعة — إبلاغ فشل التراجع بدقة** (`216d2c3`):
+  - `ifm_controller.undo_last/undo_all`: النجاح يُعلن فقط إذا استُهلك السجل فعلاً؛ السجل المحفوظ يُكتب بـ`success=False` مع سبب الفشل، ويُصدر `undo_finished(success=False)` + `error` — «يتطلب استرداداً يدوياً» للملتبس، «فشل التراجع» للعادي.
+  - MCP `_tool_undo_last`: `success` = عكس ناجح استهلك السجل فعلاً، مفتاح `recovery_required` جديد، وعرض `rollback_error_message` بدل `error_message` الأصلي.
+  - توثيق عقد F19: الرفع **داخلي** في `_rollback_entry`، والعقد إرجاعي عبر `requires_recovery` — صُحّح في `AI_WORKLOG.md` وجسم PR عند الموضعين الأصليين.
+  - اختبارات +4 (MCP × 2، Controller × 2) تثبت أن الفشل لا يُعرض نجاحاً.
+
+
 ### أُصلح
 - **F19 متابعة — إبلاغ فشل التراجع بدقة** (`216d2c3`):
   - `ifm_controller.undo_last/undo_all`: النجاح يُعلن فقط إذا استُهلك السجل فعلاً؛ السجل المحفوظ يُكتب بـ`success=False` مع سبب الفشل، ويُصدر `undo_finished(success=False)` + `error` — «يتطلب استرداداً يدوياً» للملتبس، «فشل التراجع» للعادي.

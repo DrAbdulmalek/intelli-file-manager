@@ -13,9 +13,9 @@
 """
 from __future__ import annotations
 
-import json
 import logging
 import math
+import re
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -35,6 +35,18 @@ SUCCESS_WEIGHT = 1.5
 
 # بذرة قوة الاستقرار بالأيام (نصف عمر افتراضي)
 _INITIAL_STABILITY_DAYS = 14.0
+
+
+_SAFE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+
+
+def _require_safe_token(value: str, field: str, *, allow_empty: bool = False) -> str:
+    """Accept bounded identifiers only; reject paths, free text, and contact data."""
+    if allow_empty and value == "":
+        return value
+    if not isinstance(value, str) or not _SAFE_TOKEN_RE.fullmatch(value):
+        raise ValueError(f"{field} must be a bounded categorical token")
+    return value
 
 
 def _now_iso() -> str:
@@ -89,12 +101,9 @@ class FeedbackStore:
                        token TEXT NOT NULL,
                        tool TEXT NOT NULL,
                        signal TEXT NOT NULL,
-                       note TEXT DEFAULT '',
                        context TEXT DEFAULT '',
                        condition_key TEXT DEFAULT '',
                        preferred_action TEXT DEFAULT '',
-                       inputs_json TEXT DEFAULT '{}',
-                       outcome_json TEXT DEFAULT '{}',
                        ts TEXT NOT NULL
                    )"""
             )
@@ -127,28 +136,42 @@ class FeedbackStore:
         inputs: Optional[dict] = None,
         outcome: Optional[dict] = None,
     ) -> dict:
-        """يسجل إشارة مرتبطة بـfeedback_token — يرفض الإشارات والأفعال الممنوعة."""
-        if signal not in ALLOWED_SIGNALS:
-            raise ValueError(f"إشارة ممنوعة: {signal} — المسموح: {sorted(ALLOWED_SIGNALS)}")
+        """Store bounded categorical feedback only; legacy free-form fields fail closed."""
+        if note not in ("", None) or inputs not in (None, {}) or outcome not in (None, {}):
+            raise ValueError("free-form feedback payloads are disabled")
+        token = _require_safe_token(token, "token")
+        tool = _require_safe_token(tool, "tool")
+        context = _require_safe_token(context, "context", allow_empty=True)
+        condition_key = _require_safe_token(
+            condition_key, "condition_key", allow_empty=True
+        )
+        if not isinstance(signal, str) or signal not in ALLOWED_SIGNALS:
+            raise ValueError(
+                f"إشارة ممنوعة: {signal} — المسموح: {sorted(ALLOWED_SIGNALS)}"
+            )
+        if not isinstance(preferred_action, str):
+            raise ValueError("preferred_action must be a categorical token")
         if preferred_action and preferred_action not in ALLOWED_PREFERRED_ACTIONS:
-            # حاجز الأمان: لا تفضيل يستبدل/يتعطل قرار حماية
             raise ValueError(
                 f"preferred_action ممنوع: {preferred_action} — قرارات الأمان "
                 f"(مثل overwrite) خارج التعلم؛ المسموح: {sorted(ALLOWED_PREFERRED_ACTIONS)}"
             )
+        if preferred_action and (not context or not condition_key):
+            raise ValueError("context and condition_key are required for a learned preference")
         with self._lock:
             if self._conn is None:
                 logger.info("إشارة بلا مخزن (ذاكرة فقط): token=%s signal=%s", token, signal)
                 return {"stored": False, "reason": "no_db_path"}
             self._conn.execute(
-                "INSERT INTO feedback_events (token, tool, signal, note, context, "
-                "condition_key, preferred_action, inputs_json, outcome_json, ts) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO feedback_events (token, tool, signal, context, "
+                "condition_key, preferred_action, ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
-                    token, tool, signal, note, context, condition_key,
+                    token,
+                    tool,
+                    signal,
+                    context,
+                    condition_key,
                     preferred_action,
-                    json.dumps(inputs or {}, ensure_ascii=False),
-                    json.dumps(outcome or {}, ensure_ascii=False),
                     _now_iso(),
                 ),
             )
@@ -158,16 +181,17 @@ class FeedbackStore:
         return {"stored": True}
 
     def events_for_token(self, token: str) -> List[dict]:
+        token = _require_safe_token(token, "token")
         if self._conn is None:
             return []
         with self._lock:
             rows = self._conn.execute(
-                "SELECT token, tool, signal, note, ts FROM feedback_events "
+                "SELECT token, tool, signal, ts FROM feedback_events "
                 "WHERE token = ? ORDER BY id",
                 (token,),
             ).fetchall()
         return [
-            {"token": r[0], "tool": r[1], "signal": r[2], "note": r[3], "ts": r[4]}
+            {"token": r[0], "tool": r[1], "signal": r[2], "ts": r[3]}
             for r in rows
         ]
 
@@ -179,6 +203,10 @@ class FeedbackStore:
         """يحدّث تفضيلاً: دعم +1 (وزن النجاح 1.5 يظهر في strength)، وتقادم، وترقية 3x."""
         if not context or not condition_key or not preferred_action:
             return
+        context = _require_safe_token(context, "context")
+        condition_key = _require_safe_token(condition_key, "condition_key")
+        if not isinstance(signal, str) or signal not in ALLOWED_SIGNALS:
+            raise ValueError("signal is not allowed")
         if preferred_action not in ALLOWED_PREFERRED_ACTIONS:
             raise ValueError(f"preferred_action ممنوع: {preferred_action}")
         now = _now_iso()
@@ -215,7 +243,10 @@ class FeedbackStore:
                 logger.info("ترقية تفضيل إلى قاعدة دائمة: %s/%s → %s", context, condition_key, preferred_action)
 
     def query(self, context: str, limit: int = 5) -> List[Preference]:
-        """يسترجع تفضيلات السياق مرتبة بالقابلية المتقادة R = exp(-أيام/S)."""
+        """يسترجع تفضيلات سياق محدد بمعرّف تصنيفي محدود."""
+        context = _require_safe_token(context, "context")
+        if not isinstance(limit, int) or not 1 <= limit <= 50:
+            raise ValueError("limit must be between 1 and 50")
         if self._conn is None:
             return []
         now = _now_iso()
