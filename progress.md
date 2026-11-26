@@ -6,9 +6,9 @@
 ## 2026-11-26 — القرارات النهائية + Phase 5 Trial Batch + id=156 + Metric 6
 
 - **ما أُنجز**: 
-  - **id=156 فاسد**: ❌ OCR garbage — عرض 2192px لحرف واحد، confidence 0.15، source: notes.db:auto. يُستبعد من اعتماد B أو يحتاج مراجعة بشرية.
+  - **id=156 — تصحيح جوهري**: B's id=156 صحيح (label='-', width=84px, verified=1). **A** هو الفاسد (label='i', width=2192px, verified=0). الوكيل خلط بين A و B في تقاريره. B لا يستبعد شيئًا.
   - **Metric 6 (بعد إعادة العدّ الفعلي)**: سلة_تحقق = **5,847 ملف فريد** — mp3: 3,064 + jpg/jpeg: 2,751 + png: 32. (17,361 كان عدد الإشارات في HTML؛ كل ملف يظهر ~3 مرات في التقرير. الرقم الصحيح للملفات الفريدة 5,847.)
-  - **crops.db resolution**: D (investigate) → C (directed merge: B كأساس 55,141، 24 تعارض يفوز فيها B، id=156 مُستبعد — OCR garbage، لا يُدرج في الدمج). B كأساس بعد استبعاد id=156.
+  - **crops.db resolution**: D (investigate) → C (directed merge: B كأساس 55,141، 24 تعارض يفوز فيها B، id=156 في B صحيح — لا استبعاد). B كأساس كما هو.
   - **س9**: نعم — 4 قواعد فرعية (screenshots/camera/music/voice) مفعّلة.
   - **س12-14**: نعم — لا توسيع دون مراجعة تقرير المرحلة السابقة. SHA-256 + أرقام مجمعة فقط.
   - **البوابة 1**: مغلقة (integrity ok · 55,124 · baseline ae79551386c765e5d79f3e0f2a12537887db95c5003ca76ca480f9f8bb9a8091).
@@ -23,7 +23,7 @@
   - Trial batch: 33/33 نجح، 0 فشل، rollback 33/33 نجح
   - UndoLog: 33 إدخال مع checksum_before/after، كلها متطابقة
   - Metric 6: 5,847 ملف فريد (mp3: 3,064، jpg/jpeg: 2,751، png: 32) — 17,361 إشارة في HTML
-  - id=156: ❌ فاسد — مُستبعد من اعتماد B (OCR garbage، عرض 2192px، confidence 0.15)
+  - id=156: ✅ في B صحيح (width=84px, verified=1) — A هو الفاسد (width=2192px)
 
 - **الخطوة التالية (بالترتيب الإلزامي)**: 
   1. دمج crops.db: B كأساس بعد استبعاد id=156 (UPDATE ignored=1، لا حذف) — integrity_check + SHA-256
