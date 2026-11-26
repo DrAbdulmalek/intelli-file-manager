@@ -108,18 +108,20 @@ def test_pii_gate_clean_text_passes_through(tmp_path, pii_gate_module):
 # 2) ترتيب التعريف: _SAFE_CATEGORY_RE قبل create_app()
 # ---------------------------------------------------------------------------
 @pytest.mark.unit
-def test_safe_category_re_defined_before_create_app():
-    """بند P0-5 من docs/REVIEW.md: كان التعريف بعد create_app() — أي استدعاء
-    أثناء بناء التطبيق كان سيوقعت NameError. الآن: تعريف على مستوى الوحدة
-    يسبق الاستدعاء."""
+def test_safe_category_re_defined_before_create_app_factory():
+    """تحقق من الثابت قبل تعريف المصنع؛ لا نزعم وجود NameError فعلي.
+
+    جسم endpoint لا يُنفّذ عند تعريف create_app، وكان الثابت سابقًا
+    متاحًا قبل app = create_app() وقبل أول طلب HTTP.
+    """
     src = Path("src/api/server.py").read_text(encoding="utf-8")
     lines = src.splitlines()
     def_line = next(i for i, l in enumerate(lines, 1)
                     if "_SAFE_CATEGORY_RE = re.compile" in l)
-    app_line = next(i for i, l in enumerate(lines, 1)
-                    if l.startswith("app = create_app()"))
-    assert def_line < app_line, (
-        f"_SAFE_CATEGORY_RE (سطر {def_line}) يجب أن يسبق create_app (سطر {app_line})"
+    factory_line = next(i for i, l in enumerate(lines, 1)
+                        if l.startswith("def create_app("))
+    assert def_line < factory_line, (
+        f"_SAFE_CATEGORY_RE (سطر {def_line}) يجب أن يسبق تعريف المصنع (سطر {factory_line})"
     )
 
 
