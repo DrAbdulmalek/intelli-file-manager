@@ -83,3 +83,30 @@ Decision: quarantine only, NO rotation.
 - No credential content, name, email, or key may be added to this file or any commit.
 - Originals are not deleted without explicit owner approval after bundle verification.
 - Phase 1 stays BLOCKED until 8/8 pass.
+
+## Update — expanded fiinote scope (KeePass scan)
+
+`scripts/import_to_keepass.py --scan` (safe: no password, no writes) found the
+exposure is **larger than P0.6 documented**. P0.6 counted only `fiinote_export/`
+(4 files). Scanning all three roots by name (`@` + `expiry`):
+
+| Root | fiinote credential files |
+|------|--------------------------|
+| `fiinote_export/` | 4 |
+| `سلة_تحقق/` | 17 |
+| `وثائق/` | 0 |
+| **total** | **24** (+ 1 vault CSV = 342 entries) |
+
+So **20 additional credential files** in `سلة_تحقق/` were outside the original
+incident count. Rotation scope must be re-based on 24 fiinote + 318 vault, not
+4 + 318. The `.kdbx` import covers all 24 automatically (name-based discovery).
+
+## Remediation tooling added
+
+`scripts/import_to_keepass.py` — imports all credential files into an encrypted
+`.kdbx` (pykeepass 4.2.0, isolated venv `~/rotation-venv`). Guarantees: master
+password via `getpass` only (no echo/log/argv), no secret printed, atomic save,
+SHA-256 dedup, and **no source deletion before a successful `--verify` + explicit
+`DELETE` confirmation**. `--scan` is safe (no password, no writes). `--import`,
+`--verify`, `--delete-source` require the owner's interactive master password and
+were NOT run by the assistant.
