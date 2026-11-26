@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] — Integration Fixes (ربط بوابة PII + ترتيب التعريف — 2026-11-25)
+
+### أُصلح
+- **ربط بوابة PII فعليًا في `RAGEngine.ingest_file`** (`src/core/rag_engine.py`):
+  الإضافة كانت موجودة (`src/plugins/pii_gate.py`) مع تعليمات ربط صريحة في
+  ترويستها لكن الربط لم يُنفذ — أي نص شخصي كان يدخل ChromaDB دون حاجز.
+  الآن: `gate_text_for_indexing(text, source=...)` بعد التسوية العربية وقبل
+  التقسيم، مع حارس `return 0` عند الحجب (وضع block). اختبارات دائمة ×3:
+  mask يخفي ولا يفهرس PII خام، block يحجب كليًا، والنص النظيف يمر بلا
+  إيجاب كاذب (`tests/unit/test_pii_gate_wiring.py`).
+  الحدود: كشف الأسماء يقتصر على تسميات وأنماط محددة (عادةً 2–4 كلمات)، ولا يغطي
+  كل الأسماء المفردة أو غير الموسومة. لا تُنقّى قيمة `source` (مسار الملف)
+  المخزنة في metadata، ولا تُحذف إدخالات ChromaDB القديمة عند تفعيل الحجب؛
+  هذه الدفعة تحمي النص الممرر حديثًا عبر `RAGEngine.ingest_file` فقط.
+- **تقديم تعريف `_SAFE_CATEGORY_RE` قبل مصنع التطبيق** (`src/api/server.py`):
+  نُقل الثابت إلى أعلى الملف قبل `def create_app()` لتوضيح ترتيب الاعتماد.
+  تصحيح دقة مهم: جسم endpoint لا يُنفَّذ عند تعريف المصنع، وكان التعريف
+  السابق يسبق `app = create_app()`؛ لذلك لا نعدّ هذا إصلاحًا لخطأ NameError
+  مثبت. الاختبار يثبت الآن الترتيب المقصود (قبل تعريف المصنع) والوظيفة
+  (عربي/لاتيني يقبل، `../escape` يرفض).
+
+### التحقق
+- 58 اختبار PII/حساسية (الجديد ×5 + plugin ×26 + reader ×27) ناجحة.
+- 168 وحدة + 61 + 8 تكامل snippets — ناجحة. ruff (E9,F63,F7,F82,F821) نظيف.
+- إقلاع حي: `uvicorn src.api.server:app` — `/openapi.json` 200 بـ36 مسارًا.
+
+---
+
 ## [Unreleased] — Review Follow-up (F19 متابعة ٢ — PR #78)
 
 ### أُصلح

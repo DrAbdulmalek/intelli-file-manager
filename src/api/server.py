@@ -41,6 +41,10 @@ from pydantic import BaseModel, Field
 
 from src.core.sensitive_barrier import SensitiveFileBlockedError, is_sensitive_path
 
+# Safe category pattern (Arabic + alphanumeric + dash/underscore)
+_SAFE_CATEGORY_RE = re.compile(r"^[\w\-\u0600-\u06FF]+$")
+
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1055,9 +1059,6 @@ def create_app() -> FastAPI:
 
     return _app
 
-
-# Safe category pattern (Arabic + alphanumeric + dash/underscore)
-_SAFE_CATEGORY_RE = re.compile(r"^[\w\-\u0600-\u06FF]+$")
 
 
 # When run directly: uvicorn src.api.server:app --port 8421
