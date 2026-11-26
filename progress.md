@@ -6,6 +6,16 @@
 
 
 
+### 2026-11-27 — Phase 0 Diagnostics (P0.1–P0.4)
+
+- **check_self_nesting.py v2**: 10/10 اختبارات إلزامية PASS (clean=0، nesting=1، deeper=1، nonexistent=2، root-is-file=2، arabic=0، symlink-root=4، symlink+flag=0، internal-symlink=0، chmod000=3). py_compile OK. مسح واحد `os.walk(topdown, onerror, followlinks=False)`، لا `resolve()`، لا طباعة مسارات.
+- **undo_diag.py**: self-nesting مؤكد (medi: 60 entries، nested count=1 → rollback). checksum متطابق تمامًا (backup: match=33 mismatch=0 missing=0؛ medi: match=60 mismatch=0 missing=0). error_count=0 لكليهما. لا فشل نقل ولا فشل تراجع — rollback نظيف متعمد.
+- **سياسة جديدة**: رفض أي دفعة اسم جذرها = اسم أي وجهة قاعدة (self-nesting → exit 1). مُوثّقة في SCOPE_POLICY.md.
+- **Sensitive recon (metadata فقط، بلا فتح محتوى)**: `*password*`=0، `*passwd*`=0، `*secret*`=0، `*credential*`=0، `*.kdbx`=0، `*.key`=0. لا ملفات مطابقة → لا توزيع أحجام/صلاحيات. لا انتشار.
+- **Vault (~/secure/vault-2026-11-27)**: الحكم = **مجلد عادي غير مشفّر** (plain_subdir، btrfs على /dev/sda2، لا crypt/luks، mode=700 owner=xorthomson). ليس LUKS.
+- **Gate 0 Inventory** (أعداد فقط): `02 4 2023  Dr Michel SAMAAN` files=890 dirs=9 · backup=33/6 · fiinote_export=41/6 (محظور، لم يُمس محتواه) · أرشيف_مؤرخ=18/0 · سلة_تحقق=72/0 · غير_مصنّف=44/0 · مستودعات_كود=2/0 · وثائق=144/0 · وسائط=60/0 · Foxit/MEGA Downloads/Quick Share/حالات سريرية/دنادر حمدان/كتب=0. root_files=2. unreadable=0 · paths>200=4 · non-UTF8=0 · .frdat=0 · symlinks=0.
+- **الخطوة التالية**: بانتظار موافقة المالك على P0 الكامل قبل اقتراح دفعة Phase 1.
+
 ### 2026-11-27 — ✅ Production Run #2 (backup، 33 ملفًا) — نجاح كامل
 
 - **dry-run**: 33 ملفًا، 36 إجراءً، 0 أخطاء، 1.02s
