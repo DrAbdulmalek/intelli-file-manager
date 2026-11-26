@@ -71,7 +71,7 @@ def test_pii_gate_wired_into_ingest_file_mask(tmp_path, pii_gate_module):
     chunks = engine.ingest_file(str(f))
 
     assert chunks > 0, "وضع mask يجب أن يفهرس النص بعد الإخفاء"
-    stored = "\\n".join(doc for docs in client.collection.added for doc in docs)
+    stored = "\n".join(doc for docs in client.collection.added for doc in docs)
     assert "doctor@example.com" not in stored, "بريد خام تسرب إلى الفهرس!"
     assert "0512345678" not in stored, "هاتف خام تسرب إلى الفهرس!"
     assert "أحمد محمد" not in stored, "اسم المريض الخام تسرب إلى الفهرس!"
@@ -101,7 +101,7 @@ def test_pii_gate_clean_text_passes_through(tmp_path, pii_gate_module):
     engine, client = _engine_with_stub_client()
     chunks = engine.ingest_file(str(f))
     assert chunks > 0, "نص نظيف حُجب خطأً (إيجاب كاذب)"
-    stored = "\\n".join(doc for docs in client.collection.added for doc in docs)
+    stored = "\n".join(doc for docs in client.collection.added for doc in docs)
     assert "500" in stored
 
 
