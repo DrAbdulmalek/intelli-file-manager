@@ -55,6 +55,10 @@ Thumbs.db
 secrets.yaml
 secrets.json
 
+# Run artifacts — contain CREDENTIAL FILENAMES (email+password in name). NEVER commit.
+_runs/
+*.kdbx
+
 # Database files
 *.sqlite
 *.db
