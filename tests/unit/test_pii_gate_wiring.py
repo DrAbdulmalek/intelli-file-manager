@@ -4,8 +4,8 @@
 
 - test_pii_gate_wired_into_ingest_file_mask: مع mask تُفهرس المقاطع بلا أي PII خام
 - test_pii_gate_wired_into_ingest_file_block: مع block يتوقف الاستيعاب (0 مقطع)
-- test_safe_category_re_defined_before_create_app: التعريف يسبق create_app()
-  (إغلاق بند P0-5 من docs/REVIEW.md — NameError محتمل وقت الاستيراد)
+- test_safe_category_re_defined_before_create_app_factory: يفرض ترتيب الثابت قبل مصنع التطبيق
+  (تحسين ترتيب الاعتماد؛ ليس إصلاح NameError مثبتًا)
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def _engine_with_stub_client():
 
 
 PII_TEXT = (
-    "تقرير المريض أحمد: للتواصل doctor@example.com أو 0512345678. "
+    "اسم المريض أحمد محمد: للتواصل doctor@example.com أو 0512345678. "
     "الجرعة اليومية 500 ملغ."
 )
 
@@ -74,6 +74,7 @@ def test_pii_gate_wired_into_ingest_file_mask(tmp_path, pii_gate_module):
     stored = "\\n".join(doc for docs in client.collection.added for doc in docs)
     assert "doctor@example.com" not in stored, "بريد خام تسرب إلى الفهرس!"
     assert "0512345678" not in stored, "هاتف خام تسرب إلى الفهرس!"
+    assert "أحمد محمد" not in stored, "اسم المريض الخام تسرب إلى الفهرس!"
     assert "[PII:" in stored, "الإخفاء لم يُطبَّق (لا عنصر نائب)"
 
 
