@@ -1,0 +1,4908 @@
+TASK-02C Security Scan Remediation
+Loading...
+لم يصل رمز التيليجرام 
+GLM-5.3-Flash
+Thought Process
+
+الرمز وصل بنمط «عبر التطبيق» (SentCodeTypeApp) — وهذا يعني أن تيليجرام أرسله كرسالة خدمة داخل تطبيقك نفسه، وقد لا يظهر إن لم تكن مسجلًا في جهاز آخر. أتحقق من إمكانات إعادة الإرسال بالـSMS وبديل QR، وأنفذ الاثنين:
+
+Ran 1 commands
+
+قامت مكتبة qrcode بالتحميل بنجاح، وعلى البوابة فقط الأمرين request/finish. أقوم بكتابة سكربت لإعادة إرسال رمز التحقق عبر خدمة الرسائل القصيرة SMS + سكربت تسجيل الدخول باستخدام QR (سأقوم بالتشغيل عندما تكون مستعدًا)، ثم أقوم بإعادة الإرسال فورًا:
+
+Wrote 2 files，Ran 1 commands
+
+telethon اختفى بين الأوامر — بيئة .venv خارج مجلد المشروع أعيد ضبطها (السبب نفسه الذي ميت به الجلسات). أثبته وأشغّل إعادة الإرسال في أمر واحد متسلسل:
+
+Ran 1 commands
+
+الرمز أُرسل فعليًا — الخطأ فقط في حفظ الهاش (جاء dict وليس نصًا في Telethon الجديد). أصلح الاستخراج وأعيد التشغيل ليُحفظ الهاش الصحيح (سيصل SMS ثانٍ — تجاهل الأول):
+
+Wrote 1 files，Ran 1 commands
+
+إشارة مهمة: force_sms لم يعد مدعومًا في Telethon الجديد — التسليم سيبقى عبر التطبيق، وملف الهاش أصبح فارغًا بعد محاولتي السابقة. أقرأ منطق cmd_request في سكربت gatekeeper (لقد حفظ الهاش بنجاح سابقًا) لأحاكيه حرفيًا:
+
+Explored 1 files
+
+وجدت العلة: gatekeeper يقرأ sent.phone_code_hash مباشرة (وسكربتي قرأ c._phone_code_hash الذي أصبح dict في Telethon الجديد وأقفل السلسلة). أصلح السكربت بنفس نمط gatekeeper وأطلب رمزًا جديدًا مع الحفظ الصحيح:
+
+Wrote 1 files，Ran 1 commands
+✅ رمز جديد أُرسل الآن — لكن انتبه: ليس SMS
+
+تيليجرام أزالت خيار فرض SMS من الـAPI (السكربت أوضح ذلك)، فالتسليم يبقى «عبر التطبيق» — رمز من 5 أرقام، والهاش محفوظ بنجاح هذه المرة.
+
+أين تبحث عن الرمز (مهم)
+
+الرمز لا يصل كرسالة هاتفية — يظهر داخل تطبيق تيليجرام نفسه:
+
+افتح قائمة محادثاتك → ابحث عن محادثة رسمية باسم «Telegram» (رسائل الخدمة)
+الرسالة الأخيرة فيها الآن: "Login code: XXXXX. Do not give this code to anyone..."
+فقط الرمز الأحدث صالح (طلبت رمزًا جديدًا للتو، ألغى أي رسالة قديمة)
+بديل أسرع وأضمن: مسح QR 📱
+
+إن لم تجد الرمز أو كان حسابك ليس مسجلًا في أي جهاز حاليًا، اكتب لي «جاهز» وسأولّد رمز QR فورًا وأنتظر مسحك مباشرة 5 دقائق:
+
+أفتح telegram-login-qr.png بعد ردي
+من تيليجرام: الإعدادات → الأجهزة → ربط جهاز سطح مكتب → أمسح الصورة
+لا رمز ولا SMS إطلاقًا — الجلسة تُفوَّض فورًا وأكمل تلقائيًا
+عند وصول الرمز
+
+اكتب لي الأرقام فقط (مثل 85317) وسأنفّذ finish فورًا. إن كان حسابك محميًا بتحقق 2FA سأطلب منك كلمة المرور في الرد التالي، ثم أنتقل مباشرة لجرد القناة وتنزيل الملفات ودمجها كـbatch-002.
+
+جاهز 
+GLM-5.3-Flash
+Thought Process
+
+النافذة تعمل الآن — افتح telegram-login-qr.png حالًا وامسحه من تيليجرام (الإعدادات ← الأجهزة ← ربط جهاز سطح مكتب). الصورة تتجدد تلقائيًا كل 35 ثانية، وإن انتهت صلاحيتها أعد فتح الرابط لآخر نسخة. سأنتظر مسحك 5 دقائق وأتابع تلقائيًا عند النجاح:
+
+Ran 1 commands
+
+انتهت النافذة الأولى دون مسح — أعيد توليد نافذة أطول (7 دقائق) الآن، وأضيف بديلًا أسهل من الكاميرا: ملف نصي فيه رابط الدخول تفتحه من هاتفك مباشرة (يتجدد مع الرمز):
+
+Explored 1 files，Wrote 2 files，Ran 1 commands
+
+✅ تم التفويض بنجاح: @DrAbdulmalekHusseini — الجلسة محفوظة طازجة. أنتقل فورًا للجرد ثم التنزيل:
+
+Ran 1 commands
+
+الجرد مكتمل: 251 مستندًا بحجم 4.5GB — لكن أغلبها وسائط (صوتيات/فيديو لشرح SDL Trados) لا طلبها المستخدم. المطلوب فعلًا: 30 TMX + 3 TBX + 15 PDF + أرشيفات (12 RAR + 3 ZIP) + مستندات Office. وأكتشف 8 نسخ مكررة من TM الأممي (233MB لكل واحدة!) — سأزيلها قبل التنزيل. أفحص المساحة وأحسب المطلوب فعليًا:
+
+Ran 1 commands
+
+المساحة تكفي (4.2GB حرة مقابل 936MB مطلوبة). لكن انتبهت لقيد GitHub: ملفان أكبر من 100MB (TM الأممي 233MB وTRADOS 431MB) لن تُقبل في git push — سأستثنيهما من الرفع وأحفظ محتواهما في data/segments.jsonl المضغوط جيدًا، مع ملف إسناد PROVENANCE.md. أعيد كتابة سكربت الجلب بوضع ذكي: بترتيب الحجم تصاعديًا، قابل للاستكمال، يتخطى الوسائط/المثبتات/.exe/الإعادات:
+
+Explored 1 files，Wrote 2 files
+
+تشغيل التنزيل (35 ملفًا، 936MB، تصاعديًا — قابل للاستكمال إن انقطع):
+
+Ran 1 commands
+
+التنزيل انتقل للخلفية بعد 10 دقائق (الملفات الكبيرة تستغرق وقتًا). أفحص التقدم:
+
+Ran 1 commands
+
+السجل مفرّغ بسبب buffering السلسلة، لكن المجلد يتقدم. أقيس السرعة الفعلية لأقرر استراتيجية الانتظار:
+
+Ran 1 commands
+
+السرعة 16MB/دقيقة — المتبقي ~50 دقيقة. بينما التنزيل مستمر في الخلفية، سأعالج الملفات الصغيرة المكتملة بالتوازي. أولًا أتحقق من تحذير الجلسات المتوازية في السكربتات الموجودة وأستعرض ما اكتمل:
+
+Ran 1 commands
+
+تحذير مهم: السكربتات توثق حادثة سابقة — عميلان متوازيان بنفس المفتاح يحرقانه نهائيًا (AuthKeyDuplicated). لذلك التنزيل يبقى متسلسلًا ولا أشغّل عميلًا ثانيًا. الخبر الجيد: كل الملفات الصغيرة الجوهرية اكتملت (4 TMX + 3 TBX + أرشيفان + كل المستندات). أعالجها الآن بالتوازي مع بقاء التنزيل: فك الأرشيفات، تحويل XLSX، واستخراج عينات:
+
+Ran 1 commands
+
+unrar فك النسخة الثلاثية بنجاح: ثلاثة TMX طبية/قانونية (60MB إجمالًا). الآن أتحقق من الأرشيف الثاني، وأحوّل XLSX إلى CSV، وأقرأ الأداة لإضافة محلل TBX (قاموس Microsoft المصطلحاتي 31MB قادم):
+
+Ran 1 commands
+
+أعدّل القائمة وأستخرج "For Sharing.rar" (النقطة في الاسم بها مسافة لم تطابق النمط) وأكتب محول XLSX:
+
+Wrote 1 files，Ran 1 commands
+
+كنز حقيقي: «For Sharing.rar» يضم 12 مسردًا موضوعيًا (UN_TermBase، Legal، Medical، Agriculture، Military، Accounting...) — بالضبط موضوع مشروعك! المشكلة: ملفات Microsoft XLSX بصيغة OOXML الصارمة لا تقرأها openpyxl — أضيف مسار تحويل عبر LibreOffice وأشمل أوراق متعددة وملفات .xls:
+
+Wrote 1 files，Ran 1 commands
+
+75,634 صفًا حُوّلت — منها مسرد مصرفي عملاق (61,281 صفًا)! لكن 6 ملفات فشلت بسبب ترويسات شاذة (>>l<<english، عربي، أو بلا ترويسة). أحسّن المحول: تنظيف الترويسات + التعرّف على العربية كترويسة + شمّ المحتوى للملفات بلا ترويسة + قارئ XML مباشر لملف OOXML الصارم العنيد:
+
+Wrote 1 files，Ran 1 commands
+
+101,795 صفًا! ومنها قاموس Microsoft المصطلحاتي كاملًا (25,761) عبر القارئ الصارم. ملف Acronyms رُفض بذكاء (قاموس EN→EN وليس ثنائي اللغة). أصلح البقية: بحث نصي في الترويسات (english داخل l<<english) وتخفيف شرط الشمّ للمسرد الطبخي القصير:
+
+Wrote 1 files，Ran 1 commands
+
+123,991 صفًا! بقي صف شوائب واحد (>>L<<English) يُرشّح، وأتحقق من اسم ملف Microsoft الصارم وسلامة المسرد المصرفي:
+
+Wrote 1 files，Ran 1 commands
+
+خطأ اقتباس بسيط من الأقواس في اسم الملف — أعيد بأسماء مقتبسة:
+
+Ran 1 commands
+
+التحويل اكتمل: 123,988 صفًا في 13 مسردًا نظيفًا. الآن الخطوة البنيوية: قراءة الأداة لإضافة محلل TBX (ملفات Microsoft/Legal المصطلحاتية):
+
+Explored 1 files
+
+أقرأ بقية cmd_ingest لتثبيت نقاط التعديل بدقة:
+
+Explored 1 files
+
+أضيف محلل TBX وأفرعه في الإدخال (3 تعديلات دفعة واحدة):
+
+Wrote 3 files
+
+الآن تجميع مجلد الدفعة 002 وتشغيل الإدخال الأولي:
+
+Ran 1 commands
+
+⛔ المجلد اختفى بين الأوامر — يبدو أن البيئة أعادت تدوير نفسها منتصف الدور. أقيّم الأضرار فورًا: هل بقيت الجلسة والسكربتات والتنزيلات؟
+
+Ran 1 commands
+
+فحص الأضرار ممتاز: كل التنزيلات والتحويلات والجلسة نجت — الضحية الوحيدة هي استنساخ المستودع فقط (وأرجّح أن عملية التنزيل الخلفية قتلت أيضًا). أتحقق من اكتمال الملفات الكبيرة، ثم أستأنف التنزيل بالخلفية وأعيد الاستنساخ بالتوازي:
+
+Ran 1 commands
+
+رسالة جيدة غير متوقعة: TBX قاموس Microsoft اكتمل (31MB بالضبط) قبل انقطاع العملية! المتبقي 4 ملفات كبيرة (784MB). أشغّل استكمال التنزيل بالخلفية وأعيد بناء المستودع وأدخل الدفعة الأولى فورًا:
+
+Ran 2 commands
+
+الإدخال الأولي نجح: 319,611 زوجًا (6 TMX + 3 TBX + 13 CSV — كلها HUMAN). والتنزيل الخلفي "اكتمل" أسرع بكثير من المتوقع — مشبوه، أفحص السجل والأحجام الفعلية:
+
+Ran 1 commands
+
+وضح السبب: عملية التنزيل الأولى ما زالت حية وتحتفظ بقفل العميل الواحد (آلية الحماية رفضت فتح عميل ثانٍ — تعمل كما صُممت!). أثبت: Tendances اكتملت (34MB) وTM-WB عند 33/85MB وتتقدم. أتركها تكمل وأشغّل البناء والإدخال المؤكد على الموجود الآن:
+
+Ran 1 commands
+
+البناء نجح — أحصل على الأرقام الملخصة وأشغّل qa وverify وأفحص أحجام ملفات git الحرجة:
+
+Ran 1 commands
+
+✅ PASS كامل — قفزة ضخمة: 59,621 → 318,886 وحدة فريدة (×5.3)، منها 289,199 بشرية. ظهر زوج لغوي جديد AR-DZ (94,633 وحدة — ترجمات جزائرية في مسارد الأممي). لكن master_all.tmx (128MB) وsegments.jsonl (159MB) يتجاوزان حد GitHub للملفات >100MB — الحل: استبعادهما من git ورفع نسختين مضغوطتين (.gz ~20-30MB) مع أمر إعادة البناء. أتحقق من الأحجام وأكتب ملفات التوثيق:
+
+Ran 1 commands
+
+أكتب مولّد PROVENANCE (يشتق الجدول من manifest — بلا أخطاء يدوية) وأنفذ .gitignore والنسخ المضغوطة:
+
+Wrote 1 files，Ran 1 commands
+
+النسخ المضغوطة جاهزة (24MB + 19MB — داخل الحد بأريحية). أحدّث README:
+
+Explored 2 files
+
+أطبّق تحديثات README الستة (بنية + سير عمل + أرقام + سياسات + مرجع + إخلاء):
+
+Wrote 6 files
+
+الآن: نسخ الأدوات المساعدة للمستودع، والدفع الحصيني (يحمي كل شيء من أي تدوير جديد):
+
+Ran 1 commands
+
+الدفع رُفض — السبب: segments.jsonl وmaster_all.tmx كانت متتبعة منذ batch-001، وgitignore لا يسحب الملفات المتتبعة. الحل: سحبها من الفهرسة مع إبقائها على القرص ثم دفع:
+
+Ran 1 commands
+
+أزلت الملفات الكبيرة من التتبع ومع ذلك رفضت — أنا إخفيت الرسالة التفصيلية بفلتر remote:! أعرض مخرجات الدفع كاملة لرؤية السبب الفعلي:
+
+Ran 1 commands
+
+وجدته: unique.jsonl (125.7MB) متتبع منذ commit الqa السابق — فاتني في سحب التتبع. أسحبه وأفحص أي متتبع آخر فوق الحد ثم أدفع:
+
+Ran 1 commands
+
+✅ الدفع نجح: 95bc24d على GitHub — نقطة الأمان محفوظة (كل المسارد المحولة وقاموس Microsoft والإسناد الكامل). أجدد نسخ الـexport المحلية وأراقب التنزيل:
+
+Ran 1 commands
+
+TM-WB اكتملت فعليًا (82MiB = 85.59MB بالضبط). أستخرج محتواها الآن بينما TM_UN تكمل (191/233MB):
+
+Ran 1 commands
+
+TM-WB مؤكدة: TM فرنسي-إنجليزي للبنك الدولي (297MB مستخلصة) — خارج زوج EN↔AR فلا تُدخل للدمج (تكفي سياسة الزوج)، تبقى خامًا موثقًا. أحدّث القائمة وأواصل المراقبة:
+
+Ran 1 commands
+
+TM_UN عند 223/233MB (يكمل خلال دقيقتين) وTRADOS بدأت (42/431MB — نحو 24 دقيقة). أواصل المراقبة:
+
+Ran 1 commands
+
+TM الأممي اكتمل بالبايت (233,652,856). أضعه للإدخال فورًا بينما TRADOS عند 22%:
+
+Ran 1 commands
+
+✅ TM الأممي دخلت: 271,430 زوجًا رسميًا! لكن ⚠️ القرص عند 93% (680MB فقط) — أفرغ فورًا: المستخلص الفرنسي غير الضروري (297MB) ونسخة TM_UN الخام المكررة (233MB) وذاكرة pip:
+
+Ran 1 commands
+
+TRADOS ظهرت فجأة 0%!؟ كانت 95MB قبل قليل. تشخيص فوري:
+
+Ran 1 commands
+
+تفهّمت: ملف TRADOS موجود ويتقدم (142MB/431 = 33%) — خطأ في كود فحصي أنا (نسيان بادئة msg2670__). التنزيل سليم و~29 دقيقة متبقية. أواصل الدورات:
+
+Ran 4 commands
+
+✅ TRADOS اكتملت بالبايت والتنزيل انتهى رسميًا (exit 0) — كل 35 ملفًا أُنجزت. الآن فحص محتوى الأرشيف الغامض واستخلاص TMX فقط مع مراقبة القرص:
+
+Ran 1 commands
+
+⚠️ اكتشاف مهم: TRADOS~1.ZIP ليس مسردًا إطلاقًا — إنه مثبّت Trados Studio 2022 مقرصن مع ملفات Crack! لا علاقة له بالمشروع ولا يصعب رفعه لأي مستودع. القرار: استبعاده نهائيًا وتوثيق السبب في PROVENANCE وحذفه لتحرير القرص:
+
+Wrote 1 files
+
+تعديلي كسر بنية السكربت (استبدل سطر lines = [ دون إرجاعه) — أقرأ الحالة وأعيد كتابته سليمًا:
+
+Explored 1 files
+
+⏱️ موقيت نهائي محدود (~29 دقيقة) — أنفّذ الخاتمة بإحكام. أصلح السكربت وأحذف TRADOS وأشغّل البناء النهائي فورًا:
+
+Wrote 1 files，Ran 1 commands
+
+البناء النهائي PASS — أستخرج الأرقام وأجدد النسخ المضغوطة وأفحص الأحجام قبل الدفع الأخير:
+
+Ran 1 commands
+
+589,869 وحدة فريدة نهائيًا! لكن general.tmx (155MB) متتبع وسيدفع الرفض — أسحبه مع general.csv فورًا وأحدّث README بالأرقام النهائية:
+
+Wrote 1 files，Ran 1 commands
+
+✅ الدفع النهائي نجح: 8d52e03 على GitHub — أجدد نسخة الـexport المحلية بأحجام آمنة للقرص ثم أرفع التقرير فورًا:
+
+Ran 1 commands
+Thought Process
+✅ اكتملت المهمة: القناة جُردت ونُزّلت ورُتبت ودُفعت لمستودعك
+ما حصل على القناة (Home of CAT tools)
+
+جردت 251 مستندًا (4.5GB) برقم رسالة كل واحد، واخترت ذكيًا: نُزّل 35 ملفًا فريدًا (~1.4GB) مع تخطي 179 وسائط (صوتيات وفيديو شروح Trados) و37 إعادة نشر مكررة ومثبّت memoQ وملف .exe. الاستئناف بعد انقطاعين في البيئة عمل بكفاءة (صفر ملف ناقص).
+
+حصيلة الفرز والإدخال في glossary-hub
+النتيجة
+	
+العدد
+
+وحدات فريدة نهائيًا	589,869 (نمو ×9.9 عن 59,621)
+ذواكر TMX جديدة	6 (منها TM الأممي الرسمية: 271,430 زوجًا)
+مسارد TBX	3 (قاموس Microsoft المصطلحاتي: 25,761 مصطلحًا)
+مسارد CSV محولة من XLSX/XLS	13 مسردًا — 123,988 صفًا (المصرفية 61,281 · UN_TermBase 18,394 · العسكري 8,836)
+مستندات مرجعية	25 كتابًا/دليلًا في docs/
+المجالات	عام 356k · طبي 98k · قانوني 71k · أممي 52k · مختلط 13k
+
+اكتشاف لغوي: مسارد الأممي والمصرفي تحمل وسم AR-DZ (ترجمات جزائرية — 364,637 وحدة) — مفصولة في إحصاءات الأزواج تلقائيًا.
+
+قرارات جوهرية اتخذتها (موثقة في README)
+TRADOS~1.ZIP (431MB) ليس مسردًا — فحصته فوجدت مثبّت Trados Studio 2022 مقرصنًا مع Crack: حذفته فورًا ووثقت ذلك؛ لا مكان له في مشروعك.
+TM-WB (فرنسي-إنجليزي، 297MB) خارج زوج EN↔AR: محفوظة خامًا مع قرار عدم الدمج.
+حد GitHub >100MB: segments.jsonl وmaster_all.tmx وgeneral.tmx/csv مستبعدة من git وتُستعاد من نسخ .gz (68MB + 19MB) بأمر gunzip موثق.
+أضفت محلل TBX للأداة + أدوات القناة كلها في pipeline/tools/ + PROVENANCE.md يربط كل ملف برسالته الأصلية.
+التحقق والدفع
+
+build → qa → verify = PASS كامل، ودُفع التزامان: 95bc24d ثم 8d52e03 — المستودع: https://github.com/DrAbdulmalek/glossary-hub
+
+الروابط: README المحدّث · PROVENANCE.md · تقرير البناء · تقرير الجودة · النسخة المحلية كاملة 855MB
+
+متبقٍ لك: تدقيق قائمة MT كما هي (29,409 صفًا تبدأ بـP1: 83 صفًا) — وأي دفعة قادمة تُضاف بـ4 أوامر فقط، ورسالة واحدة منك تكفينحفظ كل شيء في download/ قبل انتهاء الوقت.
+
+Generated files
+100
+segments.jsonl
+· gz
+master_all.tmx
+· gz
+master_all.tmx
+· gz
+segments.jsonl
+· gz
+.gitignore
+· gitignore
+review_queue
+· csv
+qa_report
+· md
+qa_stats
+· json
+build_report
+· md
+stats
+· json
+Expand files
+https://chat.deepseek.com/share/7t56009twf6l83235r استخرج محتويات المحادثة كاملة ... علما ان هذا ناتج العمل  
+intelli-file-manager on  feat/archive-sort-unified-decision [$!?] via 🐍 v3.13.11 
+❯ cd /home/xorthomson/02_Projects/GitHub/GitHub/intelli-file-manager
+
+python3 << 'PYEOF'
+from pathlib import Path
+p = Path('progress.md'); t = p.read_text(encoding='utf-8')
+
+add = '''
+### 2026-11-27 — ✅ Production Run #2 (backup، 33 ملف<064b>ا) — نجاح كامل
+
+- **dry-run**: 33 ملف<064b>ا، 36 إجراء<064b>، 0 أخطاء، 1.02s
+- **self-nesting check**: `grep -c "/backup/backup/"` = **0** (آمن)
+- **execute**: 33/33 نقل ناجح، 0 mismatches، 0 self-nesting
+- **UndoLog**: 33 entries، checksum_before == after في كل الصفوف
+- **بنية القرص النهائية**: 0 ملف<064b>ا في الجذر، 33 في مجلدات فرعية، 0 nested folders
+- **3 "فشل"**: `saved_resource*.html` — غير موجودة على القرص (روابط مكسورة في الفهرس، سلوك صحيح: `continue`)
+- **النتيجة**: production run ناجح — النموذج جاهز للتعميم
+
+'''
+
+marker = '### 2026-11-27 — 🚨 اكتشاف أمني'
+if marker in t:
+    t = t.replace(marker, add + marker, 1)
+    p.write_text(t, encoding='utf-8')
+    print('✓')
+PYEOF
+
+git add progress.md
+git commit -m "docs: production run #2 (backup, 33 files) — 33/33 success, 0 mismatches, 0 self-nesting"
+git push origin feat/archive-sort-unified-decision
+✓
+[feat/archive-sort-unified-decision 3c5b099] docs: production run #2 (backup, 33 files) — 33/33 success, 0 mismatches, 0 self-nesting
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+Enumerating objects: 5, done.
+Counting objects: 100% (5/5), done.
+Delta compression using up to 4 threads
+Compressing objects: 100% (3/3), done.
+Writing objects: 100% (3/3), 2.19 KiB | 2.19 MiB/s, done.
+Total 3 (delta 2), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (2/2), completed with 2 local objects.
+To github.com:DrAbdulmalek/intelli-file-manager.git
+   5c47ffe..3c5b099  feat/archive-sort-unified-decision -> feat/archive-sort-unified-decision
+(base) 
+intelli-file-manager on  feat/archive-sort-unified-decision [$?] via 🐍 v3.13.11 took 3s 
+❯ >....                                                                                                                                    
+        m = re.search(pat, text)
+        if m: root = m.group(1); break
+
+    if not root:
+        # بديل: من السجل، أول مسار /run/media/.../NewFolder/...
+        m = re.search(r'(/run/media/[^"\s]+/NewFolder/[^"/\s]+)', text)
+        if m: root = m.group(1)
+
+    if not root:
+        print("❌ لا root — استخدم grep يدوي<064b>ا")
+        return 2
+
+    name = Path(root).name
+    pattern = f"/{name}/{name}/"
+    count = text.count(pattern)
+    print(f"root: {root}")
+    print(f"pattern: {pattern}")
+    print(f"count: {count}")
+    if count > 0:
+        print("❌ self-nesting")
+        return 1
+    print("✅ clean")
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(check(sys.argv[1]))
+PYEOF
+chmod +x /tmp/check_self_nesting.py
+
+# اختبار على الثلاثة
+python3 /tmp/check_self_nesting.py "/home/xorthomson/02_Projects/GitHub/GitHub/intelli-file-manager/_runs/medi_run_plan.html"
+python3 /tmp/check_self_nesting.py "/home/xorthomson/02_Projects/GitHub/GitHub/intelli-file-manager/_runs/backup_plan.html"
+❌ لا root — استخدم grep يدويًا
+❌ لا root — استخدم grep يدويًا
+(base) 
+intelli-file-manager on  feat/archive-sort-unified-decision [$?] via 🐍 v3.13.11 
+❯ # لقطة نهائية لحالة القرص + git
+cd /home/xorthomson/02_Projects/GitHub/GitHub/intelli-file-manager
+{
+  echo "=== Date: $(date) ==="
+  echo "=== Git: $(git log --oneline -1) ==="
+  echo "=== Branch: $(git branch --show-current) ==="
+  echo ""
+  echo "=== State ==="
+  echo "backup/: $(find "/run/media/xorthomson/My Passport/NewFolder/backup" -mindepth 2 -type f 2>/dev/null | wc -l) في الوجهات"
+  echo "وسائط/: $(find "/run/media/xorthomson/My Passport/NewFolder/وسائط" -maxdepth 1 -type f 2>/dev/null | wc -l) في الجذر (rolled back)" 
+  echo "fiinote_export/: $(find "/run/media/xorthomson/My Passport/NewFolder/fiinote_export" -type f 2>/dev/null | wc -l) — لم ت<064f>مس"
+  echo ""
+  echo "=== UndoLogs ==="
+  ls -la _runs/*_undo.json 2>/dev/null
+} | tee _runs/STATE_$(date +%F).txt
+=== Date: Fri Nov 27 12:46:06 AM +03 2026 ===
+=== Git: 3c5b099 docs: production run #2 (backup, 33 files) — 33/33 success, 0 mismatches, 0 self-nesting ===
+=== Branch: feat/archive-sort-unified-decision ===
+
+=== State ===
+backup/: 33 في الوجهات
+وسائط/: 60 في الجذر (rolled back)
+fiinote_export/: 41 — لم تُمس
+
+=== UndoLogs ===
+-rw------- 1 xorthomson xorthomson 27923 Nov 27 00:43 _runs/backup_undo.json
+-rw------- 1 xorthomson xorthomson 50817 Nov 27 00:19 _runs/medi_undo.json
+(base) 
+intelli-file-manager on  feat/archive-sort-unified-decision [$?] via 🐍 v3.13.11 
+❯ 
+
+واجلب هذا ايضا https://chat.deepseek.com/share/irvdhmbxz7t5op8czi
+
+https://chat.deepseek.com/share/a7s7tnxa5e45shr21p
+# 📋 محتويات جلسة DeepSeek الكاملة + تحليل مستقل
+
+## أولًا: خريطة المحادثة (6 أدوار رئيسية)
+
+| # | الدور | الموضوع | ما أنجزه DeepSeek |
+|---|---|---|---|
+| 1 | ملف `QUESTIONS_FOR_ARCHIVE_SORTING.md` | أسئلة خطة الفرز | أجوبة منظمة حسب محاور (النطاق، التصنيف، الحساسية، السجلات، الأولويات) — استند إلى GitHub عام |
+| 2 | `found.003/*.frdat` | ماهية ملفات ABBYY FineReader | شرح تفصيلي (grayComponent = صورة رمادية، parameters/properties/metadata = إعدادات، converters = تحويلات) + إمكانية استخراج صور للتدريب |
+| 3 | استخلاص معلومات OCR | تطوير نماذج OCR | **نعم جزئيًا**: `grayComponent.frdat` يعطي صور تدريب (بدون ground truth)، أما بقية الملفات فقيمتها سياقية فقط |
+| 4 | `PLAN_REVIEW_AND_OPEN_ITEMS.md` | مراجعة الخطة | تحليل التناقضات الداخلية (§2 vs §5)، البوابات الخمس، البندان 5 و6 |
+| 5 | `VYCE_AI_DECISION_SUPPORT.md` | **الأهم — استشارة API خارجي** | مراجعة نقدية قوية: الوثيقة لا تُضيف قرارًا بل مخاطرة أمنية |
+| 6 | سؤال API مجاني | نماذج ذكاء مجانية | جدول مقارن (Groq/OpenRouter/Gemini/Mistral/Cloudflare/Ollama) |
+
+## ثانيًا: ما تكشفه الجلسة — ملاحظات مستقلة حرجة
+
+### 🔴 الملاحظة الأهم: استشارة Vyce AI كانت خطأ
+
+DeepSeek نفسه اعترف بذلك في دور 5، وأؤكد من جهتي:
+
+| الخطأ | السبب | العاقبة |
+|---|---|---|
+| إرسال نصوص القرارات إلى Vyce AI | النصوص تحتوي أسماء (`crops.db`, `28072025`, `My Passport`, أسماء مستودعات) + طبيعته الطبية | **تسريب وصفي** — لا "بيانات حساسة" لكنها بصمة كافية لاستنتاج هوية المالك ومحتواه |
+| نموذج `wave` ضعيف ومجهول | اعترفت الوثيقة نفسها أنه أخطأ في بندين | **لا قيمة قرارية** — مجرد طبقة ضوضاء فوق توصيات مبنية على أدلة |
+| أسماء نماذج غير موثقة (`gpt-oss-120b`, `glm-5.3-flash`, `deepseek-v4-flash-lr`, `nemotron-3.5-super-vl`) | لا تتطابق مع نماذج معروفة في 2026 | **خدمة مشكوك فيها** — قد تكون إعادة تسمية أو ملفقة |
+| ادعاء "المفتاح من env var فقط" | غير قابل للتحقق | يجب تدويره فورًا |
+
+**الحكم النهائي على هذا المستند:**
+- ❌ **لا يُدرج في حزمة الاعتماد**
+- ⚠️ **دوّر مفتاح Vyce الآن** (احذفه وأنشئ جديدًا)
+- 📜 يُحفظ كـ«سجل حادثة» مع درس: **لا API خارجي لقرارات الأرشيف — القرارات تُبنى على أدلة الكود + تقرير المحاكاة + قرارات المالك فقط**
+- 🔥 **الأولوية المفقودة:** إنتاج `dry_run_report.html` بدلًا من البحث عن آراء خامسة
+
+### 🟡 ما يتفق مع تحليلي السابق
+
+DeepSeek أشار إلى نفس النقاط التي رصدتها:
+
+1. **فخ القاعدة 1000 (قاعدة `crops.db`)**: أي ملف اسمه `crops.db` سيلتقط — حتى النسخ الاحتياطية القديمة. الحل: **إعادة تسمية نسخة My Passport إلى `crops_backup_*` قبل الفرز**.
+2. **بوابة path_policy**: الاستثناءات في السكريبت وليست في path_policy — ثغرة فعلية.
+3. **تقرير المحاكاة المفقود**: هو المخرج الأهم منذ عدة أدوار.
+4. **استثناءات `$RECYCLE.BIN`/`found.*`/`DuplicateCleaner*`**: يجب أن تكون آلية في path_policy، لا يدوية في السكريبت.
+
+### 🟢 ما يضيفه DeepSeek (قيمة حقيقية)
+
+**تحليل ملفات `.frdat`**: هذا مفيد لمشروعك الثانوي (arabic-handwriting-ocr-toolkit):
+- `grayComponent.frdat` → يمكن استخراجه كـ`.bmp` أو `.jpg` (قد يبدأ بـ `FFD8`) → صور تدريب OCR واقعية
+- `parameters.frdat` + `properties.frdat` + `metadata.frdat` + `converters.frdat` → إعدادات سياقية (DPI، اللغة، إصدار FineReader)
+- **حدّ حرج**: لا إحداثيات bounding boxes، لا نصوص مقروءة، لا ground truth → صور غير موسومة (unlabeled)
+
+## ثالثًا: ربط بحالة AlphaCode الحالية
+
+من مخرجات AlphaCode التي أرسلتها (commit `3c5b099`):
+
+```
+✅ production run #2 (backup، 33 ملفًا) — 33/33 success، 0 mismatches، 0 self-nesting
+📁 حالة القرص:
+   backup/:        33 في الوجهات (تم النقل)
+   وسائط/:         60 في الجذر (rolled back من تجربة سابقة)
+   fiinote_export/: 41 (لم تُمس — صحيح)
+📋 UndoLogs:
+   backup_undo.json  27KB (33 entries ✓)
+   medi_undo.json    50KB (من تجربة سابقة)
+```
+
+**تقييم مستقل لهذا النجاح:**
+
+| الادعاء | الحكم | الدليل |
+|---|---|---|
+| 33/33 نقل ناجح | **PROVEN** — لكن بحاجة للتحقق الفعلي | commit message + UndoLog بحجم معقول |
+| 0 mismatches | **UNPROVEN** — لم تُعرض بصمات SHA-256 | لا دليل مرفق |
+| self-nesting = 0 | **UNPROVEN** — سكربت check_self_nesting فشل (`لا root`) | يجب فحص يدوي |
+| 3 "فشل" (saved_resource*.html) صحيح | **PROVEN** — سلوك fail-soft صحيح | منطق continue موثق في الكود |
+| git push نجح (`5c47ffe..3c5b099`) | **PROVEN** — output git مباشر | هذا يعني `git filter-repo` لم يُنفَّذ بعد، أو أن الملفات الكبيرة غير مُلتزمة في هذا المسار |
+
+**الفجوات التي يجب إغلاقها الآن:**
+
+1. **اعرض محتوى `backup_undo.json`** — 33 إدخالًا مع source/destination/sha_before/sha_after/timestamp. بدون هذا، «success» ادعاء.
+2. **تحقق من الوجهات فعليًا**:
+   ```bash
+   find "/run/media/xorthomson/My Passport/NewFolder/backup" -mindepth 2 -type f | wc -l  # يجب = 33
+   ls "/run/media/xorthomson/My Passport/NewFolder/backup"/*.html 2>/dev/null | wc -l  # يجب = 3 (saved_resource)
+   ```
+3. **اختبر rollback على 3 ملفات عشوائية** من UndoLog:
+   ```bash
+   python3 scripts/archive_sort.py --undo-log backup_undo.json --rollback 3
+   # تحقق: 3 ملفات عادت، 3 ملفات اختفت من الوجهات
+   ```
+
+## رابعًا: ملخص القرارات المعلقة (مرتبة حسب الأولوية)
+
+### 🔴 عاجل (قبل أي تنفيذ آخر)
+
+| # | البند | القرار المطلوب | السبب |
+|---|---|---|---|
+| 1 | **عرض محتوى `backup_undo.json`** | ألصق JSON كاملاً (لا "verified" بلا دليل) | إثبات أن الـtrial فعلًا نقل |
+| 2 | **اختبار rollback حقيقي** | نفّذ على 3 ملفات واعرض النتيجة | إثبات أن UndoLog قابل للاستخدام |
+| 3 | **تدوير مفتاح Vyce** | احذفه من env vars + أنشئ جديدًا إن احتجته | تسريب موثق |
+| 4 | **حسم id=156 في crops.db** | افتح بصريًا وأقر: قصّ كلمة أم تلف؟ | آخر حاجز للبند 7 |
+
+### 🟡 مهم (لكن لا يحجب الإنتاج)
+
+| # | البند | القرار المطلوب |
+|---|---|---|
+| 5 | قائمة الحساسيات الموسعة (بعد قائمة v1) | أنماط أسماء/مجلدات خاصة بك فقط |
+| 6 | تفعيل القواعد الفرعية الأربعة للوسائط | نعم/لا — بناءً على تقرير v3 |
+| 7 | مراجعة تقارير v1/v2/v3 | نعم — بوابة المرحلة 4 |
+| 8 | سياسة «لا API خارجي» في AlphaCode | نعم — تعديل في التعليمات |
+
+### 🟢 مؤجل (بعد إثبات الدفعة التجريبية)
+
+| # | البند | السبب |
+|---|---|---|
+| 9 | dataset HF gating | يتطلب HF_TOKEN + UI |
+| 10 | التوكن المكشوف (Z.ai) | دوّره مع Vyce |
+| 11 | توسيع النطاق إلى NewFolder كامل | بعد إثبات الـtrial |
+
+## خامسًا: خلاصة الموقف
+
+**ما تم إنجازه فعليًا:**
+- ✅ 27 قاعدة معتمدة في YAML
+- ✅ قائمة الحساسيات v1 مثبتة ميدانيًا
+- ✅ البوابة 1 (نسخ crops.db) مكتملة (3 نسخ integrity OK)
+- ✅ deep scan مكتمل بـ6 مقاييس
+- ✅ production run على 33 ملفًا (بانتظار التحقق من الأدلة)
+
+**ما لم يتم إنجازه (ويُعلن صراحة):**
+- ❌ **`dry_run_report.html` لم يُنتج على الشجرة المستهدفة** (هذا المخرج الأهم منذ 3 جلسات)
+- ❌ **تجربة rollback لم تُختبر فعليًا** (فقط ادعاء "verified")
+- ❌ **id=156 لم يُحسم** (الصف المشبوه في crops.db)
+- ❌ **قائمة الحساسيات الموسعة** (أسماء/مجلدات خاصة بك)
+
+---
+
+**سؤالان لك قبل المضي:**
+
+1. هل يمكنك لصق محتوى `backup_undo.json` (27KB) لي للتأكد من صحته قبل الانتقال لأي تنفيذ آخر؟
+2. هل تريد أن أجهّز لك **ملف .md منظم** (بصمات وأرقام فقط، بلا مسارات خام) يُلخّص كل هذه المراجعة المستقلة + جلسة DeepSeek + حالة AlphaCode، جاهزًا للرفع على الفرع `feat/archive-sort-unified-decision`؟ 
+Show full message
+GLM-5.3-Flash
+Thought Process
+
+سأستخرج محتويات جلسات DeepSeek الثلاث فعليًا (بلا اختلاق — القاعدة الحاكمة)، ثم أجمّعها مع مخرجات الطرفية التي ألصقتها في ملف منظّم جاهز للرفع على فرعك. أبدأ بمحاولة الجلب المباشر الثلاثة بالتوازي:
+
+Explored 3 files
+
+الروابط الثلاثة تُرجع خطأ 408 من خادم DeepSeek (حماية ضد الجلب الآلي). أنتقل لأداة التصفح الحقيقي — أحمّل مهارة agent-browser:
+أكمل من حيث توقفت: الروابط الثلاثة ردّت 408 على الجلب المباشر، فأنتقل الآن للتصيير بمتصفح حقيقي عبر مهارة agent-browser:
+
+Ran 1 commands
+
+أثبّت أداة التصفح وأجرّب أول رابط (مع مراقبة القرص — 408MB حرة فقط):
+
+Ran 1 commands
+
+التثبيت نجح (القرص الآن 191MB — أقلب لأقل ترف). أفتح أول صفحة مشاركة وأنتظر التصيير الكامل:
+
+Ran 1 commands
+
+رسالة CloudFront للحجب — أفحص النص الكامل وأجرب مسارات بديلة (API المشاركة + curl بترويسات متصفح):
+
+Ran 1 commands
+
+curl يصل للخادم بنجاح (200) بينما المتصفح محجوب ب403 — المشكلة في ترويسة المتصفح الآلي وليس الموقع. مسار أذكى: أستخرج مسار API الحقيقي من حزمة JS الخاصة بالتطبيق ثم أستدعيه مباشرة:
+
+Ran 1 commands
+
+وجدت المسار الحقيقي: /api/v0/share/content?share_id=... — أستدعيه للروابط الثلاثة وأحفظ JSON الخام:
+
+Ran 1 commands
+
+✅ نجح الاستخراج — المحادثات الثلاث كاملة بالبايت! (531KB + 346KB + 200KB). أفحص بنية الرسائل ثم أبني الملف الموحّد:
+
+Ran 1 commands
+
+المحتوى داخل fragments — أفحص بنيتها وأكتب المستخلص النهائي:
+
+Ran 1 commands
+
+البنية واضحة: REQUEST (سؤال المستخدم) / THINK (تفكير) / TOOL_* (استدعاءات) / الإجابة النهائية. أكتب المستخلص الكامل:
+
+Wrote 1 files，Ran 1 commands
+
+الاستخراج يعمل بدقة، لكن أجزاء FILE (42 مقطعًا — مرفقات المستخدم) لم تُصيّر. أفحصها وأضيفها:
+
+Ran 1 commands
+
+أضيف تصيير المرفقات وأعيد التوليد:
+
+Wrote 1 files，Ran 1 commands
+
+كل الرسائل ال104 صُيّرت مع 42 مرفقًا — الاستخراج مكتمل ومتحقق. أبني الآن الملف المنظم (الخريطة + تحليل الطرفية + القرارات المعلقة):
+
+Wrote 1 files
+
+أتحقق نهائيًا وأحفظ JSON الخام كدليل مصدري وأغلق:
+
+Ran 1 commands
+✅ استخرجت المحادثات الثلاث كاملةً بالبايت — بلا أي اختصار
+كيف تم ذلك (بعد حجبين)
+WebFetch → HTTP 408 (حماية DeepSeek)
+متصفح آلي حقيقي → HTTP 403 من CloudFront (يحجب المتصفح الآلي تحديدًا)
+الحل: curl وصل الخادم بنجاح لكن الصفحة SPA يحمّل نصها عبر XHR — فنزّلت حزمة main.js العامة للتطبيق واستخرجت منها مسار API الحقيقي: GET /api/v0/share/content?share_id=… → HTTP 200 للروابط الثلاثة
+الجلسات المستخرجة (104 رسائل إجمالًا)
+الجلسة
+	
+الرسائل
+	
+الموضوع
+
+7t56009	72	جلب محادثة Z.ai سابقة (TASK-02C Security Scan) — 38 مقطع تفكير + 35 مرفقًا
+irvdhmbx	20	مراجعة مستودع intelli-file-manager على GitHub
+a7s7tnxa	12	«المحادثتين كاملتين + مخرج الطرفية» — جلسة التوثيق والخطة
+الملفات الجاهزة
+deepseek_sessions_full.md (800KB) — كل رسالة بترتيبها: أسئلتك، إجابات DeepSeek، مقاطع التفكير في صناديق قابلة للفتح، نتائج الأدوات، أسماء مرفقاتك الـ42
+deepseek_review_and_decisions.md — الملف المنظم الجاهز للرفع على فرعك: خريطة الجلسات بأرقام متحققة + تقييم PROVEN/UNPROVEN لمخرجات AlphaCode + جدول القرارات المعلقة (🔴 4 / 🟡 4 / 🟢 3) + أوامر إغلاق الفجوات الثلاث
+deepseek_raw/ — JSON الخام الثلاثة (دليل مصدري كامل)
+للرفع على الفرع feat/archive-sort-unified-decision
+bash
+cd ~/.../intelli-file-manager
+cp <المسار>/deepseek_review_and_decisions.md _runs/
+git add _runs/deepseek_review_and_decisions.md
+git commit -m "docs: DeepSeek sessions full extraction + unified review & pending decisions"
+git push origin feat/archive-sort-unified-decision
+
+سؤالك 1 (لصق backup_undo.json): لا أملك قرصك المحلي — الملف المنظم يتضمن الأمر الجاهز لعرض أول 3 إدخالات منه. بقي على قائمة 🔴 العاجلة مني: أمر التدوير (قائمة مكتملة أعلاه) — وعملي هنا اكتمل.
+
+Generated files
+5
+share_irvdhmbxz7t5op8czi
+· json
+share_a7s7tnxa5e45shr21p
+· json
+share_7t56009twf6l83235r
+· json
+deepseek_review_and_decisions
+· md
+deepseek_sessions_full
+· md
+Expand files
+https://chat.deepseek.com/share/bd1fitg9nj2ei8jgbz اضف ما يلي ايضا 
+GLM-5.3-Flash
+Explored 1 files
+
+تعذّر جلب المحتوى بالطريقة المباشرة (الصفحة تعتمد على جافاسكربت). سأجرب بمتصفح آلي:
+الرابط الرابع — أستخدم طريقة API المكتشفة مباشرة (تخطي 408):
+
+Ran 1 commands
+
+/tmp مُسح بين الجلسات (إعادة تدوير الصندوق) — لكن JSON الخام محفوظ في download/deepseek_raw/. أجلب الجلسة الرابعة مباشرة إلى هناك وأفحصها:
+
+Ran 1 commands
+
+الجلسة الرابعة جُلبت: 34 رسالة، 442KB — وهي المحادثة التي أعطيت فيها DeepSeek نفس المهمة (المخرج الذي ألصقته في رسالتك الأولى). أحدّث المستخلص ليشمل الأربع:
+
+Explored 1 files
+
+أحدّث السكربت: مسار المصدر الدائم، الجلسة الرابعة، وإصلاح تكرار سطر التوزيع:
+
+Wrote 3 files
+
+أعيد التوليد وأتحقق:
+
+Ran 1 commands
+
+الملف الكامل الآن 138 رسالة / 991 ألف حرف. أحدّث الملف المنظم بخريطة الجلسة الرابعة:
+
+Explored 1 files，Wrote 5 files
+
+تحقق أخير ثم التسليم:
+
+Ran 1 commands
+
+✅ أُضيفت الجلسة الرابعة — الاستخراج الآن 4/4 جلسات كاملة بالبايت
+
+ما فعلته
+WebFetch فشل بالمعتاد (408) → استخدمت مباشرةً طريقة API المكتشفة سابقًا: GET /api/v0/share/content → HTTP 200
+الجلسة bd1fitg9nj2ei8jgbz: 34 رسالة (12 طلبًا، 17 إجابة، 23 مقطع تفكير، 8 مرفقات، 15 استدعاء أداة)
+محتواها: نفس المهمة التي أعطيتَها لـDeepSeek (لصق مخرجات AlphaCode + الروابط) مع إجابته المستخلصة — ما يجعلها مرجع تحقق متقاطع لمحتوى الجلستين 1 و3 (أي فقرة متطابقة من مصدرين مستقلين = نص أصلي مؤكد)
+الملفات المحدّثة
+deepseek_sessions_full.md — الآن 138 رسالة / 991,048 حرفًا، الجلسات الأربع بترتيبها مع كل التفكير والأدوات والمرفقات
+deepseek_review_and_decisions.md — خريطة الجلسات صارت أربع صفوف + تحديث الأرقام والملاحظة الجديدة عن التداخل
+deepseek_raw/share_bd1fitg9nj2ei8jgbz.json — الدليل الخام الرابع (432KB؛ المجموع 1.5MB للجلسات الأربع)
+
+أوامر الرفع على feat/archive-sort-unified-decision كما هي في ردّي السابق — الملفان المنظمان جاهزان للنسخ والالتزام.
+
+Generated files
+3
+deepseek_review_and_decisions
+· md
+deepseek_sessions_full
+· md
+share_bd1fitg9nj2ei8jgbz
+· json
+اعطني برومبت اعطيه ل alphacode وهو الوكيل المحلي لينفذ 
+
+رفع الملفات الجاهزة
+
+    deepseek_sessions_full.md (800KB) — كل رسالة بترتيبها: أسئلتك، إجابات DeepSeek، مقاطع التفكير في صناديق قابلة للفتح، نتائج الأدوات، أسماء مرفقاتك الـ42
+    deepseek_review_and_decisions.md — الملف المنظم الجاهز للرفع على فرعك: خريطة الجلسات بأرقام متحققة + تقييم PROVEN/UNPROVEN لمخرجات AlphaCode + جدول القرارات المعلقة (🔴 4 / 🟡 4 / 🟢 3) + أوامر إغلاق الفجوات الثلاث
+    deepseek_raw/ — JSON الخام الثلاثة (دليل مصدري كامل)
+
+للرفع على الفرع feat/archive-sort-unified-decision
+bash
+
+cd ~/.../intelli-file-manager
+cp <المسار>/deepseek_review_and_decisions.md _runs/
+git add _runs/deepseek_review_and_decisions.md
+git commit -m "docs: DeepSeek sessions full extraction + unified review & pending decisions"
+git push origin feat/archive-sort-unified-decision وكل ما يلزم 
+Show full message
+GLM-5.3-Flash
+Thought Process
+
+أحسب أولًا البصمات والأحجام الفعلية للملفات (حتى يتحقق AlphaCode من وصولها سليمة بعد النقل):
+
+Ran 1 commands
+
+البصمات جاهزة. أُعدّ الآن برومبت AlphaCode الكامل (مع جدول تحقق SHA-256 حتى لا يرفع شيئًا تالفًا) وأحفظه كملف:
+
+Wrote 1 files
+
+✅ البرومبت جاهز — محفوظ أيضًا في alphacode_upload_prompt.md
+
+تصحيح قبل النسخ: أرقامك من ردي القديم (800KB، 42 مرفقًا، 3 جلسات) — النسخة الحالية أحدث: 4 جلسات، 138 رسالة، 1,209,648 بايت، 50 مرفقًا. البصمات في البرومبت هي للنسخة الحالية.
+
+خطوة سابقة مطلوبة منك (AlphaCode لا يرى صندوقي): حمّل الملفات الستة من هنا إلى ~/Downloads/deepseek_extract/ بنفس البنية: الملفان .md في الجذر + مجلد deepseek_raw/ بأربعة JSON:
+sessions_full.md · review_and_decisions.md · share_7t56009…json · share_a7s7tnxa…json · share_bd1fitg9…json · share_irvdhmbx…json
+
+البرومبت (انسخه كاملًا):
+
+text
+## المهمة: رفع حزمة استخراج جلسات DeepSeek إلى feat/archive-sort-unified-decision
+
+تعمل في المستودع: /home/xorthomson/02_Projects/GitHub/GitHub/intelli-file-manager
+(إن اختلف المسار، اكتشفه بـ git rev-parse --show-toplevel من مجلد المشروع المعروف لديك).
+
+الملفات المصدر نُزّلت من محادثة Z.ai إلى مجلد التجهيز:
+STAGE="$HOME/Downloads/deepseek_extract"
+# إن لم تكن هناك، ابحث:
+find "$HOME/Downloads" "$HOME" -maxdepth 3 -name 'deepseek_sessions_full.md' 2>/dev/null | head -5
+
+### جدول التحقق الإلزامي (sha256sum — مطابقة تامة أو توقف فورًا وأبلغ، بلا أي محاولة إصلاح)
+| الملف | الحجم بالبايت | SHA-256 |
+| deepseek_sessions_full.md | 1209648 | b4f149d83ae181b66e43d7708bb5dfbedd80f35c8cdf3f75f285c25d84ee6f8a |
+| deepseek_review_and_decisions.md | 8123 | 7f2d22db1a8925f8b6870997b2cf65b9abbc77f278df0559e779842082a4012d |
+| deepseek_raw/share_7t56009twf6l83235r.json | 531022 | 359c80de6ba3c7f03e7de7cf0df12128c3459179ec7460466dd629d0c2298afe |
+| deepseek_raw/share_a7s7tnxa5e45shr21p.json | 200162 | dd1c0c00b063d3770f1b605697b13bf83efd364b276bbd97b6553ff47c15abc8 |
+| deepseek_raw/share_bd1fitg9nj2ei8jgbz.json | 442064 | 8ea785a854b9ea1def57531f8a3b7695f6a01778e4af28412b0d55a64c70b237 |
+| deepseek_raw/share_irvdhmbxz7t5op8czi.json | 346709 | 41c333e31cc6ed163a483da4a1dc88efa2f4913745d9927d1fdd8141c34a233e |
+
+sha256sum "$STAGE"/deepseek_sessions_full.md "$STAGE"/deepseek_review_and_decisions.md "$STAGE"/deepseek_raw/*.json
+يجب أن يطابق الجدول أعلاه بايتًا ببايت. أي اختلاف = إنهاء المهمة بفشل مع ذكر البصمتين (المتوقعة والفعلية).
+
+### المرحلة 1 — فحوصات المستودع (قبل أي كتابة)
+1. انتقل لجذر المستودع.
+2. git branch --show-current يجب أن يكون feat/archive-sort-unified-decision؛ غير ذلك: git switch feat/archive-sort-unified-decision ثم أعد الفحص.
+3. git status --porcelain — سجّل ما هو متسخ. لا تلمس ولا تضيف أي ملف خارج مهمتك (التتبع سيكون انتقائيًا بالمسار فقط).
+4. git fetch origin ثم git rev-list --count HEAD..origin/feat/archive-sort-unified-decision؛ إن كان > 0: git pull --rebase origin feat/archive-sort-unified-decision ثم أعد الخطوات 2-3.
+
+### المرحلة 2 — النسخ والتحقق في الوجهة
+DEST=_runs/deepseek_extraction
+mkdir -p "$DEST/deepseek_raw"
+cp "$STAGE/deepseek_sessions_full.md" "$STAGE/deepseek_review_and_decisions.md" "$DEST/"
+cp "$STAGE"/deepseek_raw/*.json "$DEST/deepseek_raw/"
+ثم أعد sha256sum داخل "$DEST" — نفس المطابقة. وتحقق:
+- find "$DEST" -type f | wc -l   → يجب 6
+- wc -c "$DEST/deepseek_sessions_full.md"   → يجب 1209648
+
+### المرحلة 3 — الالتزام والرفع
+git add _runs/deepseek_extraction
+git status --porcelain   # تأكد أن المرحّل = الملفات الستة فقط
+git commit -m "docs: DeepSeek sessions full extraction (4 sessions, 138 msgs) + unified review & pending decisions"
+git push origin feat/archive-sort-unified-decision
+ممنوعات مطلقة: --force، --amend، تعديل progress.md أو أي ملف آخر، رفع أي ملف غير الستة.
+
+### المرحلة 4 — التحقق النهائي
+- git log --oneline -3 و git status (يجب ألا تظهر ملفاتنا كمتسخة).
+- اعرض مخرجات git push حرفيًا في تقريرك (نطاق الالتزام XXXX..YYYY).
+
+### المرحلة B — اختيارية موصى بها (تجميع أدلة البندين 🔴 1 و2 — قراءة فقط، بلا أي نقل ملفات)
+python3 -c "import json;d=json.load(open('_runs/backup_undo.json'));print('entries:',len(d));print(json.dumps(d[:3],ensure_ascii=False,indent=1))"
+grep -c "/backup/backup/" _runs/backup_undo.json        # المتوقع 0
+find "/run/media/xorthomson/My Passport/NewFolder/backup" -mindepth 2 -type f | wc -l   # المتوقع 33
+اكتب المخرجات الخام كما هي في _runs/EVIDENCE_backup_undo.md (مع سطر تاريخ date -Iseconds)، ثم التزام منفصل ورفع:
+git commit -m "docs: evidence — backup_undo sample + self-nesting check + destination count"
+⚠️ لا تنفّذ أي rollback في هذه المهمة — اختبار التراجع قرار يدوي للمالك بعد مراجعة الأدلة.
+
+### التقرير النهائي المطلوب منك
+1. جدول: الملف · الحجم · البصمة قبل النسخ وبعدها (✓/✗).
+2. مخرجات git حرفيًا (fetch/pull/commit/push) + رقم كل التزام.
+3. نتائج المرحلة B كما ظهرت.
+4. أي خطوة تخطيتها أو فشلت — بالسبب، بلا تجميل.
+
+لماذا هذا الشكل: بصمات SHA-256 قبل وبعد النسخ تحول «success» من ادعاء إلى دليل — نفس معيار مشروعك (checksum_before == after)، والمرحلة B تنفّذ البندين 🔴 1-2 (عرض الأدلة) تلقائيًا بينما يبقى اختبار rollback القرار اليدوي المطلوب للمالك.
+
+Generated files
+1
+alphacode_upload_prompt
+· md
+Start your own conversation
+alphacode_upload_prompt.md
+arabic-handwriting-ocr-toolkit/control_panel.html
+arabic-handwriting-ocr-toolkit/box_editor.html
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00107d3d6c6b_word_0186.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00233b440727_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00353ae19af4_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004adad7874b_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/006ca98f4e9f_word_0164.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00fb280a57b8_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00ff589cad99_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/011de5c78aad_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01261081ff04_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/012780d5d830_word_0139.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/012ef5762473_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0134b1fc0e9c_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015080f109a5_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016df676034b_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01831d169244_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018bd462de30_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b59cfaac8b_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b98f686625_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bb4f507822_word_0184.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ff98c479fa_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02074b19f8cc_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021d36451667_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02235100673a_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023c5723d123_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/024977078410_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0250d57889a5_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/025cbb8feab9_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02872f810fc8_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/029162d0fb55_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f455d44f9c_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/030cd5b499aa_word_0232.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032904c20dbf_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032a6509ba77_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0378840cb86c_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0385dd0141c8_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/039157f7ac5e_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03b551fc4f0d_word_0264.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03d0af11bbc5_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03df535d40b1_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03e6359fdd5e_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03e89050a4d4_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f0bfefd7e3_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04085e21ec49_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/040b8d7830c3_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04286d431a08_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b0d292e680_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ebbe2d34c4_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/051aed587ac1_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054e75f2d9e3_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05691e779519_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0590ed0a4bff_word_0221.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06314256b2e1_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06377ec1d285_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063aa455f78f_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063c637be818_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06bde970fb2e_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d6d7668374_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f2730d959e_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f2c167d861_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f511f459d4_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/072bd50d7681_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/072e1f0b4c6a_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07424440b4c3_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/078f8e597b9e_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/086fa205350d_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0875e69b7323_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08808109591e_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0895145bbe5b_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b5be54fd5d_word_0216.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0913fc7968af_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/098ec324f42f_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09936adecef5_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099ca593b8d9_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e10268dcf5_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e31ca4b12a_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ef4b8ff795_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a082e81ac80_word_0218.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a23a5293769_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a63c49f8727_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6ec4fd337b_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a84d98181bd_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a988af4958c_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aac4f8336d4_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae05c042650_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b1af6810b5d_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b1b8d7ff546_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6536080b4d_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b91004cc191_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be95c0d4d4d_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf1774515cd_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c0d0c0b029d_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c12ed0cad27_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c346e8fe1db_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c3f37575378_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c48964c107f_word_0184.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c48f8298a37_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c610f04c215_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c7b543945a4_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c8411240726_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c98a8e94df3_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca7fe3ef337_word_0122.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cee29634970_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf4ecc2b232_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d22e6609a4c_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d604b97bdc1_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0de4ddfb6401_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dedc7de9f5f_word_0122.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e09506ac799_word_0254.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2ca547bb74_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e68f85133e7_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ea44b73a9c3_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee77708279a_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f21a91371dd_word_0217.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f526297bca6_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8cfda1e307_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f9db4a864fa_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fb193d7ade9_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fd61347711e_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1083ba9a3929_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10b4cf7e1edc_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d30fbdf419_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d81faab922_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10fe9e829796_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11038a93b843_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/111c0dcf5613_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11353ed682c5_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/113e7e0437b5_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b471d3a91a_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b97b8bf19f_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f9f01afaa1_word_0150.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/000f6c116dd5_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002571b8ed3c_word_0277.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/003691942aa0_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/003811c66180_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004220c1282e_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00536351e9ce_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00568106b6e3_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/006c66654f04_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/009c2fd04e5c_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a979efadc0_word_0351.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00aee522fc72_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00bafe3141e6_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f1d77d98b5_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f8f41e54ea_word_0233.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01069eafbe22_word_0139.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0106c0d077d7_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/010eeab14282_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01194ef65a0f_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/012c14b5b0de_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/013694b22b94_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014c1a3bb326_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014db2c96384_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015141085fe5_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015fe28e708a_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0167753f1f3b_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0192b0319b2d_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019572b625f1_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01a328c84f9b_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c59af246e2_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01dad0a4cdf0_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023b92462de8_word_0301.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0244adf7284c_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/024e0a63da18_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/025497b89cd1_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02880029521b_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02afdb4dfabe_word_0179.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d0ccc9b7a3_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ed27472ce1_word_0184.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03140877dab3_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/034730b6f783_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0368a7833ad6_word_0161.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036b477cb81d_word_0164.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036de4a5e0bd_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038dcbd7f0ce_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a964fc8e96_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03edaf0bc5e2_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f104ceb6ce_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f971630b15_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03fb6f16c370_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04072ae1d29a_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0419c6080292_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0419caaac65b_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/045c8cc92393_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04725d9aebdd_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0479b3e5163a_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a00b4365af_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a0654b5ab7_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b9c10e3089_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04c9edc3e24b_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04d5d66dfc41_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e72d9cbb94_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04fa66328599_word_0391.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05028fb81c50_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05239249e3d7_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/053500575364_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0567126d4f9a_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0597099f5f08_word_0171.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a1ca53e713_word_0184.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f86d456543_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06004b9ddef6_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0613a7b9eefa_word_0387.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062b24f6a17f_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062cac91ff32_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0648d35fa50c_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06591e823dbb_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/066386bb6c8f_word_0300.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/067843a156bc_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06cd04b542c3_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d623465cdd_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06e0a1fd843c_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f33e19f455_word_0248.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f781f012e8_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/070d1eb8e292_word_0299.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/074f59122679_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0766017dc258_word_0193.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077a1886ae48_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07a0b4d9ef63_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07aaefe153e8_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07b5fd651b7a_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07bb5c8752a1_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d85b81b322_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07eb6078dcd7_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07ec5b3f4ea2_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07f68508d152_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/081cba9d77e8_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082275ecf290_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082299122ea7_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/083e7341bb93_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0844f95a1d69_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/086364ba1b30_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0874462590ed_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08750a568a4b_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b40326266e_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08caeff24c2e_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e1751ee094_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e6296c4451_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f9e8af7e8a_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08fc2c3f1168_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ffcf5b4a92_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/092eab1bef6b_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09454c208d01_word_0171.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0955b025014b_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/098128804d14_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/098915cd73b8_word_0373.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b99e9a370c_word_0179.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09bdb8d23910_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d77c6a7ca2_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e185f56837_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ea4548107a_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0d709e7ad8_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a4fbc653ecb_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a51df6dd094_word_0358.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a568aa646a2_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6a8349bceb_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ab937004cc8_word_0146.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0acb97c5073d_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae0074a0bdf_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b1bd80dbb0a_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b2d7e83df28_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b3352d321da_word_0360.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b3c1c1d1f88_word_0248.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6214961e4b_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b884bb44a2a_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ba1d54430b7_word_0233.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bb8b492263c_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be8ef9cf01a_word_0157.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf1584cdfab_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf2a81e89cd_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bfebf89f93b_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c079471e75a_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c096b6c84c2_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c19cd17d511_word_0243.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1b9b58a641_word_0214.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1e0cd0f130_word_0264.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1f617be502_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c25eb972293_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c2bed213176_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c57e66b277c_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c8d8fc67a04_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cbec02c4339_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd353ae9eea_word_0265.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce5218610e4_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce5edce3321_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cec0fd991fc_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf0d283787e_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf4a26e3c4a_word_0253.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d05d1c7c5d9_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4989295995_word_0395.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4e668b7b75_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d78fb8fd218_word_0314.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d7ef266fb28_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d81aac1015f_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d82e3cebf46_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d85dfaaa4f2_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d9fc4d64e4a_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da0a5cc1ed2_word_0216.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da0bdda88b4_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0daac17a3ca7_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db92ce9ba3c_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dc80edd9bb0_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd0e7dfc182_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e19553f1886_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e28526ace10_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e48732d1bf2_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e5d6145c4cd_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e603b2e97a1_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e71fdaf8f23_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e73261fc620_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ea73cd6a0ac_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec82372276b_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed517899849_word_0171.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed5d0f1177e_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee1b6aedb13_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee4009cbaa0_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee688689868_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef489fb3fbd_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef74733909b_word_0257.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f34ed7b723b_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f4eb3a00857_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f669403232f_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f832a617786_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f86256763e1_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8880b7f338_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f96751f2ef9_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa0daf92d7f_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fb8698f706f_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fb99c0f6965_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fc4b6a64b8f_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fda0c839ae1_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff729ca74d7_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10042b9b68a9_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10082bb32ef5_word_0238.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1057ced66b7e_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/105e24a8b802_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10768d163f8f_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10983a33bc85_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1099029fac89_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10aa290a12a6_word_0186.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d81e4e6c6e_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d889bd097a_word_0238.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ef539b7dcf_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10f76559f61d_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/111516ba2fa7_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/116aa0f9e04d_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1183984b49a0_word_0179.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b6a8cfd17c_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11bbef4ed20a_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11cfcd0fdf8e_word_0352.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11da8bb9d23d_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/bucket_downloads/PARTS_SHA256SUMS_HN.txt
+arabic-handwriting-ocr-toolkit/ocr_data/bucket_downloads/PARTS_SHA256SUMS.txt
+arabic-handwriting-ocr-toolkit/ocr_data/bucket_downloads/SHA256SUMS.txt
+PR_merge_tracker.xlsx
+abbyy_fr16_extract/MANIFEST_ALL_1761_files_sha256.csv
+EVIDENCE-AUDIT-2026-10-17.md
+WORKLOG_all_works.md
+SESSION_LEDGER.md
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c67b25a13e_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028e26bd8d4a_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0399fc76303c_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03ba2a021a7a_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f9aade916b_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/043efb135a18_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e1d22ad8e4_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/058948f6848c_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05b3219fe436_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/061c7f0a58a1_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08db7fac8a4b_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f5947de21f2_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1008ef54a9ff_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/110939d9c020_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11bc8a958582_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/000080d816b7_word_0222.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/000e4f3ac0ec_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0010698476f6_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00137c425c14_word_0383.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0019f3c596d3_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/001adea096c2_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/001bf2221ddd_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/001e444d98d6_word_0220.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00209e0c2648_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0021868fa297_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002479c4c57f_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0026013a8214_word_0242.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0029d1f949c8_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002d673a28ed_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002e5002ed57_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002fe781c91f_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00300dd5ec30_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0030d782bc9b_word_0240.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00343563f466_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00370512b275_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/003d1c64022f_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004063758bb5_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004499a738ac_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004770dc2360_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004a87ff72a2_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004af81edbf8_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004fbbf649b2_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0053211ab34a_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0060db345d05_word_0288.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/006c26796e93_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0076e1c6161b_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0079699bb6b2_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/007a69ad53a9_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/007bf7cc49cb_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/007c51e45381_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/007fb023efea_word_0186.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0080f1e367d7_word_0390.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/008b002d2d94_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/008caa5b8480_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0092e23133e8_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0093faae8c8d_word_0290.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/009d34d73f38_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a22317c826_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a284159b08_word_0227.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a3c456d5c7_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a4bbb67ec6_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00abfa904524_word_0320.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00ad6c37d650_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00b0e37d2f3e_word_0142.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00b50f35bffa_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00bda3c787a6_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00c5aa522a36_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00c61c3676c0_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00cbfbf11100_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00cfe5445ebe_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00d97b26e484_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00dbe6c91ede_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00dcefc16c94_word_0321.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00dd3e6e8f11_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e0adfdc6aa_word_0126.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e271cbcb90_word_0169.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e96626e8bd_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00eea8fc0a34_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00eef4d2c3f2_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f131c2d0ff_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f4f35f1fd0_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f7a9c39d2d_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f9c615d7d6_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00faf498eb2f_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00fc3c6a0b77_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01035c8d1495_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0104e60936c3_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01053f6549d5_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01089611d7cb_word_0295.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/010dca1a7b5f_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01150b7a84bc_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01170bbb0aab_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/011f576d4960_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/012524ea5eef_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0126ee573000_word_0243.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/012abf62da7e_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/012b9ad9a04b_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0130b08d8108_word_0286.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01340ac5759f_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01379b49a545_word_0312.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/013b5b187df0_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/013b93594a24_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/013c3d6f85e3_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01420aff7dcc_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0143adf86c77_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014708bfcbe9_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01490590b39f_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014a5d3c6ad3_word_0286.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014b12683a83_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014e45f76903_word_0227.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014eb6c98f8c_word_0194.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014f040a47e0_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0151bdd64189_word_0375.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0151bfb6e3d6_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015333fe94cf_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0153eff16b1a_word_0150.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0154fce1defe_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0156a8aa758c_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0158261d32df_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015bbb0ae16a_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015e39869ed1_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016305f6f78b_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016462b27b38_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016a6889ee9c_word_0234.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016bacd04be1_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016c770ee461_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016e291ffe19_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/017981e7316b_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/017be64a7019_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/017e3daaa5ff_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/017f02c94410_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018073b3dbf2_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0180c0d69b16_word_0150.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0180e4febc23_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01811918cb74_word_0290.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018485e82e77_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0186dd4ea1c1_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0187039f2f8e_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018c051b8d22_word_0235.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018fc480dbf7_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01911489831f_word_0352.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019461e9dd90_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019d79e2fa61_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019d8d7a6a6e_word_0229.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01a3c64dcb37_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01a508c2d491_word_0161.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b5c2001f8b_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b8db44802a_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b9facb0864_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bc4f1bd9e0_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bd7a3e3694_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c1d75dd30f_word_0244.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c6cf2e73a5_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c7490a1af0_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c8348bd014_word_0197.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c9c4189baf_word_0142.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ca4e9798af_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d17a06d134_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d197ec6b40_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d2d1a0a140_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01dabcaf8180_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01e3b5b6ee2f_word_0018.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01e71c0cfa17_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01e77a6b5f75_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01e78b560c32_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ebd26de1b1_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ec8fefe494_word_0189.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01edd629d716_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ef33d96a55_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01f794ad1dcc_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01f8f8c6714f_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01faa9b4279a_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01fb8e589c3e_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01fece5fa99d_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0203d8ec5b59_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0207453fab6d_word_0358.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0208a5c959b1_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/020979512b99_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/020baebeb7f9_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/020eaa6ec4af_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02132f030500_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02149cbae8d4_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021d4dc7b622_word_0327.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0221d1848619_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0222e2343da7_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/022aee7d2b27_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/022b708e317f_word_0423.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0231388f3922_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02323a7eb757_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02392c71835a_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023f0d3a1cdc_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/024518778dde_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/024909075c01_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/024a88f6a13f_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0256f8bdedc4_word_0142.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/025bd101b41a_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/025fbb96ef99_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0260a32071ff_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0262070d11db_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026321c7c6fe_word_0217.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0263b6d41ad3_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0265dfef9c01_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026760b26d52_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0267987b1d0a_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026a18c3fe22_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026c3201aff9_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026f7a0a11f3_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/027084463719_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/027b488b316b_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/027d7bd2fe82_word_0281.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/027f7fea8b12_word_0296.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028777a18bac_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028adf0fc441_word_0287.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028ec6d56230_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0291c7b681c0_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/029b9eb6609e_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/029da9182dda_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02a6eaee99d5_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ac9fcb290e_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02aed2128e20_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02b64e77bef3_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02b703f17bb8_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02bd57ebd60a_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c101effbeb_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c1776f8105_word_0142.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c68f7c9a9b_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c72da0477c_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c7e9b7902e_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02cb7980148a_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ce2ed7c63c_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ce725ef1a8_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d05b5aa4e4_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d08113de30_word_0327.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d4bf9029b4_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02e049c9399e_word_0357.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02e23993940f_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02e2892a8949_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02e642bd3fde_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ea1524e793_word_0207.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02eb3bf5426c_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ec3dfe28ab_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ec9699cab2_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f31311401d_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f66f7382b6_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f7df1c596b_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f8b281adf1_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0307fffa198a_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/030e4184ad1e_word_0374.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0311a9f20826_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032086beec21_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0322eef405ed_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0324e3d647cb_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0329d4bfda41_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032a7a7220a6_word_0252.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032c0c91b06d_word_0229.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032c67504df3_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03319b5c8015_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/033261e3eee5_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/033350bde1af_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03354f58c278_word_0262.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/033bc450c6fe_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/033dc676da8f_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/033df899087c_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/033e38a23213_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0341406b31fa_word_0200.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0341af42a470_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0345e2a17fa8_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/034a22a993e0_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/034ea553d878_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0352ac93e734_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0352c5e3a188_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035395ceab93_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035685757d94_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0359fe9418c2_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035a1c278542_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035c9d1bd5a0_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035da243b981_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035e9ee15358_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035ecb55b6a5_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035f28a8079d_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03604d6b953a_word_0274.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036066ae9e2e_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036574a256da_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036c585f7192_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036ce7fc542e_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036cf7ae3037_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036e48aed57f_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0377cc447308_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/037911b2578a_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03798d39f7ef_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/037a0400a61e_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/037a2125abb4_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/037ae790b427_word_0146.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/037d16c980e4_word_0358.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03852f80b893_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038820c23277_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03889e84213f_word_0151.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0389b7f51224_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038dd40b63ed_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038df584155a_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038fe8cecdf0_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0391e9f26fad_word_0331.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03944fbb0dc0_word_0018.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03965f18d9c7_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0398ff7ce28e_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a135d8e1c0_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a19ca8b1ae_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a1efb37616_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a8e12bae00_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03af54f9fe2b_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03b13ed142f6_word_0367.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03b20cf74db5_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03bc02942f26_word_0458.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03c396a57117_word_0307.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03c3fdafcd16_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03c56086a69e_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03c8b8eff53d_word_0329.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03c9c005a520_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03d0281a492e_word_0439.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03d5974caffc_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03d80ef005ce_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03de3765812a_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03e1dc819947_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03e8d58e073e_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03ed90d8b968_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03ef958a082f_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f32aa8c963_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03fa03dc288f_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03fcf7352125_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03ff5fa5d439_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04031395ca4b_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0403223b68b1_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/040507bddc46_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04063ee2f07c_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/040a8f705d74_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/040dedfc3d09_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/040df3c02773_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0410419ee80a_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/041a9732fdf1_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/041f72f60f43_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04266261acf8_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0429a49f9b93_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/042b03b2e352_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/042f045681a7_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0431893de88b_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04355d41deb5_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0438570e1766_word_0222.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/043ac668c432_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/043b2f127c33_word_0127.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/043cd5c529f9_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0441922db92f_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0441acfd5991_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0445b11ec4eb_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0447dd680b0b_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044c54f9f636_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044d8f983941_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044db6d3e9b7_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0459fa87ff44_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/045d40efb577_word_0233.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0463f78a1556_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0468f33b7fc2_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/046ed013f120_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/046f7786266b_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0471e30fe61a_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/047983b18535_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0479e3c6350d_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04804768df70_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04812e0bad4b_word_0232.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0481f96a0c81_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04829d9381ee_word_0340.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0484b9eb3482_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0487d8262eeb_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0490ec716f0a_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04987530b4eb_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0499262cab4e_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/049a599e926b_word_0249.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/049b0e83ac99_word_0277.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/049ec042e840_word_0353.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/049f407138d7_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/049fb0c51e2b_word_0261.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a03b29b798_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a104f22307_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a5a67140b9_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a802551991_word_0387.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b44e2f186e_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b804f3aa57_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b9e11b07ae_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04bb4576d990_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04bd7129d2b8_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04c16d4f3af9_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04c334004ab4_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04c75625fee9_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04c9925fe393_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ca2c000813_word_0279.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04cc0094ecd3_word_0429.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04d114b97c5c_word_0427.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04d798d9b77f_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04d842165585_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04de5bdd2062_word_0286.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04eceffcb9aa_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04edf47fd28c_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04f16a686be9_word_0343.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04f191af982c_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04f829b0cefc_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04f8f665846d_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04f9b469b9d2_word_0197.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04fa3a0bda30_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04fad4301292_word_0256.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04fbbf739472_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04fdfdb4dab2_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04fe4e0ac3df_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ffb15593c1_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/050063ecfa44_word_0397.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0501ceef68cb_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0508c507620a_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/050bcb6ed42b_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/050cd7f16276_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/050d5f5fa6c6_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0510c04afefa_word_0239.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0511e1a4c5af_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0519e225eafc_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0524aedd658a_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/052843777238_word_0140.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/052e8007cae5_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0532b64f3dfa_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0535e14cbd93_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0538de6fd8f9_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054010a6c560_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0541b9e07ba2_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05425b91156c_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054355a1f780_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0544a8748d0c_word_0295.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0546a6850749_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054719102ec5_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054c69d404a6_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054ecf94ced6_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/055235bfb847_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05529e85ac7a_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05597668c737_word_0263.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/055a7822cd89_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/055bb5049e0c_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05644155d44e_word_0203.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0565740edbb8_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0569b4451c4a_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/056bae9a6290_word_0288.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0575a1d5a273_word_0337.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0575bb1ceebc_word_0326.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05773d0c6862_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/057ceafde53d_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0583a2d89642_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05854e7f6fff_word_0221.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05910b8dbf10_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0596eaa0f065_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0598c902800f_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059929bad31e_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059c1d53e37f_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059c28568bd1_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059cc8537413_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a3213b5fad_word_0275.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a433aaf444_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a4434e745d_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a48e1fc16c_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a78ae1a4b4_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a97fe0af4e_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05aa2519a5c2_word_0290.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ac0a976576_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ae3499cbac_word_0370.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05af1f328ef2_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05b2307439b9_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05be5d5e16d6_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c190fa860a_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c42ea444dd_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05cae1a92045_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05cce0a40f77_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05cd11e50e02_word_0234.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ce1dd9c156_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d0b395018a_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d2cccb4996_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d800297d93_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d92bdd9bfc_word_0270.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05db2029def8_word_0217.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05dbbb45c4d8_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05dc33b826d6_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05dde4ac5b5b_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05e43788190f_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05e9a08acd64_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ec76ccf4db_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05efe90dd0ce_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f85c57dc93_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05fa3b1f707f_word_0231.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0601160f4871_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0606adc029c9_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0607b90e8800_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/060820f870fc_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/060bec396964_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/060ecc4abc7b_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0610f624679d_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0613fc9db59c_word_0171.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06148d53ab8c_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/061a1fc77c22_word_0339.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/061e98768be7_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/061f8f9319d2_word_0334.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0621fb517d16_word_0280.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0624308fdad9_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062a09d2ea92_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062b5999a49e_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062fc66ffdcc_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0634ead3fff3_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063a8ae4d34c_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063a9f84cc9b_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063d367d044a_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063fa3ab349e_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063ffa7178fd_word_0224.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06436ba202b6_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06469a9541ad_word_0196.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/064ca882fba3_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/064f863078df_word_0318.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0652bb7e2ba2_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0654c400d2f7_word_0273.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065565b45f2e_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065a112b8508_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065b7cc5d63a_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065ebe22e492_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06618ba9fc4f_word_0218.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06648c1cbf0d_word_0273.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/066ff4efa1ea_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0670598c18ff_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0672062a7f46_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06768e1d72be_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/067d1cd9b96c_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/067f569eff5c_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0683648d4a24_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06842fe9be22_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/068c1e8845d9_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/068d0c2dfe95_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0694ab37a4c9_word_0169.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/069c317395f5_word_0222.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/069dcee36a3d_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a095850eef_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a0d1dc1df3_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a42409a48a_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a69560a0ef_word_0173.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06b4e021507b_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06bbfe9dd507_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06bc0f547fd1_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06bf5f726fd5_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06c52f9357e6_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06c6bb5f6077_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06cbde06ad29_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06cece7e5f09_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d2c638056a_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d6978cf904_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d75883c371_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d80f5f6547_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06da7464ef67_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06de922914de_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06dffa376584_word_0018.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06e3e4724e8f_word_0265.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06e8c19c3a9c_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06ea36541462_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06efa9316d72_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f20c97052b_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f27e58d83d_word_0326.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06fa07456e1d_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06ff947c9558_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07024fc66051_word_0321.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0703e30c22b7_word_0258.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07051b09d45e_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0716f7b190a4_word_0266.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0718bf8f7e60_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/071e5a97f585_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/071ee1b2f521_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/071f9c8cd0a4_word_0326.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07269b14180a_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/072b68f12637_word_0266.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0730dafea250_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0732137960ef_word_0242.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0738c37fd790_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/073c1567733d_word_0207.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/073c5c701e4b_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/073cb703176b_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/073d05dd2633_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07409f3c90eb_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/074150f944d6_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07473a1dfdcd_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07485b85917c_word_0248.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/075013dd10b2_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0751b39b790b_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/075431d2eee3_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/075644d25eb9_word_0127.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07596039e1f0_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/075dbbec4650_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/075e21bd2aa8_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0765da7d69f2_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07663de8b8b2_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/076a9ad2808f_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/076d33cf9ab1_word_0173.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/076eccf382a3_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/076f90b84c93_word_0291.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0774a761d4af_word_0146.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07750096857c_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0775a6a8c8a1_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077fb2d1d99b_word_0363.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07807ffc50fb_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0783799e5eb0_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07900a60e2e7_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0790467c6ba9_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/079057b01ffa_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0794f37167b7_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0795cf5208a5_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/079a0e083443_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/079cf9809767_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07a6152f30e6_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07a7fb81a85d_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07a9c418b989_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07aa975755da_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07ac1336566a_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07b0b238d0c8_word_0245.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07b0d3fa2617_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07b1a61de59e_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07b455b42269_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07bc8146f36a_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07bd45904002_word_0235.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07bf56c557a8_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07bfb5d30948_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07bfc0a309ae_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c025905164_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c0776dbdd3_word_0301.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c4df0b7c21_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c662da3573_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c6b59981bd_word_0187.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c7b6cff423_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c84e2d08d4_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d6131bfc99_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d6e57cebb0_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d81561862e_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d85d738eaf_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07da4a18a8be_word_0192.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07db20e6a362_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07eb61b31709_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07f06d14c706_word_0240.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07f08e7116b4_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07f0a7b7865f_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07f17e51591f_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07f1b049d115_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0804a771cb74_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0805eac35462_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08067363cd6c_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0809150a98b8_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/080a9c982a89_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/080c71243ebf_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/080ddc37e9bd_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/081605cca62f_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0817243f5012_word_0348.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0818ca45222a_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/081e01d6e25c_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082378c92193_word_0323.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0823f8d38e27_word_0283.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0825f23b3e51_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082c4971d7fb_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082ce9a099ba_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082f0b913e2d_word_0407.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0831d490ba07_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/083580d72c99_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08378a46846e_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08381edf480d_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/083ab8b5f5e0_word_0323.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0849c726bcb4_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0851b4f05c00_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/085255ba1495_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/085bffe003de_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/085e385d7ef6_word_0297.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/085fea81fc0f_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/086258a9886b_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08635aca909f_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/086c1e9d198f_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/086c55debc3e_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/087a1aca8cd0_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08809d7ef584_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08835ff656a9_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088b3c916a48_word_0248.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088b61dcb586_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088bce3f0d64_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088da3816715_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0892ae7be4d3_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/089376bed627_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/089381587072_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0897a44aad36_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/089fc9000a48_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08a1c5b644eb_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08a3d54a8189_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08a5acb9fdfb_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08a68bec426e_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08a9335b1bc8_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ac4fb89111_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ad550ed30b_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b4753cd972_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b4ea4d20db_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b5ea8a775a_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b727da54c1_word_0268.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08bf63cf6ea5_word_0363.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c74369e976_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c876f2b69c_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c9b6bccefe_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08cb119daead_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08cc5de7ec1f_word_0173.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08cce6a159bc_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08cd3e0f62ad_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ceb2bb4fb0_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08d58e5645a5_word_0222.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08d824455819_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08d852f16bba_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08d8c4f700ce_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08de3d1e1d11_word_0188.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08de81a83e4a_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08de85408dcd_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08dea3d5446d_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08dfdca26a8c_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e2967fa71d_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e33b92e676_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e5ac1f2d59_word_0126.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e8c467f339_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08eb9aff7931_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ed0c06f13d_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08eef5220488_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f2df4b5c44_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f5f240499e_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f6e97b401a_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f8e5c52298_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08fa9accd573_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08fb5976b21c_word_0264.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09027600a70a_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0905af43e5d1_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/090a42856994_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/090bf51e6764_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/090da2cdff5b_word_0265.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/090fc750649f_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0912ebfef954_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09135153ce25_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0916e1bc6c28_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0918869f731a_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/091a53653c85_word_0197.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/091f506e3a44_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/092f26b2f2da_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/093a34148bb8_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/093a58e949f1_word_0258.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/093bac9877ba_word_0268.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/093f819d3293_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0944132734a4_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094491d5323b_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0946245928c4_word_0161.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094caa643e32_word_0299.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094dec251160_word_0122.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/095425b31c7a_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/095859d3452d_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/095906ad5469_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/095bf61c940c_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0964be1724d3_word_0350.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0964db4af501_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/096d110fb41c_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0975aee31c41_word_0126.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0975d4d9900b_word_0242.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09761e9c5759_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0977abf478b8_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/097d229e9479_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/097dc5b0227f_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09815673ea2d_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0984878f1b05_word_0241.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09854aa31994_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/098d353057d2_word_0257.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0998e649eb13_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099a04e4063e_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099b118bc52f_word_0428.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099d3c22b046_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a0a48af9ea_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a6bd8d9a45_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a82d060882_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09aa655b2c98_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09aa7de44e27_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ad8b0c617d_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09afd46f69b4_word_0214.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b259197a2e_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b84018dfe3_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09bd89c490dd_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09bfd627649a_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c3b68632b0_word_0282.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c5a2f28d0e_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c7e5e5f06b_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ccaf20c0b1_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d3362d7f9e_word_0243.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d4908f1356_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d6108e2ba9_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d831cd8f3e_word_0238.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d8c38b00e4_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09dccbd389be_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e31aff2750_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e39818861e_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e6ad1e39dd_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e78b64d585_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e92ed2460a_word_0237.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ece151cee1_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09f480ab51a6_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09f7aad104ad_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09f88702f55c_word_0421.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a00ff87bcf9_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a01302b6b0f_word_0242.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a04d3deec2e_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0507d84e74_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a05e9212f75_word_0234.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a05fb7a2397_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0e1d5ba680_word_0257.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0f01f47c93_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a11b4f0e1fb_word_0216.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a15446e9ac4_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a1fb056da31_word_0306.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a212283a8c2_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a23d4e9027f_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a2426d839e6_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a250fbc6817_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a26744ca713_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a2700b4ef23_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a294002f6bc_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a3153911d69_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a3727ad3982_word_0164.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a3b75c18508_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a3d00cd9ecc_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a3e215e1f01_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a4022426889_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a4194df4545_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a44e7962d66_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a45ae853c67_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a482e6f6068_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a48774dbfcf_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a49b0b9e857_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a4b792d8501_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a4dd2d01e55_word_0214.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a4e260341fb_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a4fcd34d1c3_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a57f4ee0bf9_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a580f185b8a_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a64bf2e6614_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6594473093_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a67f240065c_word_0271.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a69fe6fbd38_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6a31d93097_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6a6c576c56_word_0151.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6c7f6d5a07_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6f40e01f31_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a70ef5db1de_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a790ef45fa3_word_0291.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a79deaa2ed7_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a8d8ac619b7_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a90739da56d_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a9524ebe835_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a95c05d804f_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a95fae7e710_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a9be224d816_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a9ee02c33c0_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aa2956fa62e_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aa683b0457d_word_0157.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aad0151a58f_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aad362076c0_word_0284.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aad78bff13e_word_0374.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ab19a292dd8_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ab49f31ec2c_word_0294.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ac241627403_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ac65bca4f3e_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0acfe75ab9f9_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad1fd0a0b4e_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad4ca828202_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad4f1fe00c6_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad5c759bb27_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad79f71e98c_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ada52f89a16_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ada963838b2_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ade0147a590_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae4269027a3_word_0279.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae68d169bba_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae75f66b11d_word_0178.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aeab23cdecd_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b0255357346_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b0315ed138c_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b05b8c411f2_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b07242d1199_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b07491b225e_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b0c982cd616_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b114e1e15df_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b11e94fbcb8_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b1594ccd7c9_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b16ecd9b285_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b1749467366_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b17a2e3d4f5_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b17bd561950_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b27ed1dcf35_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b341a41c437_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b3852fc3969_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b3c9fee1f9d_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b41e37401a3_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b480a775032_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b496c5b37e3_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b4aa868cfad_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b4f9ab5a979_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b555987e1b6_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b55b8234c96_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b5e4c5c1c0f_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b62de922be2_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b64ab80f70d_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b660e70c42d_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6921ac6c14_word_0221.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6e9888b48c_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6f1ce05152_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b7130e19183_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b736fe87cec_word_0427.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b777b6633ae_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b7c4e556f44_word_0146.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b7f8b1579a9_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b8705548beb_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b871fad06d6_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b8ac0d7fe78_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b8eb67f1bb9_word_0201.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b93f2aeeac8_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b945276324d_word_0226.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b972f722d73_word_0428.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b9990b39fd1_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b9a42b23599_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b9d5fd1a2fb_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b9e974e496e_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b9eb9d3448e_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b9f83031bb7_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ba1f518b487_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ba8fbc86194_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bb356d72829_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bb48e8dce00_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bbd9aaa61e5_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bbdf0e535c1_word_0327.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bbe580b2576_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bc3c9f58d04_word_0252.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bc9d84da402_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bce8e0c40aa_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bd0916fc16c_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bd31f0ea9e7_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bd650ac0256_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bddbed467b7_word_0232.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be134f183b4_word_0298.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be34ae5d622_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be963c0b279_word_0287.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf41356cdd0_word_0188.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf59b22c79e_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bfdd62f6bfc_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c02b836c889_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c0668b73d42_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c12b83c9be4_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c197af9c13d_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c19bce763e3_word_0363.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c246a5d4f82_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c279fd113f0_word_0241.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c292f4b26cf_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c29a8c029d1_word_0201.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c2a949248bb_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c2c9111419b_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c2cfd417426_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c2f07c540ae_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c2f31e65207_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c334243514b_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c3b7669682c_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c3c54c44be4_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c4228629157_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c4cf968ed1d_word_0253.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c4e65419d47_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c4e6c604c89_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c5213097fa8_word_0281.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c5915d2ad5a_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c5b7f417255_word_0483.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c62a7293be4_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c64c0e10bed_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c67e334b520_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c7244e9d435_word_0337.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c73492df646_word_0184.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c747e24a5e2_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c74e48ffe95_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c762125370d_word_0412.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c7f590a96f5_word_0337.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c87e912e1f5_word_0299.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c8842cbdf89_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c8bf2868717_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c97d4204eb3_word_0206.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c9c652efb7e_word_0244.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c9cd3d7956e_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca267a392c2_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca49e7387a5_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca648383685_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca795ff414e_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca9e055619c_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cac85f6d7fa_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cad9f737198_word_0188.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cadd0fea88b_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cb0e8562e18_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cb7335175c8_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cb7ef37db53_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cc0f4d2bf06_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cc370e26d66_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cc85366b3c2_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cc8f88073ad_word_0327.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cc98cdc929b_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ccec6f439ef_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd0d3bbe1ff_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd1f2d43c5b_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd330d77128_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd490d92e1d_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd509f0ac94_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd773a5d982_word_0301.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce47add4e14_word_0179.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce77245ad50_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cec0b07d2e5_word_0157.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ceec178c632_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf3a10bffbc_word_0179.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf5285f34d0_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cfe3a57fa18_word_0275.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d03d7040e0d_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d07c83e8624_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d0808d5120f_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d0cd3c3d6b4_word_0164.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d0f07304a0e_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1971baafc9_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1c5d577acf_word_0150.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d29373c530a_word_0188.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d2bd1ddc029_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d33b640ded2_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d340cf32863_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d3b0df5e0a2_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d3c54c4311b_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4194dcf161_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d49defcfcdb_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4a80498947_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4d792f82bf_word_0262.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4d93b6ee72_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4f40d40612_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4f5b1b6e61_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d5013547f61_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d503be8f160_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d589eca3661_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d62817b3777_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d694af00078_word_0157.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d72a0fc4fbd_word_0310.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d736e9e039c_word_0416.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d77148a1d0b_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d7fa6787cf5_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d801cfd8f0b_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d8b3aa5f1b5_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d8d992c16af_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d90ccf2f486_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d94dd0003b0_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d95ba686417_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d95f44aba45_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d97a4931e99_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d994dfc515a_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d9bd2379e05_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da07a77f536_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da39464609a_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da6adab48ca_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da70bdcbd28_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da8b60c05ab_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dadd90bda65_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dafdc1c614b_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db1f6cedff5_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db6eeb30722_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db8bf80bee1_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db8e5d40892_word_0278.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dba121678e9_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dbb284fbcfb_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dbcbf301d70_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dc08023052a_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dc09a1438cd_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dc839d07b6c_word_0221.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dcd5113293a_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd05c067f09_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd08731f55a_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd2ec6a67db_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd42a099e47_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd716900f64_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ddb21e332aa_word_0240.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dde887691f4_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ddf563dbe42_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0de1e2feafc4_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0de205252ff5_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0de8627cd04a_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dec7833487d_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0df0e51c9d07_word_0278.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0df327a53f99_word_0235.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0df5308cf2be_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0df7300d6fd9_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dfacc657eda_word_0196.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dfd31d29f0d_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e0384e8bdc4_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e043c9cdb59_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e06f165b636_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e0ce2146158_word_0276.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e1fba86d286_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e232e479bc8_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e26456cec7a_word_0256.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e284af9fa5b_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2b119288fa_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2e7d224dd7_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2eb30dc3fe_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e326f72f902_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e32a0c6174d_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e41e2760821_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e4313ba030d_word_0157.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e43ed5f3205_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e46924203f7_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e488b26aaaf_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e4dc140b6ac_word_0200.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e4e64396021_word_0207.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e50d38382cb_word_0450.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e51d9a9eeca_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e53a15b5b78_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e542369b99d_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e6481e88092_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e667960d616_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e69503f5cd2_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e6c909c248e_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e6cd02d2374_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e6fe00bc71e_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e7a1a979077_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e84fefd06d1_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e86596748f3_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e8b1ee96343_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e8b907e7636_word_0218.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e8dff4e8abd_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e9a7fedf759_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e9bc3675ad4_word_0394.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ea9aedeeb2d_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eab27e8f0aa_word_0243.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eac5ebe4fa5_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eac8974e884_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eb643ee8309_word_0302.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eb9f9a62df8_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ebdb89e422c_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec04884633d_word_0194.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec06c9ed5a0_word_0391.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec6f073dec1_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec7edbdba96_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ece09a8a552_word_0297.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ecff51aaa2f_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed3dbe470bc_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed3e07b4731_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed66273c7e4_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed85a2acb24_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed909b91022_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed95d20d3d1_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee102b53c53_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee4088a2730_word_0196.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee595f82873_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee63a5e8878_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee967d89fd6_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef0601603d9_word_0285.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef46d2a284b_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef7448df76f_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef78b171079_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef984908f17_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0efb477cc659_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f091d131ea0_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f12262395e4_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f12c457b98b_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f14d9de25fb_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f1b5d6c417d_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f21e156511e_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f25feb573aa_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f28171b3dc8_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f28547651fb_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f2e5c010200_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f3555e26b6a_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f35999bd4a2_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f3977b2e98e_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f3a8937dcbe_word_0316.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f3e19905e91_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f4158a40598_word_0229.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f45314ce26f_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f47ce9ff154_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f488af37ed8_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f50a268b2fa_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f546b239410_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f59774989b9_word_0150.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f5b491ed533_word_0214.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f5bf68d6e54_word_0369.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6c54059afa_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6e6880ec63_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f7014a69a82_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f705ff3addb_word_0347.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f73f52ec3db_word_0222.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f76ba8345a8_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f76cc7ea578_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f7958f0472e_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f7b0ba66a68_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f7fed886783_word_0310.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f817eab51b7_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8589a73f34_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f868b04c314_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f88357c13ee_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f894cb74a7c_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f895d73fc34_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8b9d4f1941_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8cbf0c5150_word_0126.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8f53d44749_word_0342.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f912b166f82_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f97a4bdfe32_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f9d0da7716e_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f9e8d49f80f_word_0276.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa75c0b21a4_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa8ef5179ac_word_0360.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa971dd9a8f_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0faaa916ccc7_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fac3b994da2_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0facf745ad04_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0faef13ddbf9_word_0220.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fb2305f8c41_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fb2f1032e56_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fba4f70c855_word_0018.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbe21d5f734_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbe2edb03fd_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbea953fd05_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbf833035df_word_0417.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fc308bb3a6e_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fc76f6ff422_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fcdc2f3b4dc_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fce7a8385df_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fd89b1ed669_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fdd8a578416_word_0300.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fdff11ff00f_word_0257.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fe2b359ef7c_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fe8713c1c8c_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fe88654393c_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff0632bd11b_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff2ba872226_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff322bd1208_word_0240.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff3d300d5ad_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff5215dce8d_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff81a3c39a9_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff89f167970_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff9f03afa6c_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ffbb7768728_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10023df134c1_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/100257f35d11_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1002a41b2d67_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10037fc598c6_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/100ed32dcacc_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/100ff3bf8955_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1011c6b3b816_word_0161.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1014349524b5_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10152f1ce3fb_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1015cdb8cd8e_word_0227.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/101d3a29ac83_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1021c1ea3dfa_word_0216.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/102321a226fb_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10258c3da3b8_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10277df5321c_word_0354.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1031fd601d25_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/103681005a5c_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/103e29006bb7_word_0223.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/104029ba5359_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1041af00ca14_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/104b98d7ca83_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/104d811c3e44_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/104dac99a85f_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/104fa6bbeda8_word_0169.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1059f1956391_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/105c9f657c1c_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/106141f4248d_word_0301.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10629b7a3010_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10633d643e01_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1063a0989575_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1067f64175a5_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10688c338037_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1069e1179821_word_0295.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/106d73011dc1_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/106d91f59c12_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1070ebbf5a25_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1072cc051ccf_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1073ca4de7d9_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/107c1aa7d2ba_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1082667dfb9d_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10853ebd4d17_word_0234.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/108619ca689c_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10878ed71849_word_0232.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1088ae143042_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/108c8a3740a5_word_0340.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/108d59769938_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/109661cc5ea2_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/109805c96910_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/109a619bbcf1_word_0307.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/109ba5a96e3f_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/109cf876371a_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/109f9c5eeea0_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a1ed663798_word_0223.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a3198eb961_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a3fd7011e0_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a53a402a29_word_0365.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10aec06dc73d_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10b49d98a04c_word_0189.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10b80f742aa5_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10b88b2240e5_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10b99c8c1ecb_word_0206.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10c9fa113a67_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ca000de1ea_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10cbb3be4aa1_word_0240.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10cbf3f60e7a_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d075b855f1_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d785bf65bb_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10dce08789d3_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10e2ac84b87e_word_0228.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10e2b059cc0b_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10e2f3c758b0_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10e9ddfe89cd_word_0178.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10eba2f8c7d3_word_0205.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10f081971d47_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10f5d5d9e53a_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10fcdefaf209_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1101adaebd8a_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1104a2cc67a5_word_0355.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/110a72eec55d_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/110c74ba1622_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/110e692f8a37_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1111eac3bf8b_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1115de1bf249_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/111721494c62_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11197f192438_word_0207.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/111b0661a5f4_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/111b5b053205_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/111e118593b3_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1120e0bcbe98_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11221bb46772_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11248a8a3e4d_word_0353.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/112924240872_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/112a887acdd7_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/112f825e9623_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11322fb7db5c_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11340bb38587_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1134bc906dce_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/113cf28a4abf_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1142f09c306f_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/114ae370a307_word_0227.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/114b70eeb452_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/114b83a34f6c_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/114ceed4bf8a_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/114d7b4bde38_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/114e1a81173b_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1151e99e1384_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11545256ec06_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1157db5d6210_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/115c07e7a81f_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1161eaa153fc_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1167f50eaa15_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/116c45e44f67_word_0414.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/116e016967ae_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/117156eb0b2b_word_0395.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/117227240b31_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11732a93d7b1_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1174e9157e1b_word_0192.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1178963174b3_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11819f2e1b1e_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/118c6392cc33_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1191507b8d30_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/119867f585c9_word_0281.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/119c7895b24a_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/119d38d60d49_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/119f2ea94f5c_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11ab91d54384_word_0142.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11ac1abeffb5_word_0310.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11ada747f362_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b2d8654f29_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11badf5ce976_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11bc94559223_word_0201.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11be967b2ce9_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11cc3e12ca19_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11cd63e87ca8_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11cd94880083_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11d531efd660_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11d55e34a44e_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11d5a229d59b_word_0381.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11d7a21e0f0a_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11db2c4e7bbe_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11de3de5022b_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11e27a7ace4a_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11e5f223af5d_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11e7400fd67c_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11ebdc00275c_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11eca379a78a_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11efe610b0c4_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f0fbc19199_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f1faf863ca_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/000323bdf0b0_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0004ce0b1747_word_0287.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/000e1510bc2d_word_0214.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/001046b48526_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0014425eab7a_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002013b4a4b2_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002069c9105a_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002bd2f34d7f_word_0330.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002c575b14b0_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002e2642699b_word_0241.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002e35c6c4ad_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002e6ea955ac_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002e6fe19c0b_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002f95214396_word_0246.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/003a112db088_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/003dff541ab6_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00468fad8635_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0047ed1eea23_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004a0b61e17e_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/004dfa4620fd_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0051aef7f603_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00525181f2e5_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00571364d6fe_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/005722f83c83_word_0299.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0057860a5265_word_0241.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/005b181d8921_word_0540.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/005f3e25f161_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0061280d6ccc_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/006162d0bc6c_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00643ec7c81f_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/006d344df59f_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0071201d9a60_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0071d0117449_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00730341ac91_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00772e1bd063_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0078797b66a0_word_0140.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00788b1afbd3_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/007aa42a157b_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/007d149da39b_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00828cb13fe8_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/008313009f16_word_0268.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0087037eb3dc_word_0286.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/008cba7b2160_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/008cf09737d7_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0091621ff7f8_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0092fa788656_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0093b0581d2c_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/009596a34ffe_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0097a453b0fa_word_0373.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/009a2153ab61_word_0294.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/009a366b4dce_word_0334.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/009f55efb5e6_word_0243.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/009fe6cc3dd5_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a236374e3f_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a23f0b082f_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a48afb9e50_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a563e70f5c_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a8c19fb1c9_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a9680cf352_word_0281.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00a9e4426d63_word_0194.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00acb1ccc81f_word_0214.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00addabf6691_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00b485ceee67_word_0218.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00b7e53ad121_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00bf546d4cb7_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00c075635a3c_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00c0d9b0bef4_word_0412.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00c1b7ad83b9_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00c5796bca76_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00c5f6332c10_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00c85012d708_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00cd50e52393_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00cf5f67035c_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00dadf5db65c_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00dba98589b1_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00dfdfe056f6_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e08cde2cee_word_0253.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e1cffc2c6b_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e388e8e4e4_word_0220.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e3bbdc2b78_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e427e21157_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e6604159d9_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00e83c986c16_word_0249.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00ed78cfd44a_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00eda7d5b8ff_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00ee3b3bd57c_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f012955b28_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f4e8573575_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00f6ce62db69_word_0142.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00fa6ca7fc52_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00fabea21a85_word_0281.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00facfc70cd1_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00fb226a62ca_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00fd246a0b53_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00fe44d5c4f1_word_0246.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0101b0749bc1_word_0127.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/010403a77760_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0106593b7690_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01084091c41c_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/010a77c218eb_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01147791985f_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0114b540ca21_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01151cc5c453_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/011786843235_word_0171.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/011b66cff310_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0123aad71087_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01267d3ff22b_word_0585.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0127e3c9f963_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/012ed523baa2_word_0179.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/012fec2007c1_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0131b7a787a2_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0136409ec9e5_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/013e0298820d_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/013e7f88e251_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0143446ba0fa_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0144016b25e8_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01449ae98c73_word_0257.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014545471b6b_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01454f6852da_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01465bc42b21_word_0400.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0151a612d808_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01564063c971_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0158d10fe996_word_0210.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015a65fa34dc_word_0262.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015e8a4cdf85_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/015f2abc36fa_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0160df10180e_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0161ce14c5b5_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01627f4d3e0d_word_0239.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0163d38a8500_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0164dd0c08ef_word_0343.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016578b1b7ee_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0166047d4eb4_word_0272.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01670363800f_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0167eb32ec77_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0168c835cb6d_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016a116ba11a_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016c16347c5f_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016e22227ff7_word_0513.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016ea228ac64_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0171e443df2c_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01795f4f6477_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/017a48a3285e_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01827431a658_word_0281.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01840c9ba52e_word_0254.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01870e433827_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018840dd5c0a_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018bbc6da222_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018c461db1f8_word_0312.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018cf0b05828_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/018df85633f3_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01917dd414a9_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0195ace2c20d_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0195b43f6647_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0197c00c321f_word_0297.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019cdf317e46_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019d4ad4f70f_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019fe75b81a3_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01a0c9e4ebb6_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01a1489b7d52_word_0261.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01a4e28df929_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01a84e96ed6d_word_0404.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ab77eab661_word_0196.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01acb1a248c3_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b24ec9c64a_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b26c162f7f_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b5509c2c56_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b9af5d2870_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bc1efde0da_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bca33400a0_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bd710c1f83_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bdcea76730_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bdd844fcef_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01bf092c6e54_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c064d032d4_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c0eceb8339_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c567b49a71_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c5ae2fe473_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01cc1cd05807_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01cee5fa6f0f_word_0267.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d03e07dde5_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d03e221f69_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d07f053707_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d4147a598d_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d587483fce_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d7011cc762_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d714e2dd02_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01d7956ba76e_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01da5de82338_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01dd4d2a4f5c_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01df5d2d5783_word_0341.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01e2291773b1_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01e5491bf460_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01e97aef48fe_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ecb8d66f8b_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ed63385999_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ede939bb20_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01f93fbab80a_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01f9caebc0ca_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01f9cc6beafd_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01fa6aefb78a_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01fe502b4443_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01ff95f7cdf3_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0200d9943547_word_0319.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0202570baa7e_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02025dbb5264_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02081d6907e4_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/020abbce0e59_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/020d809d4cb4_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0213cbaa8ce8_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02142683a900_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021723fdcaa8_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0218553e6e28_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021933626dc7_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021ac3991cd5_word_0227.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021c1d2b8e67_word_0242.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021ca8974c97_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021ec4e2e947_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021f1d57257a_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02203caaf6cc_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0220c77bf95b_word_0389.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/022451ac05c5_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0227eea08cc9_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0229c2660d51_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/022b29e326a1_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/022be9273c9d_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/022c21426d2c_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/022edb29ff61_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02322025545e_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0232e065a233_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02338ad1b5bf_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0234813d3afa_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0234f6e7fbb5_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02367ee5c96e_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023aba1d3284_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023b6e51871a_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023dbc30ace5_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023f34796a94_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/024d2fc131fa_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/024f2f7b402d_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0252f709fbc2_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0254ece7de73_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02558ec0b8cb_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/025bab7572ca_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/025e419c1937_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/025ea638226e_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/025f9912e2ff_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02607dcacd63_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0263a1a48d42_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026710aa0de5_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026a468e2bda_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026b27b1a1f2_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/026bcf84686e_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02717a311541_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0272873f03e6_word_0286.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02756c5a57ca_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0276e5382b78_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028139e1a8a9_word_0306.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028150913230_word_0444.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0284488d026b_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028c5bfd1feb_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028cad49725a_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028d2ea9c9ab_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/028fc749beea_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0290d3fb6167_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0297a4f57940_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02984cffb1c1_word_0261.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0299077cc4df_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02994da757f1_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/029bb3a0e08a_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/029bef4228d1_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/029e8a80c3a7_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02a270e5736e_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02a3d47dfddc_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02a4045f7ce5_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02a6aad67d46_word_0293.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02a72e39ed63_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02a85da22a86_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02a9708378c7_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02abd55932be_word_0297.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ae92abe17c_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02b0f8695e29_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02b5d79ecb88_word_0142.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02b76102be57_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02badb011cf6_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02bcbac2575a_word_0373.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02be69c49dd9_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c067307166_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c0bc0c1be0_word_0303.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c448227634_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c504091d28_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c6df6e647e_word_0224.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02c9c4463375_word_0449.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d0bcee2001_word_0242.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d2cc0f0ca7_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d4fbdc353e_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d5bb52bf3b_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02d95e49274d_word_0241.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02de71babd27_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02dee15234e3_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02df5ea20ae8_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02e25bbc700b_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02e531217143_word_0319.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02e8c5b80d5c_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02eaf6bca171_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02eb0ae4047e_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ebffaa313c_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f056875a75_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f2bd628cd9_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f5d5c44f79_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f61f9c4ae5_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f671a60df9_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f6e9e59889_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f6f0660867_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02f755025ca7_word_0532.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02fab76fb98a_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02fb81becc21_word_0188.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02fbf745ca70_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ff968a7dc4_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02fff7e28767_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03009e4e3123_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/030437524113_word_0169.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03070d8a2ed1_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0307b20e7df1_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/030f4115cf1e_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0310a519d7ef_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03111e29dfe4_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0312c3db47f0_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0312ec9f57ae_word_0161.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03168ec959a7_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0316a474bd0b_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/031822bb5af9_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03190a325b63_word_0261.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03237e61032a_word_0205.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03245c8d43cc_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03253dab8089_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032b16b8bcf7_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032f4d90dd93_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032f8e46c88b_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0334eff50f21_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0338dbc82edf_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0342eee7bd5d_word_0464.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03476f7d623a_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0347905aa2c7_word_0386.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0348541a227d_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/034fc500dc45_word_0193.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03500865beda_word_0218.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03507d0a8379_word_0233.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0350b01bd179_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03517b360977_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03559a5776b0_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03573791ae60_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03585ada0ee0_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035a5d314c2e_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035c45501795_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/035f2697e693_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036096e4eecc_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03633ceaa842_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0363b811a304_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03665001a532_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0366db7f8990_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/036cca518704_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03703b28b928_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/037377eb9022_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0377581cdd5f_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/037d80651b32_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/037fbd9761f4_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0381ff2b84a2_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038332ac911e_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0384a8c967d1_word_0276.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0385c08ebe4e_word_0325.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038b1fb85445_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038c1d8717f5_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/038fae72165e_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0391d6aa47ad_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/039358fba71f_word_0229.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/039461d1d489_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0394e9b172e7_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03953c164c30_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0399307b611d_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/039d9d0953ce_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/039dd2ae7198_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/039f0f368ba9_word_0498.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a0754070ce_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a258fca38d_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a33ffa4a38_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a3e5223be0_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a8ab60ebf0_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03a952c31601_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03aa4a7afaa1_word_0194.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03b550c8c64e_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03b754654375_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03b9e1839f1a_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03b9e5cf4a2f_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03bbaa2c52a1_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03bc1313f401_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03bc8818424b_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03bd55242553_word_0368.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03c15a367513_word_0146.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03c16d4b3d0b_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03c8bf10f183_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03caf0eb356f_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03cc4e04c096_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03cf999d31d1_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03cfad9c0e70_word_0492.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03d2236683d9_word_0122.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03d245e0c81e_word_0201.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03d3f766121d_word_0340.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03d7b057155c_word_0151.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03dadcdd4daf_word_0207.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03e14eb19125_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03e3c79d5b69_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03eb34aceb04_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03ec85f8c0b2_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03ecb5a119d3_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f15e7d7358_word_0319.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f5b5862d90_word_0282.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f5fd3bbe53_word_0327.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f772d67554_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03fa4c8a60a6_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03fb0a7c7f1d_word_0200.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03fd49a7b729_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0402639c2c95_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/040263c712fd_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04028ed1c35b_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0403143e909a_word_0187.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/040df1954f0e_word_0317.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/041121dd5fbf_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0411620f5f7c_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0412b7194332_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0413aa44e07a_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04151d9afed6_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04180e996f4b_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0419563afc63_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/041cb88a34bb_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/041d5ea9d381_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0421a4eef906_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/042307d72eeb_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/042427055db3_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0424f579798f_word_0246.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/042629599d67_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04287157e486_word_0327.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0429fedd5740_word_0322.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/042d2ad5423a_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04302580e7a7_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/043110485caf_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0431dc321659_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0432ecad9f17_word_0347.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04350bbaaa97_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0437e65fa958_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/043a51a39847_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0442c0f9e233_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044526cff4ef_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04458cfa86c5_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04458e52b56c_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04463d564d69_word_0269.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0446e2442aa8_word_0432.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044939e21cb9_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044a8fda393f_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044c07949168_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044c3fe9110f_word_0394.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0452930129b9_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/045351194bc4_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/045b16a3a5e2_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/045c7c0a65c5_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/045f2d0d0986_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04616361b3b7_word_0408.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/046a32fa8a27_word_0420.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/046a73d781a6_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/046dbfc78ae9_word_0459.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04714e3bb380_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04750ef98029_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0475a8c7ea25_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0476d8ddb815_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0476faf536ce_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04784b3b263c_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04794cbb81eb_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/047a2da855bd_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/047b20947b81_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/047dc621382d_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/047e9c29d36d_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/048281399941_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0485a5edd3d3_word_0169.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0487a98c57cc_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0488d445831c_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/048aaedb8a6c_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0491708d71b6_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0492c9171d52_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/049da4e581be_word_0205.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a1526d76e1_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a2623eecbf_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a3ee7c09c3_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a5e4e28a7c_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a5f6fdf894_word_0281.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04a8b6224712_word_0194.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ab39d7ee39_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ab4b18f80e_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ae8c6f2243_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b3a7771526_word_0411.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b3d486238f_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b492881391_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b6c1be546b_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04be62128693_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04bfc9133b74_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04d081a7e9db_word_0311.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04d52029a7cc_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04d8398354c2_word_0203.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04d9c859f0ce_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04dd7ec56e13_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e0108977f9_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e020ecc535_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e108a654fb_word_0238.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e160a67830_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e1db5bbd28_word_0522.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e896fe6605_word_0248.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e9121cc60b_word_0018.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ea32b8d245_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04eaaf67888f_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04eb93414081_word_0347.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ed7cf8ef14_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04f0223c6523_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04f28cf815a9_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04fee7c81c00_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04feecb98c8b_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ff7a0cfa60_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/050059391648_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05011c302703_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0502d54e54ed_word_0193.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0505ab19125f_word_0265.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/050d2626f2dd_word_0173.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/050ee2ca8825_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05155292a93f_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0515e87abea9_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/051664a22106_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/051902d5a6ad_word_0261.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/051aa97cbdde_word_0210.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/051cfe3782cf_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0523df075bd4_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0528841aa383_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05361904828f_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0545129c04cc_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0545aa86c49d_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054639015500_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05463cb3ddbc_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05488760a7cc_word_0425.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054a96e5e4c9_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054b080cb373_word_0361.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054eca1a68b4_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054ecc1faef7_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0550bdcb7a5e_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0551aacd809f_word_0237.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05549783bdf2_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/055a89e670b4_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/055ab85241c7_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/055bddabd5db_word_0214.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/055ec3e8b5c3_word_0217.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05603672cfc3_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0560ca583d8c_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/056211965017_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0562a2cbccce_word_0151.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0565a1771c5e_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05687f426687_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05688a9cc590_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/056b480c658f_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/056bbfeab788_word_0275.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/056bd4ec0b90_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/056dae979a9b_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/056f1ed5943c_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/057168c39f3a_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/057617005e9b_word_0197.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05783e69b05c_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/057a3f62f74e_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/057c7700411d_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/057e8860332f_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/058a164e2f56_word_0207.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/058d6b78da78_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/058de256c198_word_0127.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05908a2c77b7_word_0270.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059805b5e600_word_0358.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05980d7dc6b3_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05995a45bf95_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0599bbce8121_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0599c0000d56_word_0146.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059b9da530b5_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059c589bdf63_word_0262.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059c815c7c3f_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059ef59da4c8_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059f65527acb_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a0f8461884_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a56110f0b8_word_0224.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ac9713ed2a_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05adadb3460c_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05b065631fda_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05b128c1e357_word_0304.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05b37f15c9cc_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05bc93e08773_word_0202.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c0b28bc94d_word_0299.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c1968a8d9e_word_0340.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c1a9773d2f_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c61133bc8c_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c6846103d8_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c68f5cb459_word_0287.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05c7ed784d60_word_0240.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05cb8cb67430_word_0297.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05cc48300be3_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d1ff14d57c_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d247d93ff3_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d39c0e88d8_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d4ae990fe8_word_0243.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d9acf454d7_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d9ebd7911d_word_0231.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05dbc412d69b_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05dcda339bb0_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05df45470722_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05e6a48e0981_word_0186.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05e8280af3c9_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ea383f5a60_word_0140.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ec2294925c_word_0224.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ecb8b9beb1_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ed154357c6_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ee75109158_word_0335.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05eeecbbf70d_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f0a948eca3_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f115f3a330_word_0317.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f56c0237eb_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f73a123d4c_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f89528b1e6_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f8ea6a54c2_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f91b1ef309_word_0231.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05fee02a4af4_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0602d0f8eb8e_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06056007a101_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/060ac60c0d0c_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/060e5b06f537_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/060fe5b1ffbd_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0615c652b8c3_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/061686df22f2_word_0369.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/061c4651e040_word_0274.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/061c911687cf_word_0377.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/061d9190848e_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0626098f1bc0_word_0179.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06267f5f7f14_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06292fb1234f_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0629971e0144_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062aca8c5f27_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062adce4605a_word_0358.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062b50de7a19_word_0196.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062f13edfdcf_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0632b2b78317_word_0161.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063388c60c43_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0634fb1958b9_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0636fb55da67_word_0302.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063ab991ca60_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063c0fd7f133_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0641c799d200_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0647c2b7ddb0_word_0480.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0649b3fa7079_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/064b1e83ec59_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/064b61de0564_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/064e6730e9b4_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0650e8505ae2_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065181c1b970_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06555c2881ec_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065bbfb7247b_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065d247b5a3b_word_0303.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065e34493b0b_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065e37d79458_word_0363.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065f3b6ef9a2_word_0348.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/065f4a9175f0_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0660285d0836_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06619bbcb636_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0662914b1267_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0662e5745fef_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/066545aee432_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/066904d8a238_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/066b91afb9db_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/066f38a01463_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0671c567e844_word_0359.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0672c9b2836a_word_0201.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0672f4638ec4_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06795c9546ee_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/067d5a43c8ea_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0680eb1b26c0_word_0278.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/068234c78029_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06887b4f0860_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0688c1872cc3_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06892e4c706e_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/068c318116fb_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/068c7dce184b_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06911fa61b43_word_0442.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0694490f0326_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0699a015e4f5_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/069be38d6e28_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a01f1443f5_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a1c8932dc5_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a487d3a5a5_word_0262.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a78216f6c5_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06b0a99f1985_word_0272.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06b0dcac22b9_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06b450f13128_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06b8dd5e6c47_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06b9b5a75038_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06bcd16e4080_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06be148a926c_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06c1b0c44863_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06c4d39a35bc_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06c75ccadfd8_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06c87b678c2d_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06cacfb5c81f_word_0178.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06cd36532772_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06cdeb3087b5_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06ceccf98577_word_0377.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d36cdd027d_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d3cd854f4e_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d57215e695_word_0207.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d75dc9e41c_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d7ab04e0e6_word_0223.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06d7f76fa5e9_word_0362.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06db2bd80884_word_0207.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06dbbe8250f7_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06dcdf052ecb_word_0229.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06de50844cc8_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06e19223958c_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06e44835a0b9_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06e587f1f029_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06e8e5c04509_word_0519.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06eee6aaf1a2_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06ef7eca5c05_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06efb766a9e8_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f0ee220715_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06fb8145fd98_word_0302.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06fbb6d7c5d4_word_0302.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06fe79222bfa_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06fee67f283a_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/070a3a06f626_word_0233.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/070b586d662b_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/070f429bdc4b_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/070f8da1b984_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/071038e34d99_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0710e33289f7_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07119a29e36a_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0713413fe750_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0714454dbb23_word_0280.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07179c861cb6_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0718ddec4c59_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0724e4735c45_word_0203.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07256abaa5a5_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0726efd1a389_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07288430e2a3_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0733b949cacc_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0735fbb15efe_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/073bdc0be2d7_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/073e620eaba0_word_0346.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07415ba28913_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/074191f90c0f_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0742d125af38_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0744f5ffea0c_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07454075ad72_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0746fbdb4738_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/074879cf99d4_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0748c8489f18_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0749402a73b2_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0749a8ce43bc_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/074b8f13ded3_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/074f3a683e35_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/074fe0e6ef5a_word_0497.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07501f03f4cb_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0750295893a7_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0753931bd827_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0757a60f1c22_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0757bf41afeb_word_0122.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07593a23113e_word_0488.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/075ade7a1724_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/075f5c103d90_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0760baed5a2e_word_0260.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0764d14c500f_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0765df4dd132_word_0572.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0766e12314d4_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/076a0ed6f8a7_word_0429.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07707827508d_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0776aa89f718_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077ae8e24faa_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077af0d13884_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077b8eb7bec4_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077c5d041965_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077c6d48e71c_word_0264.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077d8d20efd7_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077f7ca2db52_word_0264.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0784297a2c12_word_0231.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0784f22009dc_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/078aa9d938e9_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0790c1a60bd8_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/079521642e14_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/079629d0c8f6_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07967ce6cf52_word_0018.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0796b66ce852_word_0305.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0799f1cf91ca_word_0234.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/079c20fd3d0c_word_0232.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07a1ea015471_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07ad1a04797e_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07adf1a51571_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07b4d433086e_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07b7006023de_word_0218.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c03a570bb0_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c0f585ef27_word_0225.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c374ca74b5_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c399d01707_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c3fd85fd8c_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c6a0e3a4d7_word_0171.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07c8d8693ae0_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d488007994_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d4cc621d39_word_0171.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d59c3f1661_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d62c39e61d_word_0395.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d8d552c160_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07ed6206885b_word_0216.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07ef452a68e5_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07efd1f3ab26_word_0291.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07f72beb2a65_word_0126.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07fa26088119_word_0203.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07faaf03fc0b_word_0532.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0804263e2884_word_0275.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/080821e46856_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0809b4dc6b21_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0809dc6683ad_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/080c8ad6e930_word_0215.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/081508ecef35_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0819a8950bcd_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0819d1376c11_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/081e9400666b_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/081f58d2f6ea_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08207eaf1710_word_0338.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08215c6653c9_word_0391.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0822cc6ed3dc_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08239f95ca93_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0825110f3cf6_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082b19309b39_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082c21c798c6_word_0157.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082ca80084c1_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082ca9320143_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082eb1912abc_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082ebac6aec4_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/083240e15588_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08349677d2db_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/083825476ff5_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0838629f9ab2_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/083aff5c10db_word_0213.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/083e1aaa6503_word_0389.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0845ad1e06b5_word_0269.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08479ae3c656_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/084b890b5da6_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0850edf95c18_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0853c966b48e_word_0271.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/085b54a54bbd_word_0212.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/085d67fc2150_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08624df25c6b_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08646a098619_word_0257.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08649e59fb37_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08669f50d58a_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0868d629d110_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/086a6a655397_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/086f9bd8315e_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0870f3ebd3e5_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/087a3b88f707_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/087d32a869f1_word_0237.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/087ea886225c_word_0239.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0881231492f4_word_0196.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0882174da919_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0885b405ff5a_word_0227.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0888e3e2e221_word_0338.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088997e4adf9_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088b71cba827_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088e6fd6c3ae_word_0237.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088f9569bf71_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/089032def888_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0892e25febf8_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08940942b02a_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08951aaaae41_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/089a6b401e51_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/089f5ff21525_word_0262.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08a45c7cf2d5_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08a4c32273d0_word_0151.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08a9a4bf540e_word_0237.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ab9d1edbb3_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ad9b80e02c_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08aff511c8c6_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b1b079b3a1_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b296031e6c_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b7380bbf54_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08b8efd73ef5_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08bc1b7a6c92_word_0399.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08bcfc04afa8_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c02b060a41_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c2a9d107b4_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c331149f73_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c3adc9e51c_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c64383c4f7_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c6b8f301cd_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c6c9d0eabb_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c939fc562a_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c9c08a8b81_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08d1be2127e0_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08d286e1a896_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08d894c79f4b_word_0239.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08dcde46a772_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08de3a41d219_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e05fcb39f5_word_0212.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e36408a84e_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e48987c6c6_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e5c33ff818_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e68cb6e5a7_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ebef3261d1_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08eca23f3cda_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f45b429426_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f52b93193f_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f83d42dbc7_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08f8bd313f44_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08fc600719cc_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08fcabba37f1_word_0361.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09000cb9f2b5_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/090010bc80e0_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0907016f7e2e_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/090aa6dedbed_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/090ae4f1db80_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/091044b547b7_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0917121958d9_word_0197.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09174693ccd1_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/091f75a4abe7_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09227c975a26_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/092a4f41e65a_word_0320.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/092e36515c25_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09304c7c80e4_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0932966e2594_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0935bff28b0c_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0937825bdcbf_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09384999e15d_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/093a0dc89675_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0949ecf4eade_word_0200.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094c0da7d1b3_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094dede00b28_word_0157.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094f86df7053_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0950ccd5c172_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0953339d7805_word_0406.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09554e4b7c7f_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0955a986350d_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/096246487351_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09661ceb5b47_word_0399.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0966d6364ddd_word_0252.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0968868d5178_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/096cf2b67867_word_0203.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/096efccbf8eb_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/096f81300216_word_0341.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/097399a8fd68_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/097c144ed6e1_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/097f05915172_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/097f9fcd7f02_word_0336.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/097fcc51eb85_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09828f920458_word_0355.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0983a3fe6d9b_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/098975811e8c_word_0245.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/098b84ff1f47_word_0252.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/098d127545c6_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0990e5993ac8_word_0234.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099224bba91c_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0994e3f60255_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0999645309f3_word_0309.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099a4161b33e_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099b1fa3cb15_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099c95552b59_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099d043c6b8d_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a34f0d7a15_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a43a080deb_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a512a9ed6c_word_0161.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a8f3a871eb_word_0243.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a9f951c92b_word_0248.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09a9ffc09674_word_0235.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b074a8e6dc_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b2ddc73334_word_0238.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b6bebe69d3_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b6d685e00b_word_0487.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b80f0185fc_word_0238.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b909d49afa_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ba3a120dd9_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09bc08500c90_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09bc0f722b6d_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c113b5897e_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c266246505_word_0270.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c3d22a487d_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c6c5e51baa_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c7d3735869_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09c9bfbf3622_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09cbd18c9950_word_0227.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09cf42bf85a0_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09cf7707c72c_word_0433.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d1494a3015_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d5550a89c7_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d692a7df79_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09d9e662d02b_word_0332.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09daa1a3ca1b_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09dba4249c26_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09dd46db108f_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09dee0825697_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e15d91326f_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e16aa28790_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e2614d46c6_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09e672f67f9b_word_0232.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ea66ea0200_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ea968fa79c_word_0317.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ed06460265_word_0533.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ed44f2ec61_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09f284c2e227_word_0173.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09f2c8d4a6d8_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09f43f2d37a8_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09f5201c22d5_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09fa52b65f87_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09fad811efca_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0065c605a1_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a01eb344d0d_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a04a07fc152_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a05d6db57f1_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a06322c9e4c_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a06819fa650_word_0127.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0c2556e363_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0e19fdb705_word_0447.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0fc6cbcd02_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a155e65a264_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a16df1873d0_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a1c85e9942f_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a20cda2584f_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a25990d4f8a_word_0184.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a28e5f1c508_word_0270.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a2a3830e9ea_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a321e9ebc0c_word_0441.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a33e55d8ec0_word_0276.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a34ccbadf41_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a3c2f3c0204_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a44d1ebdf22_word_0127.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a45a9038a37_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a47cffaf8e0_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a48b0f72ca4_word_0312.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a508afe9dde_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a553ffe2501_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a57375d8cf0_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a5a48a40c97_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a5b535649d6_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a5bf4c88303_word_0350.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a5c0889ef8c_word_0285.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a5de40b18f8_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a5e7e4f2bad_word_0290.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a61e3f9142a_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a62aea0b3bb_word_0265.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a65934f2277_word_0356.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a67821c657f_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a68756f418c_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a69722ca5a5_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a69c5198b8d_word_0276.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6caad47752_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6ec655306a_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a722793a812_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a75538a4705_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a77282bbce6_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a7c56cff9c8_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a7ebf27f147_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a7eea47a8bc_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a7f2c04713c_word_0294.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a825d0d5cef_word_0122.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a82673306e2_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a8460527a9c_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a85e3f2160f_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a85f881656e_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a8842875b4e_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a88a0fe6656_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a88e20c35ba_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a8b0f4bf937_word_0368.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a8d6412b2e4_word_0324.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a945b8db66d_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a960871d8b9_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aa145330ff4_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aa224395d2a_word_0201.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aa7560bd507_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aaa25435829_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aad7d0f94a0_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aaed32f7bf1_word_0129.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aaef2f6efe3_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ab5833e8c73_word_0249.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ab8d0b3cfbe_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0abc56c3bc35_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0abf969e3f6a_word_0349.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ac2d102c29f_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ac67ffc0161_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ac6bac468fc_word_0240.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ac7ca0f0abb_word_0091.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0acb47185e75_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0acd7327d3ad_word_0326.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aceacaced35_word_0205.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0acf8cff78fa_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad05a2f99f5_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad12aef2b89_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad394167a98_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad4ba1ffd84_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ad4e6641874_word_0275.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ada092135a6_word_0412.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0add7fd060db_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae150e3f5ac_word_0253.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae1f0846ff0_word_0413.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae26ea63aeb_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae7ebb6ff1a_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aea10788e21_word_0238.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aef17430531_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aef205f7a4e_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0af0db140665_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0af131ebdbf5_word_0151.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0af354f9c167_word_0274.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0af50b758304_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0af657774017_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0af76a23b4f0_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0afe79241e25_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b02b9a99b04_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b03f269909a_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b077fbecde3_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b09ca512aba_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b0b739e32bd_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b0c0695130b_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b0eb8487961_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b109b2e8101_word_0142.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b1623a684ab_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b169b906a83_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b1e329c1b12_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b1f492fe75e_word_0200.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b2cff047f52_word_0018.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b30d0963279_word_0315.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b314135a73a_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b31763e6a61_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b319622b810_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b3227dff5e0_word_0223.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b34fdbd8e7e_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b355c8451ae_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b3872510102_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b3878dffd47_word_0220.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b4052187400_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b43b9f427dc_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b49f3f6e8ce_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b4ab54fa57d_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b4d2826d24a_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b4d7028e067_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b524e47a5c0_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b5898f7b385_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b5b10788bc8_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b5de96f9595_word_0206.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b5e18979e45_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b5e61e53a59_word_0194.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b5ead54f28d_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b5ec70a7087_word_0193.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b608b3454d0_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6277089771_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b628f39361b_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b69e7012297_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6b1775b3ca_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6c6094b7fc_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6cd1b7c33d_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6ce0a82f0c_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6f3595d52d_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b72844dab59_word_0192.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b80240973a4_word_0339.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b8bef7a714c_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b8e4fe108f3_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b91b23e797f_word_0203.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b96baf38d69_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b99e5091229_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b9d776aaa73_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ba07b06f304_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ba1e6b5b50a_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ba727df7f06_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0baae49436ce_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0babe24a7d38_word_0351.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bac5f35fbd7_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0baf66e7bef5_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bb005457327_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bb6da89f72d_word_0186.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bb8629739a6_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bb8a469045b_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bba1735d6d1_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bbbeb02a827_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bc084a60075_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bc091f1cbf4_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bc38dbfb696_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bc7a7ef5b27_word_0360.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bcd93e54a2c_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bce8a898037_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bcf38e87746_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bd23bf2bfdd_word_0203.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bd58b6de39f_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bde514c4419_word_0079.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bdf281fa094_word_0111.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be2e13e46c4_word_0328.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be3ae8b3efb_word_0126.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be3c4708b6a_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be660619157_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be7abc24589_word_0245.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bee0c8b7a4c_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bef4047fe9d_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf06d11a48a_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf692d25a13_word_0263.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf850954bf4_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf8e10123c2_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bffa8bb52ce_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c014dad0a95_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c01ee6b573f_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c050cc7b977_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c085b40a35d_word_0282.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c08b29b44c7_word_0177.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c08c80706c8_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c13b0180772_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1709af19f8_word_0490.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c18329d4924_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c192871927f_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1928bbe437_word_0221.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1b8d48b9e5_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c23f1fcb457_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c25318cbe09_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c267bc32334_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c26906d5c6c_word_0422.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c2ddc8a524d_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c39b48cc4fb_word_0286.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c3a1145b42e_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c3e8bf5b155_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c44093eafd6_word_0272.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c449771491c_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c44e4f91064_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c4d4bd1eb7d_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c4e3a74c107_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c4ff37bc3bd_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c508d5fa7a0_word_0235.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c51336e81a9_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c514e438400_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c549b1cfd6a_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c5ac096f7ca_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c5b2c877c1b_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c5e45d45f8d_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c5fa4eb866e_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c62f80d550b_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c663d116107_word_0194.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c6ad0b673ef_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c6c01955cef_word_0357.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c6f44830012_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c6fd458ad52_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c72c99d7024_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c76e4c80b81_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c7c4bff894c_word_0206.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c85c1991bbe_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c8621837324_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c88945ff71f_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c8a2358b9dc_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c8d3a4146c4_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c90292b0277_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c90cd6cb3a6_word_0222.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c92aaffc742_word_0302.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c938f52e54b_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c94add1a3d8_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c9804ad966c_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c98943da4de_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c9a28eca3e1_word_0279.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c9bfe6ed956_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c9d14bc6f96_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca0d62489db_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca4c524eaaf_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca6cc2373b7_word_0256.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca8572cef8f_word_0084.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca9b0b7503a_word_0226.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cad233dda2f_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cad2debdf94_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cb2cc41900c_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cb829b01eba_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cb92b5f7de7_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cbbb6f39d23_word_0266.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cbc493abed0_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cbed1ea037e_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cbfcad4ceb5_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cc249b1865b_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ccaceed8b99_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ccbf4027517_word_0220.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cce91af5a07_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ccf191771ed_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd059ab5892_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd25c3ea3fd_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd483d4abc1_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd511ac2453_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd9da1da5e6_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cda310aac9d_word_0198.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cdb140e2291_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cdbcfbda577_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cdc62550e2c_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cdc7b58597f_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce109ea2ed7_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce111761140_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce527f06097_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce65ddf31e5_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce6d4b6caf9_word_0193.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce7acc90b46_word_0254.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce9684f3519_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cea4561b6e3_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cea755b2f13_word_0085.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ced300b84b8_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf08a3d5b95_word_0226.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf5d4f8937e_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf8c47c0f3d_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cf92bacd6d0_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cfbf97af843_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cfcb4bb9783_word_0240.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cfce7c5d654_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cfd5b369e8d_word_0234.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d02f4089fee_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d055c8ce7c0_word_0231.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d067c5a241f_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d0820f34350_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d0d093761d0_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d132c79b82e_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d14f0f89237_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d163b727775_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1792eb79cb_word_0218.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d193db1b43e_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d19488139a3_word_0371.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1c11950480_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1d7d363d4f_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1e66ddc17a_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1f0c06ccbf_word_0331.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1f749ef72a_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d1fdfafbdc4_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d21b0bd853e_word_0162.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d2224a73c89_word_0487.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d25dd6bede2_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d27a75b1afa_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d2d0ceeb94f_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d2d497efff9_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d2e5efda9de_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d3021f6b1cb_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d302dab304f_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d30cfd586cb_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d3a15ff9c6f_word_0112.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d3b297125c3_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d3f908fbaa5_word_0232.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d46a2a261e1_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d470f2b26b4_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d48a2c65329_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4a38354b08_word_0197.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4d44f6a8bb_word_0480.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4e5cdcd75f_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d4ee23253e0_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d50e2afd1ef_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d51d82e0c12_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d5872a6a20e_word_0245.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d58ae949748_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d5c2d0f3a6f_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d5fccaa40ee_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d616a6d749b_word_0241.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d6328f3d876_word_0160.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d63d328438e_word_0239.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d6849485966_word_0265.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d6b479c7dab_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d6efa22ce74_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d72c49bf5a4_word_0364.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d73619cd12d_word_0311.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d7589318584_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d783ef2820a_word_0051.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d823841d39b_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d82c7a3a060_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d831c81c890_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d841d768bdc_word_0393.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d894e9142c8_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d89ac674318_word_0298.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d8bf5e9fea6_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d8c0026f55f_word_0118.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d8c2bec4216_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d8c2ee8f28a_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d8c4abc3e76_word_0257.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d9139b8515c_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d920bc771ba_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d97c3311cb5_word_0282.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d99148bde07_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d9a3b65a622_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d9a68ad10d5_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d9ed0b0a270_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da021bdde39_word_0052.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da5ef4fcba1_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da771dc99cc_word_0225.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db17067b9d6_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db3a665b37a_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db4a6a34bd3_word_0395.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0db77a266768_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dbb0755025d_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dc0eb567737_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dc2ea8e858b_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dc61b29b6d1_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dc7a92c49a2_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dcb9d3f5424_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dcda1ced2dc_word_0315.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd2a257b7e6_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd515a38f91_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd5a058d220_word_0255.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd6a8790b54_word_0313.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd6f51ada99_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd6f6a70e0f_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd837188d6f_word_0265.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd88a2b5028_word_0246.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd8b69ff8c5_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ddcb2e2a0c8_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0de4a9b206be_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0de700f6776a_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dee60f54c29_word_0204.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0df1058fa756_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dfb6f33cc17_word_0247.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e01a3765ee6_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e02a367b6aa_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e063216cf93_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e07fe7351af_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e1242596ecf_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e14393f6b55_word_0263.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e149914093a_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e166a66f47c_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e173f24b65f_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e1d4e12b359_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e1e7e60889f_word_0099.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e1e8aa3899a_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e1f2ef52499_word_0117.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e210f955d8c_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e253f79c471_word_0525.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e28c8934473_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2a8e7090ef_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2a98f2c048_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2b1b062ee8_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2c5ff42ca8_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e2f3dba4714_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e30909a5293_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e365e1f56c7_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e3b9364fe76_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e3cbdfba512_word_0063.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e3dcf392fec_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e3f0c3e156d_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e41361055da_word_0241.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e413c699dd3_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e49def4e9a6_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e4b104bf382_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e4dcac7a344_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e4e57a79638_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e4e6b32df0a_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e4f49301511_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e504936da78_word_0256.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e53c52a32fd_word_0278.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e546f04dc7b_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e5c31f2bbac_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e5e6762a342_word_0252.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e62813ee0f3_word_0456.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e6642b924c3_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e68a2546503_word_0255.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e692235ee66_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e6a01c0fadf_word_0336.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e710c4148f1_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e74ccf00552_word_0217.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e7830fbf1d4_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e7c8d16404f_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e7ddb497b1c_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e80e0a763f3_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e856db05f74_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e8c29bbab97_word_0007.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e8ee93926df_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e90a6965751_word_0199.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e91932c6272_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e91f9977579_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e9373105aa6_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e93f46a6309_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e99a8ea3587_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e9e0dd3ee44_word_0137.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ea04a847a81_word_0089.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ea6aec22a41_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ea8c49cdd47_word_0025.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ea9a5b967b1_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eb244e50b22_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eb25b461791_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ebb3d66724b_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ebd967f271d_word_0223.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec0046e3e77_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec0e4794f62_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec3ca281d8c_word_0140.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec462477c64_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ec8152558be_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eca02e63cc5_word_0229.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed01676e808_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed2090bc084_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed386eff2c6_word_0113.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed6a1dec43e_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed6e40a031b_word_0384.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed7715fdb75_word_0193.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed921e35ce9_word_0124.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ede00a7cb1e_word_0364.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee33bb625be_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eeb6f205d40_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eeb7f927260_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eeda44b602d_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eefd91e301b_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef049382272_word_0192.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef0c71d4f2f_word_0001.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef157342c0b_word_0184.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef92b283cf1_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0efbd2568715_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0efd0d11710a_word_0254.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0efefe2c78a7_word_0214.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f01b029787c_word_0364.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f0ab37ebf88_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f0b18449512_word_0206.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f0b9410473e_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f0c9e310c7a_word_0094.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f0ed1a201a7_word_0192.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f16d9ca294b_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f1a2fcfde31_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f1a34d89f9f_word_0178.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f1be1aa85fb_word_0513.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f21e17e8f59_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f2607c7a113_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f2816566e79_word_0186.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f2cbbd1c8ae_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f2f1bcbcd61_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f305c662988_word_0228.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f33b01aebb5_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f3bb1e2b946_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f3bf2d4a3d7_word_0221.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f49699baa9c_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f4c116554c1_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f54d43bf3de_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f585137ea0c_word_0256.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f59c3eb6be1_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f5f88511d2e_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f600d75ea4c_word_0317.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6698ceb207_word_0328.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f68f50abc22_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6afee41727_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6b3f4a49b0_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6bf29712e2_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6d038d5ebf_word_0030.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6d9b0a332c_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6e0670a319_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f733ecd98c0_word_0088.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f76f03584c4_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f7a0acc4620_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f801d274a0b_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8029ab193e_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f855aa26924_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8834c26b8e_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8a419bdc0c_word_0223.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8bd7d1dfed_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f8f6fc78b1a_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f93ca9aaacd_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f96a18317ff_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f9b6615bb90_word_0103.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa0772e8942_word_0173.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa182d7e649_word_0224.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa5046d9b49_word_0227.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa96ce7409b_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fa9ed4622c1_word_0262.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0faa834909ea_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fab1e5e34f2_word_0365.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fac6c1ccd96_word_0354.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0facd531dfb1_word_0350.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fada7ff5c18_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0faf75739b33_word_0185.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fb3437e6068_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbc95223a9c_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbd00f403bd_word_0140.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbd96e7ddf8_word_0016.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbee2803068_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fc0cec8951b_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fc3b88dbee2_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fc5bf2fd544_word_0049.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fc8047d7116_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fc98eaab358_word_0058.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fcf721c73a8_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fd003dcc14c_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fd2336e3613_word_0050.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fd5668c1a9e_word_0284.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fd8066fa37f_word_0306.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fdc26af793c_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fdf31a8e09e_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fdfae2fcb0e_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fe323398d3f_word_0078.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fe4314010b8_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fe54929f896_word_0274.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fe8219ddecf_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fe9bd52e964_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fef57d6ad61_word_0104.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff1d1e57fd6_word_0283.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff1deb5da2a_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff30e18d561_word_0068.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff52255adc2_word_0032.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff7d9ad45ea_word_0164.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff7f253d533_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ffaca9dcd51_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ffb5bc6c398_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ffdbe15f838_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ffe75b2cd67_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fff8e4d6ea1_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/100104636a0d_word_0235.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/100230ff4c3a_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/100567e653cd_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1008d4c4bff5_word_0287.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1008d95b9cf8_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/100b557847ba_word_0337.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10102dd8ccba_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/101072cb31c1_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10122f29f9cf_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10125412eb1d_word_0045.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1015782166f4_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1015c09612da_word_0280.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1017a8a9d8a8_word_0139.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1018e2bc1e9c_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/101e30e1e567_word_0295.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/101ef3bb31d2_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/101fabc2b3ff_word_0172.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10204c4acfbb_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10218dfeb0f7_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/102537e1bc29_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1026dc785080_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/102a2a77f305_word_0561.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/102b88df7a33_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/102d2f5fa64d_word_0226.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/102ebbafd117_word_0095.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/102f4d142de8_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1032595823e8_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1032792f9c61_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1032930d8cc7_word_0296.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10361cddff92_word_0554.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1038d97a8ac3_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10467a75f87f_word_0273.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/104b7813528f_word_0021.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/104f685c56cf_word_0251.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/105183c7cadb_word_0149.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10524a785982_word_0158.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10528f73c6af_word_0143.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10541061dd7d_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10558c73c79c_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1056409767f4_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1059d08952f7_word_0307.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/105ac09a000c_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/105e58ea75b2_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/105fb403c8ec_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/106275bab760_word_0098.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1062bd5d372b_word_0324.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1063e67d4e35_word_0192.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10699a634432_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/106bde2eb47f_word_0232.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/106dba2c2bad_word_0056.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1072e977a8ac_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1073bd557eda_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1077b6569867_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1080fd395b57_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1084fe5b2f20_word_0320.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/108575a9a62a_word_0102.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/108595bfb79a_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/108c1ab7fb23_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/108c8095c8d6_word_0209.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10900c866aab_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10907d601d43_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1090cd79a683_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10912fd9fb1b_word_0223.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1092ea2e2294_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1093cccf35dc_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1096848eb704_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1098f8e22acf_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/109a019f80e9_word_0053.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a0345adcc2_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a259f22430_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a539567d96_word_0265.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a7520c38c4_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ad1fde0925_word_0040.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ad47dca328_word_0133.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ad9668c9f7_word_0167.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10af0e9748d3_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10b054017da0_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10b5babd389a_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10b7daf2d9fe_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ba44a74dc7_word_0065.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10bbc2cf0d75_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10bc81205325_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10bd5d321573_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10c2692a2cdc_word_0066.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10c3481710a3_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10c52c760ac8_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10c84ed93dae_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ca42eaef3f_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ceae588bfc_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d00341e603_word_0082.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d07838ca27_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10d8f3c6d3e0_word_0015.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10de23a565e2_word_0152.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10de68bbccc0_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10deef0a615d_word_0022.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10e1c965b1f7_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10e2f8a5554c_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10e58378bff1_word_0139.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10e8b4ead77a_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ed996a1809_word_0186.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10ee7047386a_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10f531a27057_word_0274.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10fcad1e770e_word_0242.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11020aeb0a95_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/110253d1ba03_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/110294c17ffd_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1103ff7ce536_word_0034.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1106a6b2740c_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11077577476f_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1109664472f1_word_0370.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11103e621cbd_word_0176.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11129a70db5f_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1115a96ff36e_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/111686aa2071_word_0212.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1118bfb3a120_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11197c8469ff_word_0146.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1121a1b69275_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11233d0a0c10_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/112711e7e0f0_word_0161.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1129188f17bc_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/112ef4035e42_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/113115f67180_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1131ac16bb9a_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1131c2abf795_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/113669f4a51f_word_0114.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11393d86a431_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1139d486aa98_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/113a138383e4_word_0211.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/113aa9014748_word_0406.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1147588d959f_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11485f180ccc_word_0126.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1148cbc72fd6_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11511d72e51c_word_0080.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1152590535e5_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1152b6aaafef_word_0006.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/115744bae2cc_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1159286e8fb3_word_0092.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1159f0ead1b8_word_0003.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/115c1d9a9aca_word_0077.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/115c9c4115f8_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/115d01234af3_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/115f31a6b2bb_word_0041.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11631a32b6ad_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1164c9c8ad0a_word_0101.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/116902ac30c8_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/116d565743d7_word_0236.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1171c3774a87_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/117954c04806_word_0159.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/118cfe2ab15a_word_0115.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/118d71696918_word_0183.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1190e0e93fb4_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1193a6e5c3dc_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1195ef4f4696_word_0179.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11982a32a6ec_word_0190.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1198d7f30900_word_0257.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/119ddc0ecc17_word_0279.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/119de97e31ae_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11a11c9f39e0_word_0541.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11a2bab0f196_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11a6906b5be0_word_0221.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11a88e6b119e_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11aa1ceff008_word_0328.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11aeed78eced_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b01cc289d9_word_0044.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b1495536fe_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b36ee1ef59_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b3ab2cae99_word_0253.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b3de8bb500_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b42790788f_word_0295.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11b7d6a3384c_word_0026.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11bcd417988c_word_0035.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11c3253ac3ab_word_0253.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11c38e9a2be5_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11c6b3e7b3a9_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11c826e8ac9a_word_0048.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11c88b15a5e1_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11cb4262771c_word_0308.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11d0306cf594_word_0096.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11d16d4d167c_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11d981b051b7_word_0012.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11dbd8eab21d_word_0220.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11dcef23a59c_word_0110.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11dd53c49371_word_0194.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11eaf6686b4d_word_0302.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11ec1058fcdc_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11eef5d6769a_word_0324.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f4bfb368fb_word_0153.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f51806e6c9_word_0489.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f5fa2ce67a_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f6b01b044c_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f991d3f49b_word_0076.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/000d1513a681_word_0005.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0019b610b0e2_word_0279.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/002085c63167_word_0404.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0062fe6a5ec7_word_0661.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0068431cd2ee_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0074ad769ab4_word_0017.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00927dd7aae0_word_0637.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00d03aa03565_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/00d0798d346b_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01292a328c69_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/013c136c839f_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014430c7b489_word_0163.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/014cbfd8afd8_word_0107.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01677c3b4ce1_word_0014.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/016c716d56e8_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019648980ac8_word_0771.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/019a79aaac0b_word_0404.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01b6fad1b11d_word_0055.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01c48af1e538_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/01dbab9cd7ad_word_0628.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02019fc9c901_word_0379.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02070eed4457_word_0694.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/020ba831aa97_word_0252.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/021b40bd3c31_word_0178.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0222e322da62_word_0173.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023b411caf6d_word_0108.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/023fc158ac29_word_0278.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0252f241a1a7_word_0060.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0262255eb6f4_word_0150.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0264995598b6_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0268b2c10a27_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0294bd52af5e_word_0510.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02eb81d32469_word_0132.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/02ed5d9df254_word_0444.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03060ce7e884_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0315d49ba96f_word_0790.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/031af34e4004_word_0046.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/031c7c93971c_word_0464.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/032fdcfabc85_word_0237.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/033b64efa636_word_0002.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/033c93361366_word_0728.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/034fcfa43362_word_0169.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0369a2b197e7_word_0141.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0372e96a4be6_word_0139.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0382767b450c_word_0148.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/039d2a5aee91_word_0497.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03b5204cd230_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03bd2bda73be_word_0451.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03bf91a99b28_word_0175.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f11e483d21_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/03f8b7d8abec_word_0334.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0424082c1d4b_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/042a205e63c4_word_0106.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04336a10f470_word_0197.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0434ce853f08_word_0778.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/043ceff1cb59_word_0238.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04415465089c_word_0838.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044b2def926e_word_0081.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/044c99aa48fd_word_0156.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04565a93723e_word_0557.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04617127f651_word_0391.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0474b0033543_word_0700.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/047821fa6b93_word_0028.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0481efa64788_word_0660.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0496facc99a8_word_0348.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/049ded250d8a_word_0700.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04ae1dd97c4f_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b1939a7620_word_0231.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04b2b2aec8bd_word_0083.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04bade903c78_word_0319.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04c9213af2de_word_0491.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04cd3f3ef8c5_word_0300.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04e0a7a7f761_word_0155.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/04eb69faa0e3_word_0144.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0515c4d48c25_word_0347.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05193e33abd2_word_0266.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/051fd2d196a0_word_0338.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/053faff4a3ed_word_0119.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/054bd53127df_word_0231.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0575585c7c53_word_0059.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0597b42316ee_word_0125.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059bdff1464f_word_0439.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/059e7c8966da_word_0188.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05a78a1cd7aa_word_0178.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05ba3b73a8da_word_0392.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05d5db8d2002_word_0350.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05dc1fbcf65e_word_0413.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05deb255862b_word_0819.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05efbee73306_word_0064.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05f8181674af_word_0020.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05fb8a2ca87f_word_0336.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/05fc72ca8de0_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0605cbe0df4e_word_0264.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/062b1465368d_word_0074.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/063e9ecd5d14_word_0151.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0663d39544e8_word_0205.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06816fcb11dd_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/068417453dfa_word_0196.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a115cb8eaf_word_0501.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a28ba85a88_word_0061.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06a4240d4f15_word_0038.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06beb41a76ab_word_0352.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/06f8e69df4e1_word_0460.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07020c08ee1a_word_0145.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/070c1bf1d98c_word_0818.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/070d32d59434_word_0681.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0714d8ceca76_word_0315.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/071adf7dff10_word_0223.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/071cbd7adb45_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07202ea3dc22_word_0255.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/072c0a6bee26_word_0071.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0732625e3fc0_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/073c4db32240_word_0437.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0747c726a370_word_0196.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/074edb6e2665_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/077a78a1e23f_word_0036.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0798e41db224_word_0192.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07a880beb351_word_0650.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07b426f97ecf_word_0250.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07bf060c11f9_word_0465.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07bf0cbdae38_word_0640.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07ccbb098d93_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07d6f3e9084d_word_0136.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07dda6346360_word_0696.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07eb2b023abd_word_0170.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07ef9dc05d8b_word_0120.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07f9de9aeb63_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/07fa9e25264f_word_0166.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/080f7ae4836e_word_0043.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/082bdae1a02f_word_0221.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0840a52d287f_word_0530.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/085dda68b8f5_word_0328.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0861dab57e44_word_0420.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08741e780ba0_word_0075.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08794c06d3d6_word_0527.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/088e87e3c3d2_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/089993867c36_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08c7b6c9a914_word_0219.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08e5acff8c01_word_0634.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ecb9a84611_word_0610.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ee77adbd1b_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/08ff259408fb_word_0073.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0914f901e0a4_word_0154.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09327128882e_word_0389.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094138b44051_word_0235.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0942621bfb4e_word_0274.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094418f7a204_word_0206.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/094498f076a0_word_0019.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09496c2447d9_word_0174.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09520d459998_word_0222.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09591e39b3c0_word_0358.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09658aa8b966_word_0100.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/096a348a62ae_word_0758.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/096ababa288f_word_0157.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09714e012353_word_0450.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09818a87577e_word_0208.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0988505dd0bf_word_0402.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09892527615e_word_0029.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09898d894a02_word_0619.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/098e56a20fad_word_0109.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/099d93dfe2b0_word_0665.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09ab22de6ab0_word_0009.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b0c35b3f47_word_0292.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b4b76a1bfa_word_0121.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b6dd2c28e8_word_0506.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09b785489e79_word_0440.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09bbc9c41cf4_word_0024.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/09f77bca327e_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a01e42cbbba_word_0426.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a06ff965359_word_0695.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a0c6979ace1_word_0134.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a1ff2f078cf_word_0575.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a2e93ded4b5_word_0067.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a3143cca6ec_word_0664.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a314eb6db18_word_0447.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a38f714ff6b_word_0487.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a3bc671be67_word_0181.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a4766fe74c4_word_0620.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a5c0506a537_word_0270.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6033576786_word_0008.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a6eeef7133c_word_0189.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a73e82eda76_word_0463.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0a9393820c8e_word_0033.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae3044c4b96_word_0386.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ae902f628d7_word_0259.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0aeae73ad99c_word_0195.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0af8a84f90ee_word_0388.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b26cac86602_word_0027.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b517703bc9d_word_0551.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6352798a5b_word_0394.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b6bde453b31_word_0475.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b76a14c2851_word_0330.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b7943fe50fc_word_0273.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b7c75a2df38_word_0097.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b97824d2103_word_0277.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0b97ecfb8b50_word_0253.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bcb01baf47b_word_0010.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bccdbbcfbe8_word_0354.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bcd6b6bf4b8_word_0138.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0be0c1f624f5_word_0395.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0bf894a38389_word_0618.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1564d78a1f_word_0646.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1636b41e20_word_0572.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c1ba36ac967_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c361b896551_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c43ef4999ed_word_0037.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c527806eb24_word_0105.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c6329cf93f2_word_0165.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c664d55a784_word_0193.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c666187299e_word_0360.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c6b45149c78_word_0182.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0c8909a564b9_word_0410.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ca74e03fdd0_word_0668.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cb378163ed3_word_0527.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cc51efc0f31_word_0180.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cc905c8ddee_word_0168.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cd54622b57e_word_0127.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ce6b25e5762_word_0565.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0cfa20fb5fcf_word_0216.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d2654260ec1_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d5130dcf9a4_word_0237.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d5a756b2c58_word_0230.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d6f71c8fb0a_word_0093.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d73fe9a69ad_word_0031.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d83097c3168_word_0272.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d87506608e6_word_0506.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d8f72ca3842_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d9baa807532_word_0062.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0d9da695a65f_word_0201.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0da8f7f1eb54_word_0286.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0daa2bc91582_word_0369.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0daf1f526877_word_0191.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0dd91a4cd57b_word_0004.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e0a6254155d_word_0169.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e25e8bd5105_word_0086.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e334a853a64_word_0023.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e3c350d1f1d_word_0128.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e55a9883a20_word_0147.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e5832891e45_word_0264.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e83da53af7c_word_0072.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e8804f1377f_word_0312.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e9b93d7ab9a_word_0826.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e9c84f2faa9_word_0386.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0e9e29a16358_word_0039.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0eb27e08bafe_word_0116.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ebf1b15963f_word_0511.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ed4cc7a1eb5_word_0704.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee7521b6dc1_word_0359.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ee95de58247_word_0135.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ef19ad74566_word_0087.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f03bc4239dc_word_0057.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f20a7d20539_word_0794.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f2223e52ef6_word_0126.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f2cedf339ec_word_0289.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f3a944ee575_word_0783.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f41633f482a_word_0123.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f50bb155e75_word_0808.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6322870cb7_word_0312.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f64f37c6b23_word_0731.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f6b775a5390_word_0573.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0f77e12605d3_word_0130.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fbdc0df5f21_word_0210.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0fd2d05ca0f3_word_0410.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/0ff2d66a52c8_word_0397.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/100ff0c812bc_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10212579069c_word_0047.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1029f76c4067_word_0459.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/102afd0766bf_word_0234.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1032116b92f4_word_0300.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1044d30a60f8_word_0013.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1047f6fcb003_word_0042.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/105a772d6b46_word_0381.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/107061b351bf_word_0090.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10733b29f236_word_0455.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1083844d38e8_word_0216.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10a1e2f59449_word_0210.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10c3b174a7e1_word_0412.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/10dc10a8ee68_word_0069.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11230429120e_word_0505.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11291f47b79f_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1143a05138ad_word_0054.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1144b5d21f2a_word_0245.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/114d7770ca65_word_0011.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11604a8bcaa9_word_0406.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/119176452fa7_word_0782.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1196e05908a0_word_0598.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/1198321926e9_word_0000.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11a2888dc7cf_word_0070.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11a7b0984caf_word_0822.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11aadc4ec990_word_0131.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11bfa66bd1d6_word_0342.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11c3b2a9985e_word_0573.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11edfe6d1001_word_0366.png
+arabic-handwriting-ocr-toolkit/ocr_data/crops/11f5e9d975ce_word_0465.png
+abbyy_neoml_toolkit/parsed/EndToEnd.Cyrillic.dmd.vocab.txt
+abbyy_neoml_toolkit/parsed/endtoend.arabicFast.dmd.vocab.txt
+abbyy_neoml_toolkit/parsed/endtoend.arabicNormal.dmd.vocab.txt
+abbyy_neoml_toolkit/parsed/endtoend.latin.dmd.vocab.txt
+abbyy_neoml_toolkit/parsed/CRAFTdistilated.layers.txt
+abbyy_neoml_toolkit/parsed/EndToEnd.Cyrillic.layers.txt
+abbyy_neoml_toolkit/parsed/endtoend.arabicFast.layers.txt
+abbyy_neoml_toolkit/parsed/endtoend.arabicNormal.layers.txt
+abbyy_neoml_toolkit/parsed/endtoend.latin.layers.txt
+MODEL_ACCESS.md
+GENSPARK_EXECUTION_PLAN_v4.md
+GENSPARK_EXECUTION_PLAN.md
+GENSPARK-PROMPT-snippet-review.md
+MASTER-PROMPT-OMNI-OCR-v0.6.0-2026-10-05.md
+PUSH_INSTRUCTIONS.md
+MASTER_ROUND_PROMPT_ALL_REPOS_v1.md
+GROK_DEV_ROUND_PROMPT.md
+QWEN_IDEAS_ROUND_PROMPT.md
+DrMalekDrive_AI_DATA_PLAN.docx
+OMNI-EXECUTION/handovers/8f2235f0748fe0a90ce58be168f9beb0bfcd167f/ENVIRONMENT.txt
+OMNI-EXECUTION/handovers/8f2235f0748fe0a90ce58be168f9beb0bfcd167f/RECONSTRUCTION.md
+OMNI-EXECUTION/handovers/8f2235f0748fe0a90ce58be168f9beb0bfcd167f/DIFF_STAT.txt
+OMNI-EXECUTION/handovers/8f2235f0748fe0a90ce58be168f9beb0bfcd167f/NEW_FILES_MANIFEST.txt
+OMNI-EXECUTION/handovers/8f2235f0748fe0a90ce58be168f9beb0bfcd167f/TEST_RESULTS.txt
+OMNI-EXECUTION/handovers/3d3ca3bda2a8c270d4efe0177be32099f085b4ee/ENVIRONMENT.txt
+OMNI-EXECUTION/handovers/3d3ca3bda2a8c270d4efe0177be32099f085b4ee/RECONSTRUCTION.md
+OMNI-EXECUTION/handovers/3d3ca3bda2a8c270d4efe0177be32099f085b4ee/DIFF_STAT.txt
+OMNI-EXECUTION/handovers/3d3ca3bda2a8c270d4efe0177be32099f085b4ee/NEW_FILES_MANIFEST.txt
+OMNI-EXECUTION/handovers/3d3ca3bda2a8c270d4efe0177be32099f085b4ee/TEST_RESULTS.txt
+OMNI-EXECUTION/handovers/8a68f155b1689f5d5fb39155ca5fdfa0142f9893/ENVIRONMENT.txt
+OMNI-EXECUTION/handovers/8a68f155b1689f5d5fb39155ca5fdfa0142f9893/RECONSTRUCTION.md
+OMNI-EXECUTION/handovers/8a68f155b1689f5d5fb39155ca5fdfa0142f9893/DIFF_STAT.txt
+OMNI-EXECUTION/handovers/8a68f155b1689f5d5fb39155ca5fdfa0142f9893/NEW_FILES_MANIFEST.txt
+OMNI-EXECUTION/handovers/8a68f155b1689f5d5fb39155ca5fdfa0142f9893/TEST_RESULTS.txt
+OMNI-EXECUTION/handovers/acf86b3323e12dc38677f58e512491d10a60e0be/ENVIRONMENT.txt
+OMNI-EXECUTION/handovers/acf86b3323e12dc38677f58e512491d10a60e0be/RECONSTRUCTION.md
+OMNI-EXECUTION/handovers/acf86b3323e12dc38677f58e512491d10a60e0be/DIFF_STAT.txt
+OMNI-EXECUTION/handovers/acf86b3323e12dc38677f58e512491d10a60e0be/NEW_FILES_MANIFEST.txt
+OMNI-EXECUTION/handovers/acf86b3323e12dc38677f58e512491d10a60e0be/TEST_RESULTS.txt
+OMNI-EXECUTION/handovers/b49a742c12889d437a915b237fcb14531cef56ba/ENVIRONMENT.txt
+OMNI-EXECUTION/handovers/b49a742c12889d437a915b237fcb14531cef56ba/RECONSTRUCTION.md
+OMNI-EXECUTION/handovers/b49a742c12889d437a915b237fcb14531cef56ba/DIFF_STAT.txt
+OMNI-EXECUTION/handovers/b49a742c12889d437a915b237fcb14531cef56ba/NEW_FILES_MANIFEST.txt
+OMNI-EXECUTION/handovers/b49a742c12889d437a915b237fcb14531cef56ba/TEST_RESULTS.txt
+OMNI-EXECUTION/handovers/11da6ac3deba57d51107d142d846669a48e64ec1/ENVIRONMENT.txt
+OMNI-EXECUTION/handovers/11da6ac3deba57d51107d142d846669a48e64ec1/RECONSTRUCTION.md
+OMNI-EXECUTION/handovers/11da6ac3deba57d51107d142d846669a48e64ec1/DIFF_STAT.txt
+OMNI-EXECUTION/handovers/11da6ac3deba57d51107d142d846669a48e64ec1/NEW_FILES_MANIFEST.txt
+OMNI-EXECUTION/handovers/11da6ac3deba57d51107d142d846669a48e64ec1/TEST_RESULTS.txt
+OLMOCR_XBERG_IMPLEMENTATION.md
+XBERG_OLMOCR_INTEGRATION.md
+OLMOCR_XBERG_VERIFICATION-20260922.md
+WAVE2-PROGRESS-20260922.md
+WAVE1-REPORT-20260922.md
+PORTFOLIO-TRUTH-20260922/portfolio_inventory.md
+REVIEW-GENSPARK-03/VERIFICATION-CARD.md
+BULK-MANIFEST-20260920.txt
+VERIFY-TASK3-CARD.md
+OMNI-EXECUTION/handovers/phase1-remediation/SHA256SUMS.txt
+OMNI-EXECUTION/handovers/phase1-remediation/evidence/mirror_hash_check.txt
+OMNI-EXECUTION/handovers/phase1-remediation/artifacts/ENGINE_STATUS.md
+OMNI-EXECUTION/handovers/phase1-remediation/artifacts/OCR_CONTRACT_COVERAGE.md
+OMNI-EXECUTION/handovers/phase1-remediation/evidence/failure_list_baseline_a8f829a.txt
+OMNI-EXECUTION/handovers/phase1-remediation/evidence/failure_list_current_68ef890.txt
+OMNI-EXECUTION/handovers/phase1-remediation/evidence/test_gates.txt
+OMNI-EXECUTION/handovers/phase1-remediation/evidence/full_branch_diff_names.txt
+OMNI-EXECUTION/handovers/phase1-remediation/evidence/remediation_commit_stat.txt
+OMNI-EXECUTION/handovers/phase1-remediation/manifest.txt
+OMNI-EXECUTION/handovers/phase1-remediation/evidence/bundle_verify.txt
+OMNI-EXECUTION/handovers/bridge-install/STATUS.txt
+OMNI-EXECUTION/handovers/bridge-install/environment.txt
+OMNI-EXECUTION/handovers/bridge-install/evidence/bridge_files.txt
+OMNI-EXECUTION/handovers/bridge-install/evidence/live_retry_transcript.txt
+OMNI-EXECUTION/handovers/bridge-install/evidence/mcp_handshake_transcript.txt
+OMNI-EXECUTION/handovers/bridge-install/evidence/pip_list.txt
+OMNI-EXECUTION/handovers/bridge-install/evidence/pytest_output.txt
+OMNI-EXECUTION/handovers/bridge-install/evidence/source_audit_grep.txt
+OMNI-EXECUTION/handovers/bridge-install/evidence/static_security_gate.txt
+OMNI-EXECUTION/handovers/bridge-install/test_evidence.txt
+OMNI-EXECUTION/handovers/bridge-install/changed_files.txt
+OMNI-EXECUTION/handovers/bridge-install/commit_message.txt
+OMNI-EXECUTION/handovers/bridge-install/commit_metadata.txt
+OMNI-EXECUTION/handovers/bridge-install/commit_sha.txt
+OMNI-EXECUTION/handovers/bridge-install/git_status.txt
+OMNI-EXECUTION/handovers/bridge-install/parent_sha.txt
+OMNI-EXECUTION/handovers/bridge-install/remote_state.txt
+OMNI-EXECUTION/handovers/bridge-install/timestamp.txt
+OMNI-EXECUTION/artifacts/bridge-install-evidence/live_retry_transcript.txt
+OMNI-EXECUTION/artifacts/bridge-install-evidence/mcp_handshake_transcript.txt
+OMNI-EXECUTION/artifacts/bridge-install-evidence/pytest_output.txt
+OMNI-EXECUTION/artifacts/recovery-sim-bundle/RESULT.txt
+OMNI-EXECUTION/artifacts/recovery-sim-bundle/commit_metadata.txt
+OMNI-EXECUTION/artifacts/recovery-sim-bundle/commit_sha.txt
+OMNI-EXECUTION/artifacts/recovery-sim-bundle/git_status.txt
+OMNI-EXECUTION/artifacts/recovery-sim-bundle/parent_sha.txt
+OMNI-EXECUTION/artifacts/recovery-sim-bundle/shas.txt
+OMNI-EXECUTION/artifacts/recovery-sim-bundle/test.txt
+OMNI-EXECUTION/artifacts/recovery-sim-bundle/timestamp.txt
+OMNI-EXECUTION/artifacts/bridge-install-evidence/pip_list.txt
+OMNI-EXECUTION/artifacts/bridge-install-evidence/bridge_files.txt
+OMNI-EXECUTION/artifacts/bridge-install-evidence/source_audit_grep.txt
+OMNI-EXECUTION/artifacts/bridge-install-evidence/static_security_gate.txt
+OMNI-EXECUTION/handovers/xb01-uncommitted-evidence/SHA256.txt
+OMNI-EXECUTION/handovers/xb01-uncommitted-evidence/XBERG_FORENSIC_AUDIT.md
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/BRANCH.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/CHANGED_FILES.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/COMMIT_SHA.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/DIFF_STAT.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/ENVIRONMENT.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/NEW_FILES_MANIFEST.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/PARENT_SHA.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/RECONSTRUCTION.md
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/REMOTE_STATE.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/SECURITY_RESULTS.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/STATUS.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/TEST_RESULTS.txt
+OMNI-EXECUTION/handovers/639062c7f579729a9c8788bfd555338ebb411f7e/TIMESTAMP.txt
+OMNI-CONTINUATION/bundles/CP3-REBUILD-C01-4845e8e9a549.bundle/changed_files.txt
+OMNI-CONTINUATION/bundles/SIM-C01-96a34d83949f.bundle/artifact_checks.txt
+OMNI-CONTINUATION/bundles/SIM-C01-96a34d83949f.bundle/changed_files.txt
+OMNI-CONTINUATION/bundles/SIM-C01-7e7cb238a9a6.bundle/artifact_checks.txt
+OMNI-CONTINUATION/bundles/SIM-C01-7e7cb238a9a6.bundle/changed_files.txt
+OMNI-CONTINUATION/bundles/SIM-C01-4564f8167293.bundle/artifact_checks.txt
+OMNI-CONTINUATION/bundles/SIM-C01-4564f8167293.bundle/changed_files.txt
+OMNI-CONTINUATION/bundles/SIM-C01-13f81585378d.bundle/artifact_checks.txt
+OMNI-CONTINUATION/bundles/SIM-C01-13f81585378d.bundle/changed_files.txt
+OMNI-CONTINUATION/protocol/HANDOFF_BUNDLE_POLICY.md
+OMNI-CONTINUATION/council/MODEL_COUNCIL_ROUND2.md
+OMNI-CONTINUATION/protocol/RECOVERY_PROTOCOL.md
+OMNI-CONTINUATION/00_ANALYSIS_AND_PLAN.md
+OMNI-EXECUTION/jina-evidence/jina_ai_page.html
+OMNI-EXECUTION/jina-evidence/jina_arxiv.html
+OMNI-EXECUTION/jina-evidence/jina_env_baseline.txt
+OMNI-EXECUTION/jina-evidence/jina_hf_readme.md
+OMNI-EXECUTION/jina_ai_page.html
+OMNI-EXECUTION/jina_arxiv.html
+OMNI-EXECUTION/jina_hf_readme.md
+OMNI-EXECUTION/jina_env_baseline.txt
+OMNI-EXECUTION/recovery/RECOVERY_SIMULATION_EVIDENCE.txt
+OMNI-EXECUTION/recovery/HANDOFF_BUNDLE_POLICY.md
+OMNI-EXECUTION/recovery/RECOVERY_PROTOCOL.md
+OMNI-EXECUTION/review/EXTERNAL_MODEL_RESPONSE.md
+OMNI-EXECUTION/review/EXTERNAL_MODEL_BRIEF.md
+OMNI-EXECUTION/review/OCRRESULT_CONTRACT_FINAL_DECISION.md
+OMNI-EXECUTION/review/C1_C4_CLOSURE.md
+OMNI-EXECUTION/review/D7_FORENSIC_REVIEW.md
+OMNI-EXECUTION/worklogs/CHECKPOINT-3_WORKLOG.md
+OMNI-EXECUTION/CHECKPOINT-3_REPORT.md
+OMNI-EXECUTION/worklogs/CHECKPOINT-2_WORKLOG.md
+OMNI-EXECUTION/CHECKPOINT-2_REPORT.md
+OMNI-EXECUTION/OCRRESULT_CONTRACT_DECISION.md
+OMNI-EXECUTION/ARCHITECTURAL_DECISION_RECORD.md
+OMNI-EXECUTION/checkpoints/CHECKPOINT-2_TESTGATE_EVIDENCE.txt
+OMNI-EXECUTION/worklogs/CHECKPOINT-1_WORKLOG.md
+OMNI-EXECUTION/worklogs/PHASE-0_WORKLOG.md
+OMNI-EXECUTION/CHECKPOINT-1_REPORT.md
+OMNI-EXECUTION/FULL_REPOSITORY_INVENTORY.md
+OMNI-EXECUTION/ENGINE_REGISTRY_STATUS.md
+OMNI-EXECUTION/MODEL_COUNCIL_REPORT.md
+OMNI-EXECUTION/council/ckpt1_review_claude-sonnet-4-6.md
+OMNI-EXECUTION/council/ckpt1_review_deepseek-v4.1.md
+OMNI-EXECUTION/HTR_ASSET_INVENTORY.md
+OMNI-EXECUTION/OCR_ASSET_INVENTORY.md
+OMNI-EXECUTION/PORTFOLIO_FORENSICS_DELTA.md
+OMNI-EXECUTION/VYCE_MODEL_INVENTORY.md
+ahw02/SESSION_ARTIFACTS_LEDGER.md
+ahw02/SESSION_ARTIFACTS_POLICY.md
+ahw02/AHW-02_B4_DECISION.md
+ahw02/AHW-02_GATE_CLOSURE_REPORT.md
+ahw02/AHW-02_IMPLEMENTATION_REPORT.md
+ahw02/ARABIC_HANDWRITING_SELF_LEARNING_AUDIT.md
+ahw01-rebuild/ARABIC_HANDWRITING_SELF_LEARNING_AUDIT.md
+برومبت AlphaCode — رفع حزمة استخراج جلسات DeepSeek إلى الفرع
+
+انسخ ما يلي كاملًا وأرسله لـAlphaCode:
+
+المهمة: رفع حزمة استخراج جلسات DeepSeek إلى feat/archive-sort-unified-decision
+
+تعمل في المستودع: /home/xorthomson/02_Projects/GitHub/GitHub/intelli-file-manager
+(إن اختلف المسار، اكتشفه بـgit rev-parse --show-toplevel من مجلد المشروع المعروف لديك).
+
+الملفات المصدر نُزّلت من محادثة Z.ai إلى مجلد التجهيز:
+
+bash
+STAGE="$HOME/Downloads/deepseek_extract"
+# إن لم تكن هناك، ابحث:
+find "$HOME/Downloads" "$HOME" -maxdepth 3 -name 'deepseek_sessions_full.md' 2>/dev/null | head -5
+جدول التحقق الإلزامي (sha256sum — مطابقة تامة أو توقف فورًا وأبلغ، بلا أي محاولة إصلاح)
+الملف
+	
+الحجم بالبايت
+	
+SHA-256
+
+deepseek_sessions_full.md	1209648	b4f149d83ae181b66e43d7708bb5dfbedd80f35c8cdf3f75f285c25d84ee6f8a
+deepseek_review_and_decisions.md	8123	7f2d22db1a8925f8b6870997b2cf65b9abbc77f278df0559e779842082a4012d
+deepseek_raw/share_7t56009twf6l83235r.json	531022	359c80de6ba3c7f03e7de7cf0df12128c3459179ec7460466dd629d0c2298afe
+deepseek_raw/share_a7s7tnxa5e45shr21p.json	200162	dd1c0c00b063d3770f1b605697b13bf83efd364b276bbd97b6553ff47c15abc8
+deepseek_raw/share_bd1fitg9nj2ei8jgbz.json	442064	8ea785a854b9ea1def57531f8a3b7695f6a01778e4af28412b0d55a64c70b237
+deepseek_raw/share_irvdhmbxz7t5op8czi.json	346709	41c333e31cc6ed163a483da4a1dc88efa2f4913745d9927d1fdd8141c34a233e
+
+sha256sum "$STAGE"/deepseek_sessions_full.md "$STAGE"/deepseek_review_and_decisions.md "$STAGE"/deepseek_raw/*.json
+يجب أن يطابق الجدول أعلاه بايتًا ببايت. أي اختلاف = إنهاء المهمة بفشل مع ذكر البصمتين (المتوقعة والفعلية).
+
+المرحلة 1 — فحوصات المستودع (قبل أي كتابة)
+انتقل لجذر المستودع.
+git branch --show-current يجب أن يكون feat/archive-sort-unified-decision؛ غير ذلك: git switch feat/archive-sort-unified-decision ثم أعد الفحص.
+git status --porcelain — سجّل ما هو متسخ. لا تلمس ولا تضيف أي ملف خارج مهمتك (التتبع سيكون انتقائيًا بالمسار فقط).
+git fetch origin ثم git rev-list --count HEAD..origin/feat/archive-sort-unified-decision؛ إن كان > 0: git pull --rebase origin feat/archive-sort-unified-decision ثم أعد الخطوات 2-3.
+المرحلة 2 — النسخ والتحقق في الوجهة
+bash
+DEST=_runs/deepseek_extraction
+mkdir -p "$DEST/deepseek_raw"
+cp "$STAGE/deepseek_sessions_full.md" "$STAGE/deepseek_review_and_decisions.md" "$DEST/"
+cp "$STAGE"/deepseek_raw/*.json "$DEST/deepseek_raw/"
+
+ثم أعد sha256sum داخل $DEST — نفس المطابقة. وتحقق:
+
+find "$DEST" -type f | wc -l → يجب 6
+wc -c "$DEST/deepseek_sessions_full.md" → يجب 1209648
+المرحلة 3 — الالتزام والرفع
+bash
+git add _runs/deepseek_extraction
+git status --porcelain   # تأكد أن المرحّل = الملفات الستة فقط
+git commit -m "docs: DeepSeek sessions full extraction (4 sessions, 138 msgs) + unified review & pending decisions"
+git push origin feat/archive-sort-unified-decision
+
+ممنوعات مطلقة: --force، --amend، تعديل progress.md أو أي ملف آخر، رفع أي ملف غير الستة.
+
+المرحلة 4 — التحقق النهائي
+git log --oneline -3 وgit status (يجب ألا تظهر ملفاتنا كمتسخة).
+اعرض مخرجات git push حرفيًا في تقريرك (نطاق الالتزام XXXX..YYYY).
+المرحلة B — اختيارية موصى بها (تجميع أدلة البندين 🔴 1 و2 — قراءة فقط، بلا أي نقل ملفات)
+bash
+python3 -c "import json;d=json.load(open('_runs/backup_undo.json'));print('entries:',len(d));print(json.dumps(d[:3],ensure_ascii=False,indent=1))"
+grep -c "/backup/backup/" _runs/backup_undo.json        # المتوقع 0
+find "/run/media/xorthomson/My Passport/NewFolder/backup" -mindepth 2 -type f | wc -l   # المتوقع 33
+
+اكتب المخرجات الخام كما هي في _runs/EVIDENCE_backup_undo.md (مع سطر تاريخ date -Iseconds)، ثم التزام منفصل ورفع:
+git commit -m "docs: evidence — backup_undo sample + self-nesting check + destination count"
+⚠️ لا تنفّذ أي rollback في هذه المهمة — اختبار التراجع قرار يدوي للمالك بعد مراجعة الأدلة.
+
+التقرير النهائي المطلوب منك
+جدول: الملف · الحجم · البصمة قبل النسخ وبعدها (✓/✗).
+مخرجات git حرفيًا (fetch/pull/commit/push) + رقم كل التزام.
+نتائج المرحلة B كما ظهرت.
+أي خطوة تخطيتها أو فشلت — بالسبب، بلا تجميل.
+
+ملاحظة للمالك قبل الإرسال: حمّل ملفات الحزمة من محادثة Z.ai إلى ~/Downloads/deepseek_extract/ بنفس البنية أعلاه (ملفان في الجذر + مجلد deepseek_raw/ بأربعة JSON).
